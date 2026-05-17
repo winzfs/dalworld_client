@@ -3,11 +3,22 @@ import type { ClientToServerMessage, ServerToClientMessage } from '../protocol/m
 type NetworkStatus = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
 type Listener<T> = (payload: T) => void;
 
+const RECONNECT_DELAYS_MS = [2_000, 4_000, 8_000, 16_000, 30_000];
+const PING_INTERVAL_MS = 5_000;
+
 export class GameNetwork {
   private socket: WebSocket | null = null;
   private status: NetworkStatus = 'idle';
   private readonly messageListeners = new Set<Listener<ServerToClientMessage>>();
   private readonly statusListeners = new Set<Listener<NetworkStatus>>();
+  private reconnectAttempt = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private lastPingSentAt = 0;
+  private destroyed = false;
+
+  /** Round-trip latency in ms; 0 until first pong received. */
+  latencyMs = 0;
 
   constructor(private readonly url: string) {}
 
@@ -16,25 +27,53 @@ export class GameNetwork {
   }
 
   connect(): void {
+    if (this.destroyed) return;
     if (
       this.socket &&
-      (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)
+      (this.socket.readyState === WebSocket.OPEN ||
+        this.socket.readyState === WebSocket.CONNECTING)
     ) {
       return;
     }
 
+    this.cleanupSocket();
     this.setStatus('connecting');
-    this.socket = new WebSocket(this.url);
 
-    this.socket.addEventListener('open', () => this.setStatus('open'));
-    this.socket.addEventListener('close', () => this.setStatus('closed'));
-    this.socket.addEventListener('error', () => this.setStatus('error'));
-    this.socket.addEventListener('message', (event) => this.handleMessage(event.data));
+    const socket = new WebSocket(this.url);
+    this.socket = socket;
+
+    socket.addEventListener('open', () => {
+      if (this.socket !== socket) return;
+      this.reconnectAttempt = 0;
+      this.setStatus('open');
+      this.startPing();
+    });
+
+    socket.addEventListener('close', () => {
+      if (this.socket !== socket) return;
+      this.stopPing();
+      this.setStatus('closed');
+      this.scheduleReconnect();
+    });
+
+    socket.addEventListener('error', () => {
+      if (this.socket !== socket) return;
+      this.stopPing();
+      this.setStatus('error');
+      // close event follows; scheduleReconnect called there
+    });
+
+    socket.addEventListener('message', (event) => {
+      if (this.socket !== socket) return;
+      this.handleMessage(event.data);
+    });
   }
 
   disconnect(): void {
-    this.socket?.close(1000, 'Client disconnected');
-    this.socket = null;
+    this.destroyed = true;
+    this.cancelReconnect();
+    this.stopPing();
+    this.cleanupSocket();
     this.setStatus('closed');
   }
 
@@ -57,14 +96,63 @@ export class GameNetwork {
     return () => this.statusListeners.delete(listener);
   }
 
+  private cleanupSocket(): void {
+    if (!this.socket) return;
+    const old = this.socket;
+    this.socket = null;
+    try {
+      old.close(1000, 'reconnecting');
+    } catch {
+      // already closed
+    }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.destroyed) return;
+    this.cancelReconnect();
+    const delay =
+      RECONNECT_DELAYS_MS[Math.min(this.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
+    this.reconnectAttempt += 1;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, delay);
+  }
+
+  private cancelReconnect(): void {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private startPing(): void {
+    this.stopPing();
+    this.pingTimer = setInterval(() => {
+      this.lastPingSentAt = Date.now();
+      this.send({ type: 'ping', now: this.lastPingSentAt });
+    }, PING_INTERVAL_MS);
+  }
+
+  private stopPing(): void {
+    if (this.pingTimer !== null) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+  }
+
   private handleMessage(raw: unknown): void {
     if (typeof raw !== 'string') return;
+    let parsed: ServerToClientMessage;
     try {
-      const parsed = JSON.parse(raw) as ServerToClientMessage;
-      this.messageListeners.forEach((listener) => listener(parsed));
+      parsed = JSON.parse(raw) as ServerToClientMessage;
     } catch {
-      // 잘못된 서버 메시지는 클라이언트 크래시 없이 무시한다.
+      return;
     }
+    if (parsed.type === 'pong' && this.lastPingSentAt > 0) {
+      this.latencyMs = Date.now() - this.lastPingSentAt;
+    }
+    this.messageListeners.forEach((listener) => listener(parsed));
   }
 
   private setStatus(next: NetworkStatus): void {
