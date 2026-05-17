@@ -2,6 +2,7 @@ import { Application, Container, Graphics } from 'pixi.js';
 import { GameNetwork, getDefaultWebSocketUrl, type NetworkStatus } from '../net/network';
 import type {
   PlayerSnapshot,
+  PublicGameplayConfig,
   ResourceSnapshot,
   ServerToClientMessage,
   WorldInfo,
@@ -15,8 +16,8 @@ import { DebugHud } from '../render/DebugHud';
 import { MobileControls } from '../render/MobileControls';
 
 const INPUT_SEND_HZ = 20;
-const GATHER_RANGE = 80;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
+const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, gatherRange: 80 };
 
 export class GameApp {
   private readonly app = new Application();
@@ -31,6 +32,7 @@ export class GameApp {
   private readonly monsterRenderer: MonsterRenderer;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
+  private gameplayConfig: PublicGameplayConfig = DEFAULT_GAMEPLAY;
   private myPlayerId: string | null = null;
   private status: NetworkStatus = 'idle';
   private latestTick = 0;
@@ -92,7 +94,12 @@ export class GameApp {
     }
 
     const nearbyGather = me
-      ? this.resourceRenderer.getClosestAlive(this.latestResources, me.x, me.y, GATHER_RANGE)
+      ? this.resourceRenderer.getClosestAlive(
+          this.latestResources,
+          me.x,
+          me.y,
+          this.gameplayConfig.gatherRange,
+        )
       : null;
 
     this.hud.render({
@@ -125,7 +132,7 @@ export class GameApp {
       this.latestResources,
       me.x,
       me.y,
-      GATHER_RANGE,
+      this.gameplayConfig.gatherRange,
     );
     this.network.send({
       type: 'gather',
@@ -139,6 +146,7 @@ export class GameApp {
       case 'welcome':
         this.myPlayerId = message.playerId;
         this.worldInfo = message.world;
+        this.gameplayConfig = message.gameplay ?? DEFAULT_GAMEPLAY;
         this.camera.setWorldSize(message.world.width, message.world.height);
         this.drawWorldBackground();
         return;
