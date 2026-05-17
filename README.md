@@ -71,17 +71,28 @@ npm run dev
 VITE_DALWORLD_WS_URL=wss://dalworld-server.<subdomain>.workers.dev/ws
 ```
 
-## Cloudflare Pages 배포
+## Cloudflare 배포 (Workers Static Assets)
 
-1. Cloudflare Dashboard → Workers & Pages → Pages → Create application
-2. GitHub `winzfs/dalworld_client` 저장소 연결
-3. 빌드 설정:
-   - Framework preset: `Vite`
-   - Build command: `npm run build`
-   - Build output directory: `dist`
-   - Root directory: 저장소 루트
-4. 환경 변수: `VITE_DALWORLD_WS_URL` 설정
-5. Save & Deploy
+이 저장소는 정적 자산을 Cloudflare Workers Static Assets로 배포합니다
+(`wrangler.jsonc` 의 `assets.directory = "./dist"`).
+
+### Dashboard → Connect to Git
+
+1. Cloudflare Dashboard → Workers & Pages → Create application → Workers → Connect to Git
+2. `winzfs/dalworld_client` 선택
+3. 프로젝트 이름: `dalworld-client`
+4. 빌드 명령: `npm install --legacy-peer-deps && npm run build`
+5. 배포 명령: `npx wrangler deploy`
+6. 고급 설정 → 빌드 환경변수
+   - `VITE_DALWORLD_WS_URL=wss://dalworld-server.<subdomain>.workers.dev/ws`
+
+### CLI
+
+```bash
+npm install --legacy-peer-deps
+VITE_DALWORLD_WS_URL=wss://dalworld-server.<subdomain>.workers.dev/ws npm run build
+npx wrangler deploy
+```
 
 ## 현재 구현된 기능
 
