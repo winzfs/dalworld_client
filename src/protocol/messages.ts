@@ -63,6 +63,16 @@ export type WorldInfo = {
   tickRate: number;
 };
 
+export type PublicGameplayConfig = {
+  playerRadius: number;
+  gatherRange: number;
+};
+
+export type PublicGameConfig = {
+  world: WorldInfo;
+  gameplay: PublicGameplayConfig;
+};
+
 export type ClientToServerMessage =
   | { type: 'hello'; name?: string }
   | {
@@ -91,6 +101,8 @@ export type ServerToClientMessage =
       type: 'welcome';
       playerId: string;
       world: WorldInfo;
+      /** New servers send this. Optional keeps older deployed Worker builds compatible. */
+      gameplay?: PublicGameplayConfig;
       serverTime: number;
     }
   | {
