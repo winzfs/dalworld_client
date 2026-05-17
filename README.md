@@ -71,6 +71,11 @@ npm run dev
 VITE_DALWORLD_WS_URL=wss://dalworld-server.<subdomain>.workers.dev/ws
 ```
 
+## 서버 연결
+
+배포된 서버 WebSocket URL: **`wss://dalworld-server.jazzhjm.workers.dev/ws`**
+헬스체크: <https://dalworld-server.jazzhjm.workers.dev/health>
+
 ## Cloudflare 배포 (Workers Static Assets)
 
 이 저장소는 정적 자산을 Cloudflare Workers Static Assets로 배포합니다
@@ -84,13 +89,13 @@ VITE_DALWORLD_WS_URL=wss://dalworld-server.<subdomain>.workers.dev/ws
 4. 빌드 명령: `npm install --legacy-peer-deps && npm run build`
 5. 배포 명령: `npx wrangler deploy`
 6. 고급 설정 → 빌드 환경변수
-   - `VITE_DALWORLD_WS_URL=wss://dalworld-server.<subdomain>.workers.dev/ws`
+   - `VITE_DALWORLD_WS_URL=wss://dalworld-server.jazzhjm.workers.dev/ws`
 
 ### CLI
 
 ```bash
 npm install --legacy-peer-deps
-VITE_DALWORLD_WS_URL=wss://dalworld-server.<subdomain>.workers.dev/ws npm run build
+VITE_DALWORLD_WS_URL=wss://dalworld-server.jazzhjm.workers.dev/ws npm run build
 npx wrangler deploy
 ```
 
