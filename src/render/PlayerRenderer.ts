@@ -1,8 +1,7 @@
-import { Assets, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
+import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import type { Facing, PlayerSnapshot } from '../protocol/messages';
 import { Interpolator2D } from '../game/interpolation';
 import {
-  PLAYER_IDLE_FRAME,
   PLAYER_IDLE_FRAME_HEIGHT,
   PLAYER_IDLE_FRAME_WIDTH,
   PLAYER_IDLE_SHEET_DATA_URL,
@@ -14,6 +13,15 @@ const COLOR_REMOTE = 0xffd166;
 const EYE_OFFSET = PLAYER_RADIUS * 0.55;
 const EYE_RADIUS = 4;
 const SPRITE_SCALE = 0.72;
+const IDLE_COLUMNS = 8;
+const IDLE_FPS = 8;
+
+const IDLE_ROW: Record<Facing, number> = {
+  down: 0,
+  left: 1,
+  up: 3,
+  right: 5,
+};
 
 type PlayerView = {
   container: Container;
@@ -26,10 +34,12 @@ type PlayerView = {
   facing: Facing;
   local: boolean;
   phase: number;
+  animTime: number;
+  currentFrame: number;
   interp: Interpolator2D;
 };
 
-type DirectionTextures = Record<Facing, Texture>;
+type DirectionTextures = Record<Facing, Texture[]>;
 
 export class PlayerRenderer {
   private readonly layer = new Container();
@@ -62,6 +72,7 @@ export class PlayerRenderer {
       if (view.facing !== player.facing || view.local !== local) {
         view.facing = player.facing;
         view.local = local;
+        view.currentFrame = -1;
         updateEye(view.fallbackEye, player.facing);
         this.applySpriteTexture(view);
         view.selection.visible = local;
@@ -83,25 +94,32 @@ export class PlayerRenderer {
     for (const view of this.views.values()) {
       const pos = view.interp.update(dt);
       view.phase += dt * 3.5;
+      view.animTime += dt;
       view.container.position.set(Math.round(pos.x), Math.round(pos.y));
-      if (view.sprite) {
-        view.sprite.y = Math.round(Math.sin(view.phase) * 1);
+
+      const nextFrame = Math.floor(view.animTime * IDLE_FPS) % IDLE_COLUMNS;
+      if (nextFrame !== view.currentFrame) {
+        view.currentFrame = nextFrame;
+        this.applySpriteTexture(view);
       }
+
       view.selection.alpha = view.local ? 0.65 + Math.sin(view.phase * 2) * 0.18 : 0;
     }
   }
 
   private async loadTextures(): Promise<void> {
     try {
-      const sheet = await Assets.load<Texture>(PLAYER_IDLE_SHEET_DATA_URL);
+      const image = await loadImage(PLAYER_IDLE_SHEET_DATA_URL);
+      const sheet = Texture.from(image);
       sheet.source.scaleMode = 'nearest';
       this.textures = {
-        down: frameTexture(sheet, PLAYER_IDLE_FRAME.down),
-        left: frameTexture(sheet, PLAYER_IDLE_FRAME.left),
-        up: frameTexture(sheet, PLAYER_IDLE_FRAME.up),
-        right: frameTexture(sheet, PLAYER_IDLE_FRAME.right),
+        down: rowTextures(sheet, IDLE_ROW.down),
+        left: rowTextures(sheet, IDLE_ROW.left),
+        up: rowTextures(sheet, IDLE_ROW.up),
+        right: rowTextures(sheet, IDLE_ROW.right),
       };
       for (const view of this.views.values()) {
+        view.currentFrame = -1;
         this.applySpriteTexture(view);
       }
     } catch (error) {
@@ -142,6 +160,8 @@ export class PlayerRenderer {
       facing: player.facing,
       local,
       phase: Math.random() * Math.PI * 2,
+      animTime: Math.random(),
+      currentFrame: -1,
       interp: new Interpolator2D(player.x, player.y, local ? 30 : 12),
     };
     this.applySpriteTexture(view);
@@ -149,8 +169,9 @@ export class PlayerRenderer {
   }
 
   private applySpriteTexture(view: PlayerView): void {
-    const texture = this.textures?.[view.facing];
-    if (!texture) return;
+    const frames = this.textures?.[view.facing];
+    if (!frames) return;
+    const texture = frames[Math.max(0, view.currentFrame) % frames.length];
 
     if (!view.sprite) {
       view.sprite = new Sprite(texture);
@@ -177,16 +198,35 @@ export class PlayerRenderer {
   }
 }
 
-function frameTexture(sheet: Texture, frameIndex: number): Texture {
-  return new Texture({
-    source: sheet.source,
-    frame: new Rectangle(
-      frameIndex * PLAYER_IDLE_FRAME_WIDTH,
-      0,
-      PLAYER_IDLE_FRAME_WIDTH,
-      PLAYER_IDLE_FRAME_HEIGHT,
-    ),
+async function loadImage(src: string): Promise<HTMLImageElement> {
+  const image = new Image();
+  image.decoding = 'async';
+  image.src = src;
+  if ('decode' in image) {
+    await image.decode();
+    return image;
+  }
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error('Failed to load player sprite image'));
   });
+  return image;
+}
+
+function rowTextures(sheet: Texture, row: number): Texture[] {
+  const frames: Texture[] = [];
+  for (let col = 0; col < IDLE_COLUMNS; col += 1) {
+    frames.push(new Texture({
+      source: sheet.source,
+      frame: new Rectangle(
+        col * PLAYER_IDLE_FRAME_WIDTH,
+        row * PLAYER_IDLE_FRAME_HEIGHT,
+        PLAYER_IDLE_FRAME_WIDTH,
+        PLAYER_IDLE_FRAME_HEIGHT,
+      ),
+    }));
+  }
+  return frames;
 }
 
 function updateEye(eye: Graphics, facing: Facing): void {
