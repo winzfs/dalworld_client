@@ -167,18 +167,24 @@ export class GameApp {
   }
 
   private drawWorldBackground(): void {
+    this.background.removeChildren().forEach((child) => child.destroy());
     this.background.clear();
     this.background
       .rect(0, 0, this.worldInfo.width, this.worldInfo.height)
       .fill({ color: 0x223843 });
+
     const step = 200;
-    const grid = new Graphics();
     for (let x = 0; x <= this.worldInfo.width; x += step) {
-      grid.moveTo(x, 0).lineTo(x, this.worldInfo.height).stroke({ color: 0x2c4a55, width: 1 });
+      this.background
+        .moveTo(x, 0)
+        .lineTo(x, this.worldInfo.height)
+        .stroke({ color: 0x2c4a55, width: 1 });
     }
     for (let y = 0; y <= this.worldInfo.height; y += step) {
-      grid.moveTo(0, y).lineTo(this.worldInfo.width, y).stroke({ color: 0x2c4a55, width: 1 });
+      this.background
+        .moveTo(0, y)
+        .lineTo(this.worldInfo.width, y)
+        .stroke({ color: 0x2c4a55, width: 1 });
     }
-    this.background.addChild(grid);
   }
 }
