@@ -6,8 +6,108 @@ body,
   margin: 0;
   overflow: hidden;
   background: #101820;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 canvas {
   display: block;
+}
+
+#dalworld-hud {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(15, 20, 25, 0.75);
+  color: #e0e6ed;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  pointer-events: none;
+  min-width: 160px;
+  z-index: 10;
+}
+
+#dalworld-hud .hud-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#dalworld-hud b {
+  color: #ffd166;
+  font-weight: 600;
+}
+
+#dalworld-hud .status-open { color: #95e1a3; }
+#dalworld-hud .status-connecting { color: #ffd166; }
+#dalworld-hud .status-closed,
+#dalworld-hud .status-error { color: #ef476f; }
+
+#dalworld-mobile {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#dalworld-mobile.desktop-hidden .joystick,
+#dalworld-mobile.desktop-hidden .gather-btn {
+  display: none;
+}
+
+#dalworld-mobile .joystick {
+  position: absolute;
+  left: 32px;
+  bottom: 32px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+#dalworld-mobile .joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(85, 214, 190, 0.85);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+#dalworld-mobile .action-btn {
+  position: absolute;
+  pointer-events: auto;
+  border: none;
+  border-radius: 50%;
+  font: 600 18px/1 ui-sans-serif, system-ui;
+  color: #102027;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+#dalworld-mobile .gather-btn {
+  right: 36px;
+  bottom: 56px;
+  width: 88px;
+  height: 88px;
+  background: #ffd166;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+#dalworld-mobile .fullscreen-btn {
+  right: 16px;
+  top: 16px;
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 20px;
 }
