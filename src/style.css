@@ -41,6 +41,17 @@ canvas {
   font-weight: 600;
 }
 
+#dalworld-hud .gather-hint {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  color: #55d6be;
+}
+
+#dalworld-hud .gather-hint b {
+  color: #55d6be;
+}
+
 #dalworld-hud .status-open { color: #95e1a3; }
 #dalworld-hud .status-connecting { color: #ffd166; }
 #dalworld-hud .status-closed,

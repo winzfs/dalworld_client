@@ -15,7 +15,7 @@ import { DebugHud } from '../render/DebugHud';
 import { MobileControls } from '../render/MobileControls';
 
 const INPUT_SEND_HZ = 20;
-const GATHER_RANGE = 60;
+const GATHER_RANGE = 80;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 
 export class GameApp {
@@ -59,9 +59,9 @@ export class GameApp {
     });
 
     mount.appendChild(this.app.canvas);
-    this.app.stage.addChild(this.world);
     this.input.attach();
     this.mobileControls = new MobileControls(this.input);
+    this.app.stage.addChild(this.world);
     this.drawWorldBackground();
 
     this.network.onStatus((status) => {
@@ -91,10 +91,16 @@ export class GameApp {
       );
     }
 
+    const nearbyGather = me
+      ? this.resourceRenderer.getClosestAlive(this.latestResources, me.x, me.y, GATHER_RANGE)
+      : null;
+
     this.hud.render({
       status: this.status,
       tick: this.latestTick,
       player: me,
+      nearbyGather,
+      latencyMs: this.network.latencyMs,
     });
   }
 
@@ -121,11 +127,10 @@ export class GameApp {
       me.y,
       GATHER_RANGE,
     );
-    if (!target) return;
     this.network.send({
       type: 'gather',
       seq: ++this.inputSeq,
-      resourceId: target.id,
+      resourceId: target?.id,
     });
   }
 
@@ -134,6 +139,7 @@ export class GameApp {
       case 'welcome':
         this.myPlayerId = message.playerId;
         this.worldInfo = message.world;
+        this.camera.setWorldSize(message.world.width, message.world.height);
         this.drawWorldBackground();
         return;
       case 'snapshot':
@@ -145,7 +151,7 @@ export class GameApp {
         this.monsterRenderer.sync(message.monsters);
         return;
       case 'event':
-        // 추후: 토스트/사운드 hook 자리.
+        // TODO: toast / sound feedback per event type
         return;
       case 'pong':
         return;
@@ -162,7 +168,9 @@ export class GameApp {
 
   private drawWorldBackground(): void {
     this.background.clear();
-    this.background.rect(0, 0, this.worldInfo.width, this.worldInfo.height).fill({ color: 0x223843 });
+    this.background
+      .rect(0, 0, this.worldInfo.width, this.worldInfo.height)
+      .fill({ color: 0x223843 });
     const step = 200;
     const grid = new Graphics();
     for (let x = 0; x <= this.worldInfo.width; x += step) {

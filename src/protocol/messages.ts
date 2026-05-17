@@ -1,5 +1,5 @@
 // 서버 src/protocol/messages.ts 와 동일한 프로토콜.
-// 의도적으로 클라이언트 측에 복사해 둔다 (모노레포 의존을 피하기 위함).
+// 모노레포 의존을 피하기 위해 클라이언트 측에 복사해 둔다.
 
 export type MovementKeys = {
   up: boolean;
@@ -40,7 +40,10 @@ export type ResourceSnapshot = {
   y: number;
   hp: number;
   maxHp: number;
+  /** 0 if alive, otherwise epoch ms when it will respawn */
   respawnAt: number;
+  /** true when the resource is harvestable (hp > 0 and not waiting to respawn) */
+  alive: boolean;
 };
 
 export type MonsterSnapshot = {
@@ -68,12 +71,18 @@ export type ClientToServerMessage =
       keys: MovementKeys;
       facing?: Facing;
     }
-  | { type: 'gather'; seq: number; resourceId: string }
+  | {
+      type: 'gather';
+      seq: number;
+      /** Preferred target; server picks nearest in range when omitted or invalid. */
+      resourceId?: string;
+    }
   | { type: 'ping'; now: number };
 
 export type ServerEvent =
   | { type: 'player_joined'; playerId: string }
   | { type: 'player_left'; playerId: string }
+  | { type: 'resource_hit'; resourceId: string; resourceType: ResourceType; hpRemaining: number }
   | { type: 'resource_destroyed'; resourceId: string; resourceType: ResourceType }
   | { type: 'item_gained'; playerId: string; item: ItemType; amount: number };
 
