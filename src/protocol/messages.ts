@@ -1,0 +1,96 @@
+// 서버 src/protocol/messages.ts 와 동일한 프로토콜.
+// 의도적으로 클라이언트 측에 복사해 둔다 (모노레포 의존을 피하기 위함).
+
+export type MovementKeys = {
+  up: boolean;
+  down: boolean;
+  left: boolean;
+  right: boolean;
+};
+
+export type Facing = 'up' | 'down' | 'left' | 'right';
+
+export type ResourceType = 'tree' | 'stone';
+export type MonsterType = 'wild_slime';
+export type MonsterStateName = 'idle' | 'chase' | 'attack';
+export type ItemType = 'wood' | 'stone';
+
+export type Inventory = {
+  wood: number;
+  stone: number;
+};
+
+export type PlayerSnapshot = {
+  id: string;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  stamina: number;
+  maxStamina: number;
+  facing: Facing;
+  lastInputSeq: number;
+  inventory: Inventory;
+};
+
+export type ResourceSnapshot = {
+  id: string;
+  type: ResourceType;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  respawnAt: number;
+};
+
+export type MonsterSnapshot = {
+  id: string;
+  type: MonsterType;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  state: MonsterStateName;
+  targetPlayerId: string | null;
+};
+
+export type WorldInfo = {
+  width: number;
+  height: number;
+  tickRate: number;
+};
+
+export type ClientToServerMessage =
+  | { type: 'hello'; name?: string }
+  | {
+      type: 'input';
+      seq: number;
+      keys: MovementKeys;
+      facing?: Facing;
+    }
+  | { type: 'gather'; seq: number; resourceId: string }
+  | { type: 'ping'; now: number };
+
+export type ServerEvent =
+  | { type: 'player_joined'; playerId: string }
+  | { type: 'player_left'; playerId: string }
+  | { type: 'resource_destroyed'; resourceId: string; resourceType: ResourceType }
+  | { type: 'item_gained'; playerId: string; item: ItemType; amount: number };
+
+export type ServerToClientMessage =
+  | {
+      type: 'welcome';
+      playerId: string;
+      world: WorldInfo;
+      serverTime: number;
+    }
+  | {
+      type: 'snapshot';
+      tick: number;
+      serverTime: number;
+      players: PlayerSnapshot[];
+      resources: ResourceSnapshot[];
+      monsters: MonsterSnapshot[];
+    }
+  | { type: 'event'; serverTime: number; event: ServerEvent }
+  | { type: 'pong'; now: number };

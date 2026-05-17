@@ -1,4 +1,4 @@
-import type { ClientToServerMessage, ServerToClientMessage } from './messages';
+import type { ClientToServerMessage, ServerToClientMessage } from '../protocol/messages';
 
 type NetworkStatus = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
 type Listener<T> = (payload: T) => void;
@@ -11,8 +11,15 @@ export class GameNetwork {
 
   constructor(private readonly url: string) {}
 
+  get currentStatus(): NetworkStatus {
+    return this.status;
+  }
+
   connect(): void {
-    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+    if (
+      this.socket &&
+      (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
 
@@ -35,7 +42,6 @@ export class GameNetwork {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       return false;
     }
-
     this.socket.send(JSON.stringify(message));
     return true;
   }
@@ -52,10 +58,7 @@ export class GameNetwork {
   }
 
   private handleMessage(raw: unknown): void {
-    if (typeof raw !== 'string') {
-      return;
-    }
-
+    if (typeof raw !== 'string') return;
     try {
       const parsed = JSON.parse(raw) as ServerToClientMessage;
       this.messageListeners.forEach((listener) => listener(parsed));
@@ -71,6 +74,12 @@ export class GameNetwork {
 }
 
 export function getDefaultWebSocketUrl(): string {
+  const envUrl = import.meta.env.VITE_DALWORLD_WS_URL;
+  if (typeof envUrl === 'string' && envUrl.length > 0) {
+    return envUrl;
+  }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}/ws`;
 }
+
+export type { NetworkStatus };
