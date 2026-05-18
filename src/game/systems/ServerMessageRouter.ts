@@ -5,6 +5,7 @@ import type { CameraSystem } from './CameraSystem';
 import type { PlayerRenderer } from '../../render/PlayerRenderer';
 import type { ResourceRenderer } from '../../render/ResourceRenderer';
 import type { MonsterRenderer } from '../../render/MonsterRenderer';
+import { setRuntimeWorldMap } from '../../worldMap/runtimeMapStore';
 
 export type ServerMessageRouterContext = {
   input: InputState;
@@ -51,6 +52,7 @@ export class ServerMessageRouter {
     this.context.setMyPlayerId(message.playerId);
     this.context.setWorldInfo(message.world);
     this.context.setGameplayConfig(message.gameplay);
+    setRuntimeWorldMap(message.map);
     this.context.cameraSystem.setWorldSize(message.world);
     this.context.redrawWorld();
     this.context.reloadWorldMap();
