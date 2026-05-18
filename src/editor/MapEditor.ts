@@ -145,6 +145,7 @@ export class MapEditor {
     this.options.app.canvas.addEventListener('pointermove', this.pointerMoveHandler);
     this.options.app.canvas.addEventListener('pointerup', this.pointerUpHandler);
     this.options.app.canvas.addEventListener('pointercancel', this.pointerUpHandler);
+    void this.load();
   }
 
   stop(): void {
@@ -357,10 +358,16 @@ export class MapEditor {
 
   private save(): void {
     const worldSave = this.createWorldSave();
-    this.storage.saveWorld(worldSave);
-    this.storage.save({
+    const worldSaved = this.storage.saveWorld(worldSave);
+    const mapSaved = this.storage.save({
       ...this.placement.mapDraft,
       worldMap: worldSave.worldMap,
+    });
+
+    console.info('[MapEditor] Save completed.', {
+      worldSaved,
+      mapSaved,
+      cellCount: worldSave.cells.length,
     });
   }
 
@@ -380,6 +387,9 @@ export class MapEditor {
         ?? this.createCellDraft(current.gridX, current.gridY);
 
       await this.placement.loadDraft(currentDraft);
+      console.info('[MapEditor] Loaded saved world.', {
+        cells: worldSave.cells.length,
+      });
       return;
     }
 
