@@ -8,7 +8,15 @@ const MAX_BRUSH_SCALE = 10;
 const BRUSH_SCALE_STEP = 0.1;
 const GRID_SIZE_OPTIONS = [16, 32, 64] as const;
 
-const defaultAsset = TILESET_CATEGORIES[0]?.assets[0] ?? null;
+export const BLACK_SOLID_ASSET: EditorTilesetAsset = {
+  id: 'editor-solid-black',
+  name: 'Black',
+  categoryId: 'editor',
+  url: 'solid://black',
+  solidColor: 0x000000,
+};
+
+const defaultAsset = TILESET_CATEGORIES[0]?.assets[0] ?? BLACK_SOLID_ASSET;
 
 export class EditorState {
   private readonly listeners = new Set<EditorStateListener>();
@@ -40,6 +48,11 @@ export class EditorState {
 
   selectAsset(asset: EditorTilesetAsset): void {
     this.setBrush({ asset });
+  }
+
+  selectBlackBrush(): void {
+    this.setLayer('ground');
+    this.setBrush({ asset: BLACK_SOLID_ASSET });
   }
 
   setBrush(brush: EditorBrush): void {
