@@ -2,6 +2,7 @@ import { Assets, Container, Graphics, Rectangle, SCALE_MODES, Sprite, Texture, t
 import type { EditorMapDraft, EditorSourceRect, EditorTilePlacement, EditorTilesetAsset } from './types';
 import { EditorState } from './EditorState';
 import { TILESET_CATEGORIES } from './tilesetManifest';
+import { createTransparentBlackTexture } from './createTransparentBlackTexture';
 
 export type TilePlacementSystemOptions = {
   tileSize: number;
@@ -25,6 +26,7 @@ export class TilePlacementSystem {
   private readonly draft: EditorMapDraft;
   private readonly displays = new Map<string, PlacedDisplay>();
   private readonly textureCache = new Map<string, Promise<PixiTexture | null>>();
+  private readonly transparentTextureCache = new Map<string, Promise<PixiTexture | null>>();
 
   constructor(
     private readonly state: EditorState,
@@ -135,6 +137,7 @@ export class TilePlacementSystem {
       scale: this.state.brushScale,
       sourceRect: brush.sourceRect ? { ...brush.sourceRect } : undefined,
       solidColor: asset.solidColor,
+      transparentBlack: asset.solidColor === undefined && this.state.transparentBlack,
     };
   }
 
@@ -191,7 +194,7 @@ export class TilePlacementSystem {
 
     const texture = await this.loadTexture(asset.url);
     return texture
-      ? this.createSprite(placement, asset, texture)
+      ? await this.createSprite(placement, asset, texture)
       : this.createFallbackTile(placement, asset);
   }
 
@@ -231,20 +234,23 @@ export class TilePlacementSystem {
     return overlay;
   }
 
-  private createSprite(
+  private async createSprite(
     placement: EditorTilePlacement,
     asset: EditorTilesetAsset,
     texture: PixiTexture,
-  ): Sprite {
+  ): Promise<Sprite> {
     const safeSourceRect = placement.sourceRect
       ? shrinkSourceRect(placement.sourceRect, texture)
       : undefined;
-    const sourceTexture = safeSourceRect
-      ? createSlicedTexture(texture, safeSourceRect)
-      : texture;
-    enforceNearestScale(sourceTexture);
+    const sourceTexture = placement.transparentBlack
+      ? await this.loadTransparentTexture(asset.url, safeSourceRect)
+      : safeSourceRect
+        ? createSlicedTexture(texture, safeSourceRect)
+        : texture;
+    const resolvedTexture = sourceTexture ?? texture;
+    enforceNearestScale(resolvedTexture);
 
-    const sprite = new Sprite(sourceTexture);
+    const sprite = new Sprite(resolvedTexture);
     const scale = normalizePlacementScale(placement.scale);
 
     sprite.label = `editor-tile:${placement.id}`;
@@ -253,11 +259,11 @@ export class TilePlacementSystem {
     sprite.roundPixels = true;
     sprite.alpha = 1;
 
-    const baseWidth = placement.sourceRect?.width ?? asset.tileWidth ?? sourceTexture.width;
-    const baseHeight = placement.sourceRect?.height ?? asset.tileHeight ?? sourceTexture.height;
+    const baseWidth = placement.sourceRect?.width ?? asset.tileWidth ?? resolvedTexture.width;
+    const baseHeight = placement.sourceRect?.height ?? asset.tileHeight ?? resolvedTexture.height;
     sprite.scale.set(
-      (baseWidth / sourceTexture.width) * scale,
-      (baseHeight / sourceTexture.height) * scale,
+      (baseWidth / resolvedTexture.width) * scale,
+      (baseHeight / resolvedTexture.height) * scale,
     );
 
     sprite.zIndex = layerZIndex(placement.layer);
@@ -296,6 +302,23 @@ export class TilePlacementSystem {
           return null;
         });
       this.textureCache.set(url, promise);
+    }
+    return promise;
+  }
+
+  private loadTransparentTexture(
+    url: string,
+    sourceRect: EditorSourceRect | undefined,
+  ): Promise<PixiTexture | null> {
+    const key = `${url}:${sourceRect ? `${sourceRect.x},${sourceRect.y},${sourceRect.width},${sourceRect.height}` : 'full'}:transparent-black`;
+    let promise = this.transparentTextureCache.get(key);
+    if (!promise) {
+      promise = createTransparentBlackTexture(url, sourceRect)
+        .catch((error: unknown) => {
+          console.warn(`[MapEditor] Failed to create transparent black texture: ${url}`, error);
+          return null;
+        });
+      this.transparentTextureCache.set(key, promise);
     }
     return promise;
   }
