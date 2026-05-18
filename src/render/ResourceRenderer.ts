@@ -4,10 +4,10 @@ import type { ResourceSnapshot } from '../protocol/messages';
 const ASSET_BASE = '/assets/tilesets/fantasy/Art';
 
 const TREE_SPRITES = [
-  `${ASSET_BASE}/Trees and Bushes/Tree_Emerald_1.png`,
-  `${ASSET_BASE}/Trees and Bushes/Tree_Emerald_2.png`,
-  `${ASSET_BASE}/Trees and Bushes/Tree_Emerald_3.png`,
-  `${ASSET_BASE}/Trees and Bushes/Tree_Emerald_4.png`,
+  `${ASSET_BASE}/Tree and Bushes/Tree_Emerald_1.png`,
+  `${ASSET_BASE}/Tree and Bushes/Tree_Emerald_2.png`,
+  `${ASSET_BASE}/Tree and Bushes/Tree_Emerald_3.png`,
+  `${ASSET_BASE}/Tree and Bushes/Tree_Emerald_4.png`,
 ];
 
 const ROCK_SPRITES = [
@@ -116,17 +116,13 @@ export class ResourceRenderer {
   }
 
   private async loadTextures(): Promise<void> {
-    try {
-      this.textures = {
-        tree: await Promise.all(TREE_SPRITES.map((src) => loadTexture(src))),
-        stone: await Promise.all(ROCK_SPRITES.map((src) => loadTexture(src))),
-      };
+    this.textures = {
+      tree: await loadOptionalTextures(TREE_SPRITES),
+      stone: await loadOptionalTextures(ROCK_SPRITES),
+    };
 
-      for (const [id, view] of this.views) {
-        this.applySprite(view, { id, type: view.type });
-      }
-    } catch (error) {
-      console.warn('Failed to load resource sprites. Using fallback graphics.', error);
+    for (const [id, view] of this.views) {
+      this.applySprite(view, { id, type: view.type });
     }
   }
 
@@ -189,6 +185,21 @@ export class ResourceRenderer {
       g.circle(-2, 8, 8).fill({ color: 0x78909c });
     }
   }
+}
+
+async function loadOptionalTextures(srcs: string[]): Promise<Texture[]> {
+  const results = await Promise.allSettled(srcs.map((src) => loadTexture(src)));
+  const textures: Texture[] = [];
+
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      textures.push(result.value);
+    } else {
+      console.warn(result.reason);
+    }
+  }
+
+  return textures;
 }
 
 function loadTexture(src: string): Promise<Texture> {
