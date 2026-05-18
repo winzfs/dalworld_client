@@ -8,6 +8,15 @@ export type TilePlacementSystemOptions = {
   mapName: string;
 };
 
+export type EditorFillOptions = {
+  width: number;
+  height: number;
+};
+
+export type EditorRandomFillOptions = EditorFillOptions & {
+  chancePercent: number;
+};
+
 type PlacedDisplay = Sprite | Graphics;
 
 /**
@@ -47,32 +56,28 @@ export class TilePlacementSystem {
       return;
     }
 
+    const placement = this.createPlacementAt(worldX, worldY);
+    if (!placement) return;
+
+    this.upsertPlacement(placement);
+    await this.createDisplay(placement, this.state.selectedBrush!.asset);
+  }
+
+  async fillAll(options: EditorFillOptions): Promise<void> {
     const brush = this.state.selectedBrush;
     if (!brush) return;
 
-    const asset = brush.asset;
-    const x = snap(worldX, this.draft.tileSize);
-    const y = snap(worldY, this.draft.tileSize);
-    const existing = this.findPlacementAt(x, y, this.state.activeLayer);
+    const placements = this.createGridPlacements(options, () => true);
+    await this.addPlacementBatch(placements, brush.asset);
+  }
 
-    if (existing) {
-      this.removePlacement(existing.id);
-    }
+  async fillRandom(options: EditorRandomFillOptions): Promise<void> {
+    const brush = this.state.selectedBrush;
+    if (!brush) return;
 
-    const placement: EditorTilePlacement = {
-      id: crypto.randomUUID(),
-      assetId: asset.id,
-      assetUrl: asset.url,
-      categoryId: asset.categoryId,
-      x,
-      y,
-      layer: this.state.activeLayer,
-      scale: this.state.brushScale,
-      sourceRect: brush.sourceRect ? { ...brush.sourceRect } : undefined,
-    };
-
-    this.draft.placements.push(placement);
-    await this.createDisplay(placement, asset);
+    const chance = clamp(options.chancePercent, 0, 100) / 100;
+    const placements = this.createGridPlacements(options, () => Math.random() < chance);
+    await this.addPlacementBatch(placements, brush.asset);
   }
 
   eraseAt(worldX: number, worldY: number): void {
@@ -112,6 +117,60 @@ export class TilePlacementSystem {
 
     this.displays.clear();
     this.draft.placements.length = 0;
+  }
+
+  private createPlacementAt(worldX: number, worldY: number): EditorTilePlacement | null {
+    const brush = this.state.selectedBrush;
+    if (!brush) return null;
+
+    const asset = brush.asset;
+    return {
+      id: crypto.randomUUID(),
+      assetId: asset.id,
+      assetUrl: asset.url,
+      categoryId: asset.categoryId,
+      x: snap(worldX, this.draft.tileSize),
+      y: snap(worldY, this.draft.tileSize),
+      layer: this.state.activeLayer,
+      scale: this.state.brushScale,
+      sourceRect: brush.sourceRect ? { ...brush.sourceRect } : undefined,
+    };
+  }
+
+  private createGridPlacements(
+    options: EditorFillOptions,
+    shouldPlace: (x: number, y: number) => boolean,
+  ): EditorTilePlacement[] {
+    const placements: EditorTilePlacement[] = [];
+
+    for (let y = 0; y < options.height; y += this.draft.tileSize) {
+      for (let x = 0; x < options.width; x += this.draft.tileSize) {
+        if (!shouldPlace(x, y)) continue;
+        const placement = this.createPlacementAt(x, y);
+        if (placement) placements.push(placement);
+      }
+    }
+
+    return placements;
+  }
+
+  private async addPlacementBatch(placements: EditorTilePlacement[], asset: EditorTilesetAsset): Promise<void> {
+    for (const placement of placements) {
+      this.upsertPlacement(placement);
+    }
+
+    for (const placement of placements) {
+      await this.createDisplay(placement, asset);
+    }
+  }
+
+  private upsertPlacement(placement: EditorTilePlacement): void {
+    const existing = this.findPlacementAt(placement.x, placement.y, placement.layer);
+    if (existing) {
+      this.removePlacement(existing.id);
+    }
+
+    this.draft.placements.push(placement);
   }
 
   private async createDisplay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Promise<void> {
@@ -246,4 +305,8 @@ function findAssetById(assetId: string): EditorTilesetAsset | null {
   }
 
   return null;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
