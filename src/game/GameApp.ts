@@ -133,11 +133,16 @@ export class GameApp {
     if (direction) {
       const radius = this.gameplayConfig.playerRadius;
       const speed = this.gameplayConfig.playerSpeed;
-      const nextX = clamp(me.x + direction.x * speed * dt, radius, this.worldInfo.width - radius);
-      const nextY = clamp(me.y + direction.y * speed * dt, radius, this.worldInfo.height - radius);
+      const deltaX = direction.x * speed * dt;
+      const deltaY = direction.y * speed * dt;
 
-      if (this.canPlayerMoveTo(nextX, nextY, radius)) {
+      const nextX = clamp(me.x + deltaX, radius, this.worldInfo.width - radius);
+      if (this.canPlayerOccupy(nextX, me.y, radius)) {
         me.x = nextX;
+      }
+
+      const nextY = clamp(me.y + deltaY, radius, this.worldInfo.height - radius);
+      if (this.canPlayerOccupy(me.x, nextY, radius)) {
         me.y = nextY;
       }
 
@@ -147,9 +152,9 @@ export class GameApp {
     this.playerRenderer.sync(this.latestPlayers, this.myPlayerId);
   }
 
-  private canPlayerMoveTo(nextX: number, nextY: number, playerRadius: number): boolean {
+  private canPlayerOccupy(x: number, y: number, playerRadius: number): boolean {
     for (const monster of this.latestMonsters) {
-      if (circlesOverlap(nextX, nextY, playerRadius, monster.x, monster.y, MONSTER_COLLISION_RADIUS)) {
+      if (circlesOverlap(x, y, playerRadius, monster.x, monster.y, MONSTER_COLLISION_RADIUS)) {
         return false;
       }
     }
