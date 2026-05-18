@@ -229,7 +229,7 @@ export class MapEditor {
   ): Promise<void> {
     const previous = this.worldMapGrid.current;
 
-    this.cellDrafts.set(cellKey(previous.gridX, previous.gridY), this.withBlackBase({
+    this.cellDrafts.set(cellKey(previous.gridX, previous.gridY), this.normalizeCellDraft(previous.gridX, previous.gridY, {
       ...this.placement.mapDraft,
       name: this.getCellMapName(previous.gridX, previous.gridY),
       worldMap: this.worldMapGrid.snapshot,
@@ -238,7 +238,7 @@ export class MapEditor {
     this.worldMapGrid.selectCell(gridX, gridY);
 
     const key = cellKey(gridX, gridY);
-    const draft = this.withBlackBase(this.cellDrafts.get(key) ?? this.createCellDraft(gridX, gridY));
+    const draft = this.normalizeCellDraft(gridX, gridY, this.cellDrafts.get(key) ?? this.createCellDraft(gridX, gridY));
 
     this.cellDrafts.set(key, draft);
 
@@ -259,7 +259,9 @@ export class MapEditor {
     this.worldMapGrid.deleteCell(current.gridX, current.gridY);
 
     const next = this.worldMapGrid.current;
-    const nextDraft = this.withBlackBase(
+    const nextDraft = this.normalizeCellDraft(
+      next.gridX,
+      next.gridY,
       this.cellDrafts.get(cellKey(next.gridX, next.gridY)) ?? this.createCellDraft(next.gridX, next.gridY),
     );
 
@@ -272,7 +274,7 @@ export class MapEditor {
   private persistCurrentCellDraft(): void {
     const current = this.worldMapGrid.current;
 
-    this.cellDrafts.set(cellKey(current.gridX, current.gridY), this.withBlackBase({
+    this.cellDrafts.set(cellKey(current.gridX, current.gridY), this.normalizeCellDraft(current.gridX, current.gridY, {
       ...this.placement.mapDraft,
       name: this.getCellMapName(current.gridX, current.gridY),
       worldMap: this.worldMapGrid.snapshot,
@@ -280,13 +282,19 @@ export class MapEditor {
   }
 
   private createCellDraft(gridX: number, gridY: number): EditorMapDraft {
-    return this.withBlackBase({
+    return this.normalizeCellDraft(gridX, gridY, {
       version: 1,
       name: this.getCellMapName(gridX, gridY),
       tileSize: this.state.gridSize,
       worldMap: this.worldMapGrid.snapshot,
       placements: [],
     });
+  }
+
+  private normalizeCellDraft(gridX: number, gridY: number, draft: EditorMapDraft): EditorMapDraft {
+    return this.isOriginCell(gridX, gridY)
+      ? this.withoutBlackBase(draft)
+      : this.withBlackBase(draft);
   }
 
   private withBlackBase(draft: EditorMapDraft): EditorMapDraft {
@@ -317,6 +325,17 @@ export class MapEditor {
     };
   }
 
+  private withoutBlackBase(draft: EditorMapDraft): EditorMapDraft {
+    return {
+      ...draft,
+      placements: draft.placements.filter((placement) => placement.id !== BLACK_BASE_PLACEMENT_ID),
+    };
+  }
+
+  private isOriginCell(gridX: number, gridY: number): boolean {
+    return gridX === 0 && gridY === 0;
+  }
+
   private createWorldSave(): EditorWorldSave {
     this.persistCurrentCellDraft();
 
@@ -326,7 +345,7 @@ export class MapEditor {
 
     for (const cell of worldMap.cells) {
       const key = cellKey(cell.gridX, cell.gridY);
-      const draft = this.withBlackBase(this.cellDrafts.get(key) ?? this.createCellDraft(cell.gridX, cell.gridY));
+      const draft = this.normalizeCellDraft(cell.gridX, cell.gridY, this.cellDrafts.get(key) ?? this.createCellDraft(cell.gridX, cell.gridY));
       seen.add(key);
       cells.push({
         gridX: cell.gridX,
@@ -346,7 +365,7 @@ export class MapEditor {
         gridX,
         gridY,
         draft: {
-          ...this.withBlackBase(draft),
+          ...this.normalizeCellDraft(gridX, gridY, draft),
           name: this.getCellMapName(gridX, gridY),
           worldMap,
         },
@@ -431,14 +450,14 @@ export class MapEditor {
       this.cellDrafts.clear();
 
       for (const cell of worldSave.cells) {
-        this.cellDrafts.set(cellKey(cell.gridX, cell.gridY), this.withBlackBase(cell.draft));
+        this.cellDrafts.set(cellKey(cell.gridX, cell.gridY), this.normalizeCellDraft(cell.gridX, cell.gridY, cell.draft));
       }
 
       const current = this.worldMapGrid.current;
       const currentDraft = this.cellDrafts.get(cellKey(current.gridX, current.gridY))
         ?? this.createCellDraft(current.gridX, current.gridY);
 
-      await this.placement.loadDraft(this.withBlackBase(currentDraft));
+      await this.placement.loadDraft(this.normalizeCellDraft(current.gridX, current.gridY, currentDraft));
       console.info('[MapEditor] Loaded saved world.', {
         cells: worldSave.cells.length,
       });
@@ -458,10 +477,10 @@ export class MapEditor {
 
     this.cellDrafts.set(
       cellKey(current.gridX, current.gridY),
-      this.withBlackBase(draft),
+      this.normalizeCellDraft(current.gridX, current.gridY, draft),
     );
 
-    await this.placement.loadDraft(this.withBlackBase(draft));
+    await this.placement.loadDraft(this.normalizeCellDraft(current.gridX, current.gridY, draft));
   }
 
   private exportJson(): void {
@@ -472,9 +491,11 @@ export class MapEditor {
     const ok = window.confirm('현재 배치된 타일을 전부 삭제할까요?');
     if (!ok) return;
 
+    const current = this.worldMapGrid.current;
+    const draft = this.createCellDraft(current.gridX, current.gridY);
     this.placement.clear();
-    this.cellDrafts.set(cellKey(this.worldMapGrid.current.gridX, this.worldMapGrid.current.gridY), this.createCellDraft(this.worldMapGrid.current.gridX, this.worldMapGrid.current.gridY));
-    void this.placement.replaceDraft(this.createCellDraft(this.worldMapGrid.current.gridX, this.worldMapGrid.current.gridY));
+    this.cellDrafts.set(cellKey(current.gridX, current.gridY), draft);
+    void this.placement.replaceDraft(draft);
   }
 
   private screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
