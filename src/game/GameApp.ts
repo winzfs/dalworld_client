@@ -31,7 +31,7 @@ import { getActiveCell, hasCell, setActiveCell } from '../worldMap/activeCellSto
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, playerSpeed: 220, gatherRange: 80 };
-const CELL_EDGE_PADDING = 24;
+const CELL_EDGE_PADDING = 48;
 const CELL_TRANSFER_TRIGGER_PADDING = 32;
 
 export class GameApp {
@@ -195,18 +195,19 @@ export class GameApp {
   }
 
   private update(dt: number): void {
-    this.applyLocalMovement(dt);
-    this.handleRuntimeCellTransition();
+    if (!this.cellTransitioning) {
+      this.applyLocalMovement(dt);
+      this.handleRuntimeCellTransition();
+      this.inputSendSystem.update(
+        {
+          input: this.input.state,
+          player: this.findMe(),
+        },
+        dt,
+      );
+      this.handleGatherInput();
+    }
 
-    this.inputSendSystem.update(
-      {
-        input: this.input.state,
-        player: this.findMe(),
-      },
-      dt,
-    );
-
-    this.handleGatherInput();
     this.playerRenderer.update(dt);
     this.monsterRenderer.update(dt);
 
@@ -290,14 +291,28 @@ export class GameApp {
 
     this.cellTransitioning = true;
     setActiveCell(nextGridX, nextGridY);
-    me.x = nextX;
-    me.y = nextY;
-    this.snapshotSystem.setLocalPlayer(me);
-    this.playerRenderer.sync(this.snapshotSystem.snapshot.players, this.myPlayerId);
+    const transitionedPlayer: PlayerSnapshot = {
+      ...me,
+      x: nextX,
+      y: nextY,
+      cellX: nextGridX,
+      cellY: nextGridY,
+    };
+    this.snapshotSystem.setLocalPlayer(transitionedPlayer);
 
-    void this.loadWorldMap().finally(() => {
-      this.cellTransitioning = false;
-    });
+    void this.loadWorldMap()
+      .then(() => {
+        this.playerRenderer.sync(this.snapshotSystem.snapshot.players, this.myPlayerId);
+        this.cameraSystem.update({
+          player: transitionedPlayer,
+          world: this.worldInfo,
+          screenWidth: this.app.renderer.width,
+          screenHeight: this.app.renderer.height,
+        });
+      })
+      .finally(() => {
+        this.cellTransitioning = false;
+      });
   }
 
   private handleGatherInput(): void {
