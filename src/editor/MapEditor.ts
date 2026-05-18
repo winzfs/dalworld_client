@@ -19,6 +19,13 @@ export type MapEditorOptions = {
   onMoveCameraTo?: (x: number, y: number) => void;
 };
 
+export type WorldCellTransition = {
+  dx: -1 | 0 | 1;
+  dy: -1 | 0 | 1;
+  targetX: number;
+  targetY: number;
+};
+
 const DIRECT_SELECT_MAX_SIZE = 96;
 
 /**
@@ -39,6 +46,7 @@ export class MapEditor {
   private enabled = false;
   private worldWidth: number;
   private worldHeight: number;
+  private transitioning = false;
 
   private readonly pointerDownHandler = (event: PointerEvent) => {
     if (!this.enabled) return;
@@ -71,7 +79,10 @@ export class MapEditor {
     this.worldMapPanel = new WorldMapPanel({
       grid: this.worldMapGrid,
       onSelectCell: (gridX, gridY) => {
-        void this.selectWorldCell(gridX, gridY);
+        void this.selectWorldCell(gridX, gridY, {
+          targetX: this.worldWidth / 2,
+          targetY: this.worldHeight / 2,
+        });
       },
     });
     this.panel = new TilesetPanel(this.state, {
@@ -123,7 +134,28 @@ export class MapEditor {
     this.worldHeight = height;
   }
 
-  private async selectWorldCell(gridX: number, gridY: number): Promise<void> {
+  async transitionWorldCell(transition: WorldCellTransition): Promise<void> {
+    if (this.transitioning) return;
+    if (transition.dx === 0 && transition.dy === 0) return;
+
+    this.transitioning = true;
+    const current = this.worldMapGrid.current;
+    const nextX = current.gridX + transition.dx;
+    const nextY = current.gridY + transition.dy;
+
+    this.worldMapGrid.selectCell(nextX, nextY);
+    await this.selectWorldCell(nextX, nextY, {
+      targetX: transition.targetX,
+      targetY: transition.targetY,
+    });
+    this.transitioning = false;
+  }
+
+  private async selectWorldCell(
+    gridX: number,
+    gridY: number,
+    cameraTarget: { targetX: number; targetY: number },
+  ): Promise<void> {
     this.persistCurrentCellDraft();
 
     const key = cellKey(gridX, gridY);
@@ -131,7 +163,7 @@ export class MapEditor {
     this.cellDrafts.set(key, draft);
 
     await this.placement.replaceDraft(draft);
-    this.options.onMoveCameraTo?.(this.worldWidth / 2, this.worldHeight / 2);
+    this.options.onMoveCameraTo?.(cameraTarget.targetX, cameraTarget.targetY);
     console.info(`[MapEditor] Selected world cell ${gridX},${gridY}`);
   }
 
