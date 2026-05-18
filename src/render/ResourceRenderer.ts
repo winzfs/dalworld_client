@@ -63,21 +63,24 @@ export class ResourceRenderer {
       }
 
       if (!resource.alive) {
-        view.container.alpha = 0.18;
+        view.container.visible = false;
         view.hpBar.visible = false;
-      } else {
-        view.container.alpha = 1;
-        const hpRatio = resource.hp / resource.maxHp;
-        view.hpBar.visible = hpRatio < 1;
-        if (view.hpBar.visible) {
-          view.hpBar.clear();
-          view.hpBar
-            .rect(-HP_BAR_WIDTH / 2, -64, HP_BAR_WIDTH, 5)
-            .fill({ color: 0x1a1a2e });
-          view.hpBar
-            .rect(-HP_BAR_WIDTH / 2, -64, HP_BAR_WIDTH * Math.max(0, hpRatio), 5)
-            .fill({ color: resource.type === 'tree' ? 0x66bb6a : 0xb0bec5 });
-        }
+        continue;
+      }
+
+      view.container.visible = true;
+      view.container.alpha = 1;
+
+      const hpRatio = resource.hp / resource.maxHp;
+      view.hpBar.visible = hpRatio < 1;
+      if (view.hpBar.visible) {
+        view.hpBar.clear();
+        view.hpBar
+          .rect(-HP_BAR_WIDTH / 2, -64, HP_BAR_WIDTH, 5)
+          .fill({ color: 0x1a1a2e });
+        view.hpBar
+          .rect(-HP_BAR_WIDTH / 2, -64, HP_BAR_WIDTH * Math.max(0, hpRatio), 5)
+          .fill({ color: resource.type === 'tree' ? 0x66bb6a : 0xb0bec5 });
       }
     }
 
