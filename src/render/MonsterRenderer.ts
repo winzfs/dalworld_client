@@ -6,10 +6,10 @@ const MONSTER_COLOR_IDLE = 0xc62828;
 const MONSTER_COLOR_CHASE = 0xff5252;
 
 const SHEEP_SPRITE_SRC = '/assets/characters/monsters/sheep.png';
-const SHEEP_FRAME_WIDTH = 32;
-const SHEEP_FRAME_HEIGHT = 32;
+const SHEEP_FRAME_WIDTH = 50;
+const SHEEP_FRAME_HEIGHT = 50;
 const SHEEP_FRAME_COUNT = 4;
-const SHEEP_SCALE = 2;
+const SHEEP_SCALE = 1.3;
 const SHEEP_FPS = 8;
 
 const SHEEP_ROW_BY_FACING: Record<Facing, number> = {
