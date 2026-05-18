@@ -16,46 +16,368 @@ canvas {
   display: block;
 }
 
-#dalworld-hud {
-  position: fixed;
-  top: 8px;
-  left: 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(15, 20, 25, 0.75);
-  color: #e0e6ed;
-  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  pointer-events: none;
-  min-width: 160px;
-  z-index: 10;
+button {
+  font-family: inherit;
 }
 
-#dalworld-hud .hud-row {
+#dalworld-ui {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  color: #f7f0dd;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.ui-panel {
+  position: fixed;
+  pointer-events: none;
+  border: 1px solid rgba(255, 232, 180, 0.22);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(39, 30, 24, 0.86), rgba(18, 22, 26, 0.82));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+}
+
+.ui-player-panel {
+  left: 16px;
+  top: 16px;
+  width: 230px;
+  padding: 12px;
+}
+
+.ui-panel-title {
+  margin-bottom: 8px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffe4a3;
+}
+
+.ui-stat-row + .ui-stat-row {
+  margin-top: 8px;
+}
+
+.ui-stat-label {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
 }
 
-#dalworld-hud b {
+.ui-stat-label b {
+  color: #fff4ce;
+}
+
+.ui-bar {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.ui-bar-fill {
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  transition: transform 90ms linear;
+}
+
+.ui-stat-hp .ui-bar-fill {
+  background: linear-gradient(90deg, #e84a5f, #ff847c);
+}
+
+.ui-stat-stamina .ui-bar-fill {
+  background: linear-gradient(90deg, #47b881, #9be15d);
+}
+
+.ui-resource-panel {
+  left: 16px;
+  top: 130px;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+
+.ui-resource {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 56px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+}
+
+.ui-debug-panel {
+  right: 16px;
+  top: 16px;
+  width: 170px;
+  padding: 10px;
+  font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.ui-debug-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ui-debug-row b {
   color: #ffd166;
-  font-weight: 600;
 }
 
-#dalworld-hud .gather-hint {
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  color: #55d6be;
+.status-open { color: #95e1a3 !important; }
+.status-connecting { color: #ffd166 !important; }
+.status-closed,
+.status-error { color: #ef476f !important; }
+
+.ui-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: 116px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(17, 24, 28, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  transform: translateX(-50%);
 }
 
-#dalworld-hud .gather-hint b {
-  color: #55d6be;
+.ui-prompt kbd {
+  min-width: 26px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  background: #ffd166;
+  color: #1b1f23;
+  font-weight: 800;
+  text-align: center;
 }
 
-#dalworld-hud .status-open { color: #95e1a3; }
-#dalworld-hud .status-connecting { color: #ffd166; }
-#dalworld-hud .status-closed,
-#dalworld-hud .status-error { color: #ef476f; }
+.ui-hotbar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 18px;
+  background: rgba(17, 24, 28, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.ui-slot {
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7f0dd;
+  font-weight: 800;
+}
+
+.ui-slot.is-active {
+  border-color: rgba(255, 209, 102, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.18) inset;
+}
+
+#dalworld-windows {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  color: #f7f0dd;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.floating-toolbar {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.floating-icon {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 58px;
+  height: 58px;
+  border: 1px solid rgba(255, 232, 180, 0.3);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(66, 48, 35, 0.92), rgba(30, 34, 38, 0.88));
+  color: #fff1c5;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.floating-icon:active,
+.game-window-header:active {
+  cursor: grabbing;
+}
+
+.floating-icon-symbol {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.floating-icon-label {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.game-window {
+  position: absolute;
+  min-width: 320px;
+  border: 1px solid rgba(255, 232, 180, 0.24);
+  border-radius: 18px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(45, 35, 28, 0.96), rgba(18, 22, 26, 0.96));
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.48);
+  pointer-events: auto;
+}
+
+.inventory-window {
+  width: min(760px, calc(100vw - 24px));
+}
+
+.simple-system-window {
+  width: min(480px, calc(100vw - 24px));
+}
+
+.game-window[hidden] {
+  display: none !important;
+}
+
+.game-window-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 12px 0 16px;
+  background: rgba(255, 209, 102, 0.12);
+  border-bottom: 1px solid rgba(255, 232, 180, 0.16);
+  cursor: grab;
+  touch-action: none;
+}
+
+.game-window-header strong {
+  color: #ffe4a3;
+  font-size: 15px;
+}
+
+.game-window-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffe4a3;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.inventory-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.inventory-tab {
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+}
+
+.inventory-tab.is-active {
+  border-color: rgba(255, 209, 102, 0.86);
+  background: rgba(255, 209, 102, 0.2);
+  color: #ffe4a3;
+}
+
+.inventory-body {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) 240px;
+  gap: 12px;
+  padding: 12px;
+}
+
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(40px, 1fr));
+  gap: 8px;
+}
+
+.inventory-slot {
+  aspect-ratio: 1;
+  min-height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  cursor: pointer;
+}
+
+.inventory-slot.is-selected {
+  border-color: #ffd166;
+  box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.18) inset;
+}
+
+.inventory-detail {
+  min-height: 280px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.inventory-detail h3,
+.system-window-body h3 {
+  margin: 0 0 8px;
+  color: #ffe4a3;
+}
+
+.inventory-detail p,
+.system-window-body p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.74);
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.system-window-body {
+  padding: 14px;
+}
+
+.placeholder-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.placeholder-card {
+  height: 64px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffe4a3;
+  font-weight: 800;
+}
 
 #dalworld-mobile {
   position: fixed;
@@ -121,4 +443,22 @@ canvas {
   height: 44px;
   background: rgba(255, 255, 255, 0.85);
   font-size: 20px;
+}
+
+@media (max-width: 720px) {
+  .ui-debug-panel {
+    display: none;
+  }
+
+  .inventory-body {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-detail {
+    min-height: 120px;
+  }
+
+  .inventory-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
 }
