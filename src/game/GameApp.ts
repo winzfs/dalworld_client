@@ -14,10 +14,11 @@ import { Camera } from './Camera';
 import { PlayerRenderer } from '../render/PlayerRenderer';
 import { ResourceRenderer } from '../render/ResourceRenderer';
 import { MonsterRenderer } from '../render/MonsterRenderer';
-import { DebugHud } from '../render/DebugHud';
 import { MobileControls } from '../render/MobileControls';
 import { ProceduralMeadowRenderer } from '../render/ProceduralMeadowRenderer';
 import { getMonsterConfig } from '../assets/monsters';
+import { GameHud } from '../ui/GameHud';
+import { GameWindows } from '../ui/GameWindows';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -32,7 +33,8 @@ export class GameApp {
   private readonly background = new Graphics();
   private readonly input = new InputController();
   private readonly network: GameNetwork;
-  private readonly hud = new DebugHud();
+  private readonly hud = new GameHud();
+  private readonly windows = new GameWindows();
   private readonly camera: Camera;
   private readonly playerRenderer: PlayerRenderer;
   private readonly resourceRenderer: ResourceRenderer;
@@ -59,6 +61,7 @@ export class GameApp {
     this.resourceRenderer = new ResourceRenderer(this.world);
     this.monsterRenderer = new MonsterRenderer(this.world);
     this.playerRenderer = new PlayerRenderer(this.world);
+    void this.windows;
   }
 
   async start(mount: HTMLElement): Promise<void> {
