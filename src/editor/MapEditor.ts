@@ -12,6 +12,8 @@ export type MapEditorOptions = {
   uiRoot?: HTMLElement;
   tileSize?: number;
   mapName?: string;
+  worldWidth?: number;
+  worldHeight?: number;
 };
 
 const DIRECT_SELECT_MAX_SIZE = 96;
@@ -29,6 +31,8 @@ export class MapEditor {
   private readonly storage: MapStorage;
   private readonly uiRoot: HTMLElement;
   private enabled = false;
+  private worldWidth: number;
+  private worldHeight: number;
 
   private readonly pointerDownHandler = (event: PointerEvent) => {
     if (!this.enabled) return;
@@ -42,6 +46,8 @@ export class MapEditor {
   constructor(private readonly options: MapEditorOptions) {
     const mapName = options.mapName ?? 'untitled-map';
 
+    this.worldWidth = options.worldWidth ?? 3000;
+    this.worldHeight = options.worldHeight ?? 3000;
     this.uiRoot = options.uiRoot ?? document.body;
     this.storage = new MapStorage(mapName);
     this.placement = new TilePlacementSystem(this.state, {
@@ -62,6 +68,12 @@ export class MapEditor {
       onExport: () => this.exportJson(),
       onClear: () => this.clearAll(),
       onPickAsset: (asset) => this.pickAsset(asset),
+      onFillAll: () => {
+        void this.fillAll();
+      },
+      onRandomFill: (chancePercent) => {
+        void this.fillRandom(chancePercent);
+      },
     });
   }
 
@@ -88,6 +100,11 @@ export class MapEditor {
     }
   }
 
+  setWorldSize(width: number, height: number): void {
+    this.worldWidth = width;
+    this.worldHeight = height;
+  }
+
   private pickAsset(asset: EditorTilesetAsset): void {
     this.state.selectAsset(asset);
     void this.shouldOpenPicker(asset).then((openPicker) => {
@@ -104,6 +121,27 @@ export class MapEditor {
     if (!size) return false;
 
     return size.width > DIRECT_SELECT_MAX_SIZE || size.height > DIRECT_SELECT_MAX_SIZE;
+  }
+
+  private async fillAll(): Promise<void> {
+    const ok = window.confirm('현재 선택한 타일로 맵 전체를 채울까요? 같은 레이어의 기존 타일은 겹치는 위치에서 교체됩니다.');
+    if (!ok) return;
+
+    await this.placement.fillAll({
+      width: this.worldWidth,
+      height: this.worldHeight,
+    });
+  }
+
+  private async fillRandom(chancePercent: number): Promise<void> {
+    const ok = window.confirm(`${chancePercent}% 확률로 맵 전체에 랜덤 배치할까요?`);
+    if (!ok) return;
+
+    await this.placement.fillRandom({
+      width: this.worldWidth,
+      height: this.worldHeight,
+      chancePercent,
+    });
   }
 
   private save(): void {
