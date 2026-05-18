@@ -31,8 +31,8 @@ import { getActiveCell, hasCell, setActiveCell } from '../worldMap/activeCellSto
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, playerSpeed: 220, gatherRange: 80 };
-const CELL_EDGE_PADDING = 48;
 const CELL_TRANSFER_TRIGGER_PADDING = 32;
+const CELL_EDGE_PADDING = CELL_TRANSFER_TRIGGER_PADDING + 96;
 
 export class GameApp {
   private readonly app = new Application();
@@ -269,11 +269,9 @@ export class GameApp {
     }
 
     if (me.y >= map.cellSize - CELL_TRANSFER_TRIGGER_PADDING) {
-      // Moving down into the cell below: enter from the new cell's top edge.
       nextGridY += 1;
       nextY = CELL_EDGE_PADDING;
     } else if (me.y <= CELL_TRANSFER_TRIGGER_PADDING) {
-      // Moving up into the cell above: enter from the new cell's bottom edge.
       nextGridY -= 1;
       nextY = map.cellSize - CELL_EDGE_PADDING;
     }
