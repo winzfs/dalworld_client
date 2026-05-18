@@ -1,4 +1,4 @@
-import type { EditorLayerId, EditorTilesetAsset, EditorToolMode } from './types';
+import type { EditorBrush, EditorLayerId, EditorSourceRect, EditorTilesetAsset, EditorToolMode } from './types';
 import { TILESET_CATEGORIES } from './tilesetManifest';
 
 type EditorStateListener = () => void;
@@ -7,11 +7,14 @@ const MIN_BRUSH_SCALE = 0.1;
 const MAX_BRUSH_SCALE = 10;
 const BRUSH_SCALE_STEP = 0.1;
 
+const defaultAsset = TILESET_CATEGORIES[0]?.assets[0] ?? null;
+
 export class EditorState {
   private readonly listeners = new Set<EditorStateListener>();
 
   activeCategoryId = TILESET_CATEGORIES[0]?.id ?? '';
-  selectedAsset: EditorTilesetAsset | null = TILESET_CATEGORIES[0]?.assets[0] ?? null;
+  selectedAsset: EditorTilesetAsset | null = defaultAsset;
+  selectedBrush: EditorBrush | null = defaultAsset ? { asset: defaultAsset } : null;
   activeLayer: EditorLayerId = 'ground';
   mode: EditorToolMode = 'paint';
   brushScale = 1;
@@ -26,15 +29,26 @@ export class EditorState {
 
     this.activeCategoryId = categoryId;
     const category = TILESET_CATEGORIES.find((item) => item.id === categoryId);
-    this.selectedAsset = category?.assets[0] ?? null;
+    const asset = category?.assets[0] ?? null;
+    this.selectedAsset = asset;
+    this.selectedBrush = asset ? { asset } : null;
     this.emit();
   }
 
   selectAsset(asset: EditorTilesetAsset): void {
-    this.selectedAsset = asset;
-    this.activeCategoryId = asset.categoryId;
+    this.setBrush({ asset });
+  }
+
+  setBrush(brush: EditorBrush): void {
+    this.selectedAsset = brush.asset;
+    this.selectedBrush = brush;
+    this.activeCategoryId = brush.asset.categoryId;
     this.mode = 'paint';
     this.emit();
+  }
+
+  setSourceRect(asset: EditorTilesetAsset, sourceRect: EditorSourceRect): void {
+    this.setBrush({ asset, sourceRect });
   }
 
   setLayer(layer: EditorLayerId): void {
