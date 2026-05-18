@@ -22,11 +22,10 @@ import { HudSystem } from './systems/HudSystem';
 import { ServerMessageRouter } from './systems/ServerMessageRouter';
 import { CellTransitionSystem } from './systems/CellTransitionSystem';
 import { RuntimeWorldSystem } from './systems/RuntimeWorldSystem';
+import { RuntimeCellTransitionController } from './systems/RuntimeCellTransitionController';
 import { MapEditor } from '../editor/MapEditor';
 import { EditorCameraSystem } from '../editor/EditorCameraSystem';
 import { EditorMinimap } from '../editor/EditorMinimap';
-import { getRuntimeWorldMap } from '../worldMap/runtimeMapStore';
-import { getActiveCell, hasCell, setActiveCell } from '../worldMap/activeCellStore';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -55,6 +54,7 @@ export class GameApp {
     triggerPadding: CELL_TRANSFER_TRIGGER_PADDING,
     spawnPadding: CELL_EDGE_PADDING,
   });
+  private readonly runtimeCellTransitionController: RuntimeCellTransitionController;
   private readonly inputSendSystem: InputSendSystem;
   private readonly snapshotSystem = new SnapshotSystem();
   private readonly editorMode: boolean;
@@ -62,7 +62,6 @@ export class GameApp {
   private readonly editorMinimap: EditorMinimap | null;
 
   private editorTransitioning = false;
-  private cellTransitioning = false;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
   private gameplayConfig: PublicGameplayConfig = DEFAULT_GAMEPLAY;
@@ -90,6 +89,16 @@ export class GameApp {
       worldInfo: this.worldInfo,
       cameraSystem: this.cameraSystem,
       worldMapRenderer: this.worldMapRenderer,
+    });
+    this.runtimeCellTransitionController = new RuntimeCellTransitionController({
+      cellTransitionSystem: this.cellTransitionSystem,
+      snapshotSystem: this.snapshotSystem,
+      playerRenderer: this.playerRenderer,
+      cameraSystem: this.cameraSystem,
+      getMyPlayerId: () => this.myPlayerId,
+      getWorldInfo: () => this.worldInfo,
+      getScreenSize: () => ({ width: this.app.renderer.width, height: this.app.renderer.height }),
+      loadWorldMap: () => this.loadWorldMap(),
     });
 
     this.messageRouter = new ServerMessageRouter({
@@ -206,9 +215,9 @@ export class GameApp {
   }
 
   private update(dt: number): void {
-    if (!this.cellTransitioning) {
+    if (!this.runtimeCellTransitionController.isTransitioning) {
       this.applyLocalMovement(dt);
-      this.handleRuntimeCellTransition();
+      this.runtimeCellTransitionController.tryStart(this.findMe());
       this.inputSendSystem.update(
         {
           input: this.input.state,
@@ -258,55 +267,6 @@ export class GameApp {
     );
 
     this.playerRenderer.sync(this.snapshotSystem.snapshot.players, this.myPlayerId);
-  }
-
-  private handleRuntimeCellTransition(): void {
-    const map = getRuntimeWorldMap();
-    const me = this.findMe();
-    if (!map || !me || this.cellTransitioning) return;
-
-    const active = getActiveCell();
-    const transition = this.cellTransitionSystem.resolve({
-      map,
-      player: me,
-      activeCell: active,
-      hasCell: (gridX, gridY) => hasCell(map, gridX, gridY),
-    });
-
-    if (!transition.changed) return;
-
-    console.info('[GameApp] Runtime cell transition', {
-      active,
-      target: { gridX: transition.nextGridX, gridY: transition.nextGridY },
-      player: { x: me.x, y: me.y },
-      spawn: { x: transition.nextX, y: transition.nextY },
-      availableCells: map.cells.map((cell) => `${cell.gridX}:${cell.gridY}`),
-    });
-
-    this.cellTransitioning = true;
-    setActiveCell(transition.nextGridX, transition.nextGridY);
-    const transitionedPlayer: PlayerSnapshot = {
-      ...me,
-      x: transition.nextX,
-      y: transition.nextY,
-      cellX: transition.nextGridX,
-      cellY: transition.nextGridY,
-    };
-    this.snapshotSystem.setLocalPlayer(transitionedPlayer);
-
-    void this.loadWorldMap()
-      .then(() => {
-        this.playerRenderer.sync(this.snapshotSystem.snapshot.players, this.myPlayerId);
-        this.cameraSystem.update({
-          player: transitionedPlayer,
-          world: this.worldInfo,
-          screenWidth: this.app.renderer.width,
-          screenHeight: this.app.renderer.height,
-        });
-      })
-      .finally(() => {
-        this.cellTransitioning = false;
-      });
   }
 
   private handleGatherInput(): void {
