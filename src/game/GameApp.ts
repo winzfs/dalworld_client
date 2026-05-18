@@ -3,7 +3,6 @@ import { GameNetwork, getDefaultWebSocketUrl, type NetworkStatus } from '../net/
 import type {
   PlayerSnapshot,
   PublicGameplayConfig,
-  ServerToClientMessage,
   WorldInfo,
 } from '../protocol/messages';
 import { InputController } from './InputController';
@@ -20,6 +19,7 @@ import { InputSendSystem } from './systems/InputSendSystem';
 import { SnapshotSystem } from './systems/SnapshotSystem';
 import { CameraSystem } from './systems/CameraSystem';
 import { HudSystem } from './systems/HudSystem';
+import { ServerMessageRouter } from './systems/ServerMessageRouter';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -33,6 +33,7 @@ export class GameApp {
   private readonly network: GameNetwork;
   private readonly cameraSystem: CameraSystem;
   private readonly hudSystem: HudSystem;
+  private readonly messageRouter: ServerMessageRouter;
   private readonly playerRenderer: PlayerRenderer;
   private readonly resourceRenderer: ResourceRenderer;
   private readonly monsterRenderer: MonsterRenderer;
@@ -52,10 +53,36 @@ export class GameApp {
     this.inputSendSystem = new InputSendSystem(this.network, INPUT_SEND_HZ);
     this.cameraSystem = new CameraSystem(new Camera(this.world));
     this.hudSystem = new HudSystem(new GameHud(), new GameWindows());
+
     this.world.addChild(this.background);
     this.resourceRenderer = new ResourceRenderer(this.world);
     this.monsterRenderer = new MonsterRenderer(this.world);
     this.playerRenderer = new PlayerRenderer(this.world);
+
+    this.messageRouter = new ServerMessageRouter({
+      input: this.input.state,
+      snapshotSystem: this.snapshotSystem,
+      cameraSystem: this.cameraSystem,
+      playerRenderer: this.playerRenderer,
+      resourceRenderer: this.resourceRenderer,
+      monsterRenderer: this.monsterRenderer,
+      getMyPlayerId: () => this.myPlayerId,
+      setMyPlayerId: (playerId) => {
+        this.myPlayerId = playerId;
+      },
+      setWorldInfo: (world) => {
+        this.worldInfo = world;
+      },
+      setGameplayConfig: (gameplay) => {
+        this.gameplayConfig = gameplay ?? DEFAULT_GAMEPLAY;
+      },
+      redrawWorld: () => {
+        this.drawWorldBackground();
+      },
+      reloadWorldMap: () => {
+        void this.loadWorldMap();
+      },
+    });
   }
 
   async start(mount: HTMLElement): Promise<void> {
@@ -78,7 +105,7 @@ export class GameApp {
       this.status = status;
     });
 
-    this.network.onMessage((message) => this.handleServerMessage(message));
+    this.network.onMessage((message) => this.messageRouter.handle(message));
     this.network.connect();
 
     this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
@@ -151,41 +178,6 @@ export class GameApp {
     );
 
     this.inputSendSystem.sendGather(target?.id);
-  }
-
-  private handleServerMessage(message: ServerToClientMessage): void {
-    switch (message.type) {
-      case 'welcome':
-        this.myPlayerId = message.playerId;
-        this.worldInfo = message.world;
-        this.gameplayConfig = message.gameplay ?? DEFAULT_GAMEPLAY;
-        this.cameraSystem.setWorldSize(message.world);
-        this.drawWorldBackground();
-        void this.loadWorldMap();
-        return;
-
-      case 'snapshot': {
-        const snapshot = this.snapshotSystem.apply({
-          myPlayerId: this.myPlayerId,
-          input: this.input.state,
-          players: message.players,
-          resources: message.resources,
-          monsters: message.monsters,
-          tick: message.tick,
-        });
-
-        this.playerRenderer.sync(snapshot.players, this.myPlayerId);
-        this.resourceRenderer.sync(snapshot.resources);
-        this.monsterRenderer.sync(snapshot.monsters);
-        return;
-      }
-
-      case 'event':
-        return;
-
-      case 'pong':
-        return;
-    }
   }
 
   private async loadWorldMap(): Promise<void> {
