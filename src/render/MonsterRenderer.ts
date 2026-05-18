@@ -9,7 +9,7 @@ const SHEEP_SPRITE_SRC = '/assets/characters/monsters/sheep.png';
 const SHEEP_FRAME_WIDTH = 50;
 const SHEEP_FRAME_HEIGHT = 50;
 const SHEEP_FRAME_COUNT = 4;
-const SHEEP_SCALE = 1.3;
+const SHEEP_SCALE = 0.8;
 const SHEEP_FPS = 8;
 
 const SHEEP_ROW_BY_FACING: Record<Facing, number> = {
@@ -154,6 +154,8 @@ export class MonsterRenderer {
         view.sprite.anchor.set(0.5, 1);
         view.sprite.scale.set(SHEEP_SCALE);
         view.container.addChild(view.sprite);
+      } else {
+        view.sprite.scale.set(SHEEP_SCALE);
       }
 
       view.sprite.visible = true;
