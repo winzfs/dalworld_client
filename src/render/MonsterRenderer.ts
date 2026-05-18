@@ -1,23 +1,12 @@
 import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
-import type { Facing, MonsterSnapshot } from '../protocol/messages';
+import type { Facing, MonsterSnapshot, MonsterType } from '../protocol/messages';
 import { Interpolator2D } from '../game/interpolation';
-
-const MONSTER_COLOR_IDLE = 0xc62828;
-const MONSTER_COLOR_CHASE = 0xff5252;
-
-const SHEEP_SPRITE_SRC = '/assets/characters/monsters/sheep.png';
-const SHEEP_FRAME_WIDTH = 50;
-const SHEEP_FRAME_HEIGHT = 50;
-const SHEEP_FRAME_COUNT = 4;
-const SHEEP_SCALE = 0.8;
-const SHEEP_FPS = 8;
-
-const SHEEP_ROW_BY_FACING: Record<Facing, number> = {
-  down: 0,
-  up: 1,
-  left: 2,
-  right: 3,
-};
+import {
+  getMonsterConfig,
+  MONSTER_CONFIGS,
+  type MonsterRenderConfig,
+  type MonsterSpriteSheetConfig,
+} from '../assets/monsters';
 
 type MonsterView = {
   container: Container;
@@ -33,16 +22,22 @@ type MonsterView = {
   frame: number;
 };
 
-type SheepFrames = Record<Facing, Texture[]>;
+type DirectionalFrames = Record<Facing, Texture[]>;
+
+type LoadedSpriteSheet = {
+  config: MonsterSpriteSheetConfig;
+  frames: DirectionalFrames;
+};
 
 export class MonsterRenderer {
   private readonly layer = new Container();
   private readonly views = new Map<string, MonsterView>();
-  private sheepFrames: SheepFrames | null = null;
+  private readonly spriteSheets = new Map<MonsterType, LoadedSpriteSheet>();
+  private readonly failedSpriteSheets = new Set<MonsterType>();
 
   constructor(parent: Container) {
     parent.addChild(this.layer);
-    void this.loadSheepFrames();
+    void this.loadConfiguredSpriteSheets();
   }
 
   sync(monsters: MonsterSnapshot[]): void {
@@ -65,6 +60,7 @@ export class MonsterRenderer {
 
       if (view.type !== monster.type) {
         view.type = monster.type;
+        view.frame = -1;
         this.applyMonsterVisual(view);
       }
     }
@@ -97,28 +93,26 @@ export class MonsterRenderer {
     }
   }
 
-  private async loadSheepFrames(): Promise<void> {
-    try {
-      this.sheepFrames = await loadDirectionalFrames(
-        SHEEP_SPRITE_SRC,
-        SHEEP_FRAME_WIDTH,
-        SHEEP_FRAME_HEIGHT,
-        SHEEP_FRAME_COUNT,
-      );
+  private async loadConfiguredSpriteSheets(): Promise<void> {
+    const entries = Object.values(MONSTER_CONFIGS).filter((config) => config.spriteSheet);
 
-      for (const view of this.views.values()) {
-        if (view.type === 'sheep') {
-          this.applyMonsterVisual(view);
+    await Promise.all(
+      entries.map(async (config) => {
+        const sheetConfig = config.spriteSheet;
+        if (!sheetConfig) return;
+
+        try {
+          const frames = await loadDirectionalFrames(sheetConfig);
+          this.spriteSheets.set(config.type, { config: sheetConfig, frames });
+        } catch (error) {
+          this.failedSpriteSheets.add(config.type);
+          console.warn(`Failed to load ${config.type} monster sprite. Using fallback shape.`, error);
         }
-      }
-    } catch (error) {
-      console.warn('Failed to load sheep monster sprite. Using fallback sheep shape.', error);
-      this.sheepFrames = null;
-      for (const view of this.views.values()) {
-        if (view.type === 'sheep') {
-          this.applyMonsterVisual(view);
-        }
-      }
+      }),
+    );
+
+    for (const view of this.views.values()) {
+      this.applyMonsterVisual(view);
     }
   }
 
@@ -148,16 +142,16 @@ export class MonsterRenderer {
   }
 
   private applyMonsterVisual(view: MonsterView): void {
-    if (view.type === 'sheep' && this.sheepFrames) {
+    const loaded = this.spriteSheets.get(view.type);
+
+    if (loaded) {
       if (!view.sprite) {
-        view.sprite = new Sprite(this.sheepFrames.down[0]);
-        view.sprite.anchor.set(0.5, 1);
-        view.sprite.scale.set(SHEEP_SCALE);
+        view.sprite = new Sprite(loaded.frames.down[0]);
         view.container.addChild(view.sprite);
-      } else {
-        view.sprite.scale.set(SHEEP_SCALE);
       }
 
+      view.sprite.anchor.set(loaded.config.anchor.x, loaded.config.anchor.y);
+      view.sprite.scale.set(loaded.config.scale);
       view.sprite.visible = true;
       view.body.visible = false;
       view.frame = -1;
@@ -173,101 +167,101 @@ export class MonsterRenderer {
   }
 
   private updateSpriteAnimation(view: MonsterView, dt: number, moving: boolean): void {
-    if (view.type !== 'sheep' || !view.sprite || !this.sheepFrames) return;
+    const loaded = this.spriteSheets.get(view.type);
+    if (!loaded || !view.sprite) return;
 
     if (moving || view.state === 'chase') {
       view.animTime += dt;
     }
 
     const frame = moving || view.state === 'chase'
-      ? Math.floor(view.animTime * SHEEP_FPS) % SHEEP_FRAME_COUNT
+      ? Math.floor(view.animTime * loaded.config.fps) % loaded.config.frameCount
       : 0;
 
     if (frame !== view.frame) {
       view.frame = frame;
-      view.sprite.texture = this.sheepFrames[view.facing][frame];
+      view.sprite.texture = loaded.frames[view.facing][frame];
     }
   }
 
   private drawFallback(view: MonsterView): void {
+    const config = getMonsterConfig(view.type);
     view.body.clear();
 
     if (view.type === 'sheep') {
-      this.drawSheepFallback(view.body, view.state === 'chase');
+      drawSheepFallback(view.body, view.state === 'chase');
       return;
     }
 
     view.body
-      .circle(0, 0, 16)
-      .fill({ color: view.state === 'chase' ? MONSTER_COLOR_CHASE : MONSTER_COLOR_IDLE });
-  }
-
-  private drawSheepFallback(body: Graphics, chasing: boolean): void {
-    const wool = chasing ? 0xfff2c7 : 0xf6f1df;
-    const outline = 0x5b5146;
-    const face = 0x8b6f54;
-
-    body
-      .ellipse(0, -18, 23, 15)
-      .fill({ color: 0x000000, alpha: 0.18 });
-
-    body
-      .circle(-14, -34, 11)
-      .fill({ color: wool })
-      .circle(0, -38, 15)
-      .fill({ color: wool })
-      .circle(14, -34, 11)
-      .fill({ color: wool })
-      .circle(-4, -28, 14)
-      .fill({ color: wool })
-      .circle(10, -27, 12)
-      .fill({ color: wool });
-
-    body
-      .ellipse(18, -32, 9, 11)
-      .fill({ color: face })
-      .circle(21, -35, 2)
-      .fill({ color: 0x111111 });
-
-    body
-      .roundRect(-14, -19, 5, 13, 2)
-      .fill({ color: outline })
-      .roundRect(7, -19, 5, 13, 2)
-      .fill({ color: outline });
+      .circle(0, 0, config.fallback.radius)
+      .fill({ color: view.state === 'chase' ? config.fallback.chaseColor : config.fallback.idleColor });
   }
 }
 
-async function loadDirectionalFrames(
-  src: string,
-  frameWidth: number,
-  frameHeight: number,
-  frameCount: number,
-): Promise<SheepFrames> {
-  const image = await loadImage(src);
+async function loadDirectionalFrames(config: MonsterSpriteSheetConfig): Promise<DirectionalFrames> {
+  const image = await loadImage(config.src);
   const sheet = Texture.from(image);
   sheet.source.scaleMode = 'nearest';
 
   return {
-    down: makeRowTextures(sheet, SHEEP_ROW_BY_FACING.down, frameWidth, frameHeight, frameCount),
-    up: makeRowTextures(sheet, SHEEP_ROW_BY_FACING.up, frameWidth, frameHeight, frameCount),
-    left: makeRowTextures(sheet, SHEEP_ROW_BY_FACING.left, frameWidth, frameHeight, frameCount),
-    right: makeRowTextures(sheet, SHEEP_ROW_BY_FACING.right, frameWidth, frameHeight, frameCount),
+    down: makeRowTextures(sheet, config.rows.down, config),
+    up: makeRowTextures(sheet, config.rows.up, config),
+    left: makeRowTextures(sheet, config.rows.left, config),
+    right: makeRowTextures(sheet, config.rows.right, config),
   };
 }
 
 function makeRowTextures(
   sheet: Texture,
   row: number,
-  frameWidth: number,
-  frameHeight: number,
-  frameCount: number,
+  config: MonsterSpriteSheetConfig,
 ): Texture[] {
-  return Array.from({ length: frameCount }, (_, index) => {
+  return Array.from({ length: config.frameCount }, (_, index) => {
     return new Texture({
       source: sheet.source,
-      frame: new Rectangle(index * frameWidth, row * frameHeight, frameWidth, frameHeight),
+      frame: new Rectangle(
+        index * config.frameWidth,
+        row * config.frameHeight,
+        config.frameWidth,
+        config.frameHeight,
+      ),
     });
   });
+}
+
+function drawSheepFallback(body: Graphics, chasing: boolean): void {
+  const wool = chasing ? 0xfff2c7 : 0xf6f1df;
+  const outline = 0x5b5146;
+  const face = 0x8b6f54;
+
+  body
+    .ellipse(0, -18, 23, 15)
+    .fill({ color: 0x000000, alpha: 0.18 });
+
+  body
+    .circle(-14, -34, 11)
+    .fill({ color: wool })
+    .circle(0, -38, 15)
+    .fill({ color: wool })
+    .circle(14, -34, 11)
+    .fill({ color: wool })
+    .circle(-4, -28, 14)
+    .fill({ color: wool })
+    .circle(10, -27, 12)
+    .fill({ color: wool });
+
+  body
+    .ellipse(18, -32, 9, 11)
+    .fill({ color: face })
+    .circle(21, -35, 2)
+    .fill({ color: 0x111111 });
+
+  body
+    .roundRect(-14, -19, 5, 13, 2)
+    .fill({ color: outline })
+    .roundRect(7, -19, 5, 13, 2)
+    .fill({ color: outline });
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
