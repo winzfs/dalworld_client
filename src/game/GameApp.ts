@@ -137,12 +137,12 @@ export class GameApp {
       const deltaY = direction.y * speed * dt;
 
       const nextX = clamp(me.x + deltaX, radius, this.worldInfo.width - radius);
-      if (this.canPlayerOccupy(nextX, me.y, radius)) {
+      if (this.canPlayerOccupy(me.x, me.y, nextX, me.y, radius)) {
         me.x = nextX;
       }
 
       const nextY = clamp(me.y + deltaY, radius, this.worldInfo.height - radius);
-      if (this.canPlayerOccupy(me.x, nextY, radius)) {
+      if (this.canPlayerOccupy(me.x, me.y, me.x, nextY, radius)) {
         me.y = nextY;
       }
 
@@ -152,11 +152,24 @@ export class GameApp {
     this.playerRenderer.sync(this.latestPlayers, this.myPlayerId);
   }
 
-  private canPlayerOccupy(x: number, y: number, playerRadius: number): boolean {
+  private canPlayerOccupy(
+    currentX: number,
+    currentY: number,
+    nextX: number,
+    nextY: number,
+    playerRadius: number,
+  ): boolean {
     for (const monster of this.latestMonsters) {
-      if (circlesOverlap(x, y, playerRadius, monster.x, monster.y, MONSTER_COLLISION_RADIUS)) {
-        return false;
-      }
+      const minDistance = playerRadius + MONSTER_COLLISION_RADIUS;
+      const minDistanceSq = minDistance * minDistance;
+      const currentDistanceSq = squaredDistance(currentX, currentY, monster.x, monster.y);
+      const nextDistanceSq = squaredDistance(nextX, nextY, monster.x, monster.y);
+
+      if (nextDistanceSq >= minDistanceSq) continue;
+
+      if (currentDistanceSq < minDistanceSq && nextDistanceSq > currentDistanceSq) continue;
+
+      return false;
     }
 
     return true;
@@ -328,18 +341,10 @@ function getMoveDirection(keys: MovementKeys): { x: number; y: number } | null {
   return { x: x / length, y: y / length };
 }
 
-function circlesOverlap(
-  ax: number,
-  ay: number,
-  ar: number,
-  bx: number,
-  by: number,
-  br: number,
-): boolean {
-  const minDistance = ar + br;
+function squaredDistance(ax: number, ay: number, bx: number, by: number): number {
   const dx = ax - bx;
   const dy = ay - by;
-  return dx * dx + dy * dy < minDistance * minDistance;
+  return dx * dx + dy * dy;
 }
 
 function clamp(value: number, min: number, max: number): number {
