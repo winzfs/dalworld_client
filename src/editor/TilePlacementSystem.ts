@@ -1,6 +1,7 @@
 import { Assets, Container, Graphics, Sprite, type Texture } from 'pixi.js';
 import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset } from './types';
 import { EditorState } from './EditorState';
+import { TILESET_CATEGORIES } from './tilesetManifest';
 
 export type TilePlacementSystemOptions = {
   tileSize: number;
@@ -79,6 +80,31 @@ export class TilePlacementSystem {
     if (placement) {
       this.removePlacement(placement.id);
     }
+  }
+
+  async loadDraft(draft: EditorMapDraft): Promise<void> {
+    this.clear();
+    this.draft.name = draft.name;
+    this.draft.placements.push(...draft.placements.map((placement) => ({ ...placement })));
+
+    for (const placement of this.draft.placements) {
+      const asset = findAssetById(placement.assetId) ?? {
+        id: placement.assetId,
+        name: placement.assetId,
+        categoryId: placement.categoryId,
+        url: placement.assetUrl,
+      };
+      await this.createDisplay(placement, asset);
+    }
+  }
+
+  clear(): void {
+    for (const display of this.displays.values()) {
+      display.destroy();
+    }
+
+    this.displays.clear();
+    this.draft.placements.length = 0;
   }
 
   private async createDisplay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Promise<void> {
@@ -185,4 +211,13 @@ function fallbackColor(categoryId: string): number {
     default:
       return 0x55d6be;
   }
+}
+
+function findAssetById(assetId: string): EditorTilesetAsset | null {
+  for (const category of TILESET_CATEGORIES) {
+    const asset = category.assets.find((item) => item.id === assetId);
+    if (asset) return asset;
+  }
+
+  return null;
 }
