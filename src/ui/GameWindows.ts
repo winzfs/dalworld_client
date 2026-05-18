@@ -1,3 +1,5 @@
+import type { Inventory, ItemType } from '../protocol/messages';
+
 type WindowId = 'inventory' | 'crafting' | 'building';
 
 type FloatingButtonConfig = {
@@ -11,9 +13,27 @@ type FloatingButtonConfig = {
   defaultWindowY: number;
 };
 
+type InventoryItemView = {
+  item: ItemType;
+  label: string;
+  description: string;
+  amount: number;
+};
+
 const WINDOW_ROOT_ID = 'dalworld-windows';
 const INVENTORY_CATEGORIES = ['일반', '사용', '장비', '제작', '건설', '펫'] as const;
 const INVENTORY_SLOT_COUNT = 36;
+
+const ITEM_LABELS: Record<ItemType, { label: string; description: string }> = {
+  wood: {
+    label: '나무',
+    description: '채집으로 얻는 기본 재료입니다. 제작과 건설에 사용됩니다.',
+  },
+  stone: {
+    label: '돌',
+    description: '채집으로 얻는 단단한 재료입니다. 제작과 건설에 사용됩니다.',
+  },
+};
 
 const BUTTONS: FloatingButtonConfig[] = [
   {
@@ -51,6 +71,8 @@ const BUTTONS: FloatingButtonConfig[] = [
 export class GameWindows {
   private readonly root: HTMLDivElement;
   private zIndex = 30;
+  private selectedItem: ItemType | null = null;
+  private activeInventoryCategory = '일반';
 
   constructor() {
     this.root = createOrGetRoot();
@@ -58,6 +80,36 @@ export class GameWindows {
     this.installFloatingButtons();
     this.installWindows();
     this.installInventoryInteractions();
+  }
+
+  renderInventory(inventory: Inventory | null): void {
+    const slots = [...this.root.querySelectorAll<HTMLButtonElement>('[data-inventory-slot]')];
+    const items = this.activeInventoryCategory === '일반' ? getGeneralInventoryItems(inventory) : [];
+
+    for (const [index, slot] of slots.entries()) {
+      const item = items[index];
+      slot.innerHTML = '';
+      slot.classList.remove('has-item');
+      slot.dataset.item = '';
+      slot.title = `슬롯 ${index + 1}`;
+
+      if (!item) continue;
+
+      slot.classList.add('has-item');
+      slot.dataset.item = item.item;
+      slot.title = `${item.label} x${item.amount}`;
+      slot.innerHTML = `
+        <span class="inventory-item-icon">${getItemIcon(item.item)}</span>
+        <span class="inventory-item-count">${item.amount}</span>
+      `;
+    }
+
+    if (this.selectedItem) {
+      const selected = items.find((item) => item.item === this.selectedItem);
+      if (selected) {
+        this.renderItemDetail(selected);
+      }
+    }
   }
 
   private installFloatingButtons(): void {
@@ -97,19 +149,47 @@ export class GameWindows {
     for (const tab of tabs) {
       tab.addEventListener('click', () => {
         for (const other of tabs) other.classList.toggle('is-active', other === tab);
-        detailTitle.textContent = `${tab.dataset.inventoryTab ?? '일반'} 가방`;
-        detailBody.textContent = '아이템을 선택하면 이 영역에 상세 설명, 사용 조건, 스탯, 제작/건설 재료 정보를 표시합니다.';
+        this.activeInventoryCategory = tab.dataset.inventoryTab ?? '일반';
+        this.selectedItem = null;
+        detailTitle.textContent = `${this.activeInventoryCategory} 가방`;
+        detailBody.textContent = this.activeInventoryCategory === '일반'
+          ? '채집한 자원이 이곳에 표시됩니다.'
+          : '아직 서버 데이터가 연결되지 않은 카테고리입니다.';
+        this.renderInventory(null);
       });
     }
 
     for (const slot of slots) {
       slot.addEventListener('click', () => {
         for (const other of slots) other.classList.toggle('is-selected', other === slot);
-        const index = Number(slot.dataset.inventorySlot ?? '0') + 1;
-        detailTitle.textContent = `빈 슬롯 ${index}`;
-        detailBody.textContent = '아직 아이템 데이터가 연결되지 않은 빈 슬롯입니다. 이후 서버 인벤토리 데이터와 연결됩니다.';
+        const itemType = slot.dataset.item as ItemType | '';
+        if (!itemType) {
+          this.selectedItem = null;
+          const index = Number(slot.dataset.inventorySlot ?? '0') + 1;
+          detailTitle.textContent = `빈 슬롯 ${index}`;
+          detailBody.textContent = '아직 아이템이 없는 빈 슬롯입니다.';
+          return;
+        }
+
+        this.selectedItem = itemType;
+        const meta = ITEM_LABELS[itemType];
+        const countText = slot.querySelector('.inventory-item-count')?.textContent ?? '0';
+        this.renderItemDetail({
+          item: itemType,
+          label: meta.label,
+          description: meta.description,
+          amount: Number(countText),
+        });
       });
     }
+  }
+
+  private renderItemDetail(item: InventoryItemView): void {
+    const inventory = query<HTMLDivElement>(this.root, '[data-window="inventory"]');
+    const detailTitle = query<HTMLHeadingElement>(inventory, '[data-inventory-detail-title]');
+    const detailBody = query<HTMLParagraphElement>(inventory, '[data-inventory-detail-body]');
+    detailTitle.textContent = `${item.label} x${item.amount}`;
+    detailBody.textContent = item.description;
   }
 
   private toggleWindow(id: WindowId): void {
@@ -125,6 +205,27 @@ export class GameWindows {
 
   private bringToFront(win: HTMLElement): void {
     win.style.zIndex = String(++this.zIndex);
+  }
+}
+
+function getGeneralInventoryItems(inventory: Inventory | null): InventoryItemView[] {
+  if (!inventory) return [];
+  return (Object.keys(ITEM_LABELS) as ItemType[])
+    .map((item) => ({
+      item,
+      label: ITEM_LABELS[item].label,
+      description: ITEM_LABELS[item].description,
+      amount: inventory[item] ?? 0,
+    }))
+    .filter((item) => item.amount > 0);
+}
+
+function getItemIcon(item: ItemType): string {
+  switch (item) {
+    case 'wood':
+      return '🪵';
+    case 'stone':
+      return '🪨';
   }
 }
 
@@ -184,7 +285,7 @@ function getInventoryWindowMarkup(): string {
         </div>
         <aside class="inventory-detail">
           <h3 data-inventory-detail-title>일반 가방</h3>
-          <p data-inventory-detail-body>아이템을 선택하면 이 영역에 상세 설명, 사용 조건, 스탯, 제작/건설 재료 정보를 표시합니다.</p>
+          <p data-inventory-detail-body>채집한 자원이 이곳에 표시됩니다.</p>
         </aside>
       </div>
     </section>
