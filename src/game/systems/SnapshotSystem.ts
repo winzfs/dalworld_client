@@ -41,8 +41,13 @@ export class SnapshotSystem {
   }
 
   setLocalPlayer(player: PlayerSnapshot | null): void {
+    const players = player
+      ? upsertPlayer(this.state.players, player)
+      : this.state.players;
+
     this.state = {
       ...this.state,
+      players,
       localPlayer: player,
     };
   }
@@ -106,4 +111,19 @@ export class SnapshotSystem {
       facing: input.facing,
     };
   }
+}
+
+function upsertPlayer(players: PlayerSnapshot[], player: PlayerSnapshot): PlayerSnapshot[] {
+  let replaced = false;
+  const next = players.map((item) => {
+    if (item.id !== player.id) return item;
+    replaced = true;
+    return player;
+  });
+
+  if (!replaced) {
+    next.push(player);
+  }
+
+  return next;
 }
