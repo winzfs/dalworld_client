@@ -32,6 +32,7 @@ const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, playerSpeed: 220, gatherRange: 80 };
 const CELL_EDGE_PADDING = 24;
+const CELL_TRANSFER_TRIGGER_PADDING = 32;
 
 export class GameApp {
   private readonly app = new Application();
@@ -258,24 +259,34 @@ export class GameApp {
     let nextX = me.x;
     let nextY = me.y;
 
-    if (me.x >= map.cellSize - this.gameplayConfig.playerRadius) {
+    if (me.x >= map.cellSize - CELL_TRANSFER_TRIGGER_PADDING) {
       nextGridX += 1;
       nextX = CELL_EDGE_PADDING;
-    } else if (me.x <= this.gameplayConfig.playerRadius) {
+    } else if (me.x <= CELL_TRANSFER_TRIGGER_PADDING) {
       nextGridX -= 1;
       nextX = map.cellSize - CELL_EDGE_PADDING;
     }
 
-    if (me.y >= map.cellSize - this.gameplayConfig.playerRadius) {
+    if (me.y >= map.cellSize - CELL_TRANSFER_TRIGGER_PADDING) {
       nextGridY += 1;
       nextY = CELL_EDGE_PADDING;
-    } else if (me.y <= this.gameplayConfig.playerRadius) {
+    } else if (me.y <= CELL_TRANSFER_TRIGGER_PADDING) {
       nextGridY -= 1;
       nextY = map.cellSize - CELL_EDGE_PADDING;
     }
 
     if (nextGridX === active.gridX && nextGridY === active.gridY) return;
-    if (!hasCell(map, nextGridX, nextGridY)) return;
+
+    const exists = hasCell(map, nextGridX, nextGridY);
+    console.info('[GameApp] Runtime cell transition check', {
+      active,
+      target: { gridX: nextGridX, gridY: nextGridY },
+      exists,
+      player: { x: me.x, y: me.y },
+      availableCells: map.cells.map((cell) => `${cell.gridX}:${cell.gridY}`),
+    });
+
+    if (!exists) return;
 
     this.cellTransitioning = true;
     setActiveCell(nextGridX, nextGridY);
@@ -362,7 +373,7 @@ export class GameApp {
     for (let y = 0; y <= this.worldInfo.height; y += step) {
       this.background
         .moveTo(0, y)
-        .lineTo(this.worldInfo.width, y)
+        .lineTo(this.worldInfo.width)
         .stroke({ color: 0x2c4a55, width: 1 });
     }
   }
