@@ -1,5 +1,5 @@
 import { TILESET_CATEGORIES } from './tilesetManifest';
-import type { EditorTilesetAsset } from './types';
+import type { EditorLayerId, EditorTilesetAsset } from './types';
 import { EditorState } from './EditorState';
 
 export type TilesetPanelActions = {
@@ -13,11 +13,18 @@ export type TilesetPanelActions = {
   onToggleWorldMap: () => void;
 };
 
+const EDITOR_LAYERS: Array<{ id: EditorLayerId; label: string }> = [
+  { id: 'ground', label: 'Ground' },
+  { id: 'object', label: 'Object' },
+  { id: 'collision', label: 'Block' },
+];
+
 export class TilesetPanel {
   readonly element: HTMLDivElement;
 
   private readonly header: HTMLDivElement;
   private readonly scaleContainer: HTMLDivElement;
+  private readonly layerContainer: HTMLDivElement;
   private readonly toolContainer: HTMLDivElement;
   private readonly fillContainer: HTMLDivElement;
   private readonly actionContainer: HTMLDivElement;
@@ -45,6 +52,9 @@ export class TilesetPanel {
     this.scaleContainer = document.createElement('div');
     this.scaleContainer.className = 'map-editor-scale';
 
+    this.layerContainer = document.createElement('div');
+    this.layerContainer.className = 'map-editor-layers';
+
     this.toolContainer = document.createElement('div');
     this.toolContainer.className = 'map-editor-tools';
 
@@ -63,6 +73,7 @@ export class TilesetPanel {
     this.element.append(
       this.header,
       this.scaleContainer,
+      this.layerContainer,
       this.toolContainer,
       this.fillContainer,
       this.actionContainer,
@@ -81,6 +92,7 @@ export class TilesetPanel {
 
   private render(): void {
     this.renderScaleControls();
+    this.renderLayerControls();
     this.renderTools();
     this.renderFillControls();
     this.renderActions();
@@ -124,6 +136,25 @@ export class TilesetPanel {
     increaseButton.onclick = () => this.state.increaseBrushScale();
 
     this.scaleContainer.append(label, decreaseButton, value, suffix, increaseButton);
+  }
+
+  private renderLayerControls(): void {
+    this.layerContainer.innerHTML = '';
+
+    const label = document.createElement('span');
+    label.className = 'map-editor-layer-label';
+    label.textContent = '레이어';
+    this.layerContainer.appendChild(label);
+
+    for (const layer of EDITOR_LAYERS) {
+      const button = document.createElement('button');
+      button.className = 'map-editor-layer';
+      if (this.state.activeLayer === layer.id) button.classList.add('is-active');
+      if (layer.id === 'collision') button.classList.add('is-collision');
+      button.textContent = layer.label;
+      button.onclick = () => this.state.setLayer(layer.id);
+      this.layerContainer.appendChild(button);
+    }
   }
 
   private renderTools(): void {
