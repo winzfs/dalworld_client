@@ -1,5 +1,5 @@
 import type { Application, Container } from 'pixi.js';
-import { EditorState } from './EditorState';
+import { EditorState, BLACK_SOLID_ASSET } from './EditorState';
 import { TilesetPanel } from './TilesetPanel';
 import { TilePlacementSystem } from './TilePlacementSystem';
 import { MapStorage } from './MapStorage';
@@ -7,7 +7,7 @@ import { TilePickerWindow } from './TilePickerWindow';
 import { WorldMapGrid } from './WorldMapGrid';
 import { WorldMapPanel } from './WorldMapPanel';
 import { EditorGridOverlay } from './EditorGridOverlay';
-import type { EditorMapDraft, EditorTilesetAsset, EditorWorldSave } from './types';
+import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset, EditorWorldSave } from './types';
 
 export type MapEditorOptions = {
   app: Application;
@@ -28,6 +28,7 @@ export type WorldCellTransition = {
 };
 
 const DIRECT_SELECT_MAX_SIZE = 96;
+const BLACK_BASE_PLACEMENT_ID = 'editor-black-base';
 
 export class MapEditor {
   readonly state = new EditorState();
@@ -110,6 +111,9 @@ export class MapEditor {
           targetX: this.worldWidth / 2,
           targetY: this.worldHeight / 2,
         });
+      },
+      onDeleteCurrentCell: () => {
+        void this.deleteCurrentWorldCell();
       },
     });
 
@@ -225,16 +229,16 @@ export class MapEditor {
   ): Promise<void> {
     const previous = this.worldMapGrid.current;
 
-    this.cellDrafts.set(cellKey(previous.gridX, previous.gridY), {
+    this.cellDrafts.set(cellKey(previous.gridX, previous.gridY), this.withBlackBase({
       ...this.placement.mapDraft,
       name: this.getCellMapName(previous.gridX, previous.gridY),
       worldMap: this.worldMapGrid.snapshot,
-    });
+    }));
 
     this.worldMapGrid.selectCell(gridX, gridY);
 
     const key = cellKey(gridX, gridY);
-    const draft = this.cellDrafts.get(key) ?? this.createCellDraft(gridX, gridY);
+    const draft = this.withBlackBase(this.cellDrafts.get(key) ?? this.createCellDraft(gridX, gridY));
 
     this.cellDrafts.set(key, draft);
 
@@ -246,23 +250,70 @@ export class MapEditor {
     );
   }
 
+  private async deleteCurrentWorldCell(): Promise<void> {
+    const current = this.worldMapGrid.current;
+    const ok = window.confirm(`현재 월드맵 셀(${current.gridX}, ${current.gridY})을 삭제할까요?`);
+    if (!ok) return;
+
+    this.cellDrafts.delete(cellKey(current.gridX, current.gridY));
+    this.worldMapGrid.deleteCell(current.gridX, current.gridY);
+
+    const next = this.worldMapGrid.current;
+    const nextDraft = this.withBlackBase(
+      this.cellDrafts.get(cellKey(next.gridX, next.gridY)) ?? this.createCellDraft(next.gridX, next.gridY),
+    );
+
+    this.cellDrafts.set(cellKey(next.gridX, next.gridY), nextDraft);
+    await this.placement.replaceDraft(nextDraft);
+    this.options.onMoveCameraTo?.(this.worldWidth / 2, this.worldHeight / 2);
+    this.save();
+  }
+
   private persistCurrentCellDraft(): void {
     const current = this.worldMapGrid.current;
 
-    this.cellDrafts.set(cellKey(current.gridX, current.gridY), {
+    this.cellDrafts.set(cellKey(current.gridX, current.gridY), this.withBlackBase({
       ...this.placement.mapDraft,
       name: this.getCellMapName(current.gridX, current.gridY),
       worldMap: this.worldMapGrid.snapshot,
-    });
+    }));
   }
 
   private createCellDraft(gridX: number, gridY: number): EditorMapDraft {
-    return {
+    return this.withBlackBase({
       version: 1,
       name: this.getCellMapName(gridX, gridY),
       tileSize: this.state.gridSize,
       worldMap: this.worldMapGrid.snapshot,
       placements: [],
+    });
+  }
+
+  private withBlackBase(draft: EditorMapDraft): EditorMapDraft {
+    const hasBase = draft.placements.some((placement) => placement.id === BLACK_BASE_PLACEMENT_ID);
+    if (hasBase) return draft;
+
+    const basePlacement: EditorTilePlacement = {
+      id: BLACK_BASE_PLACEMENT_ID,
+      assetId: BLACK_SOLID_ASSET.id,
+      assetUrl: BLACK_SOLID_ASSET.url,
+      categoryId: BLACK_SOLID_ASSET.categoryId,
+      x: 0,
+      y: 0,
+      layer: 'ground',
+      scale: 1,
+      sourceRect: {
+        x: 0,
+        y: 0,
+        width: this.worldWidth,
+        height: this.worldHeight,
+      },
+      solidColor: BLACK_SOLID_ASSET.solidColor,
+    };
+
+    return {
+      ...draft,
+      placements: [basePlacement, ...draft.placements],
     };
   }
 
@@ -275,7 +326,7 @@ export class MapEditor {
 
     for (const cell of worldMap.cells) {
       const key = cellKey(cell.gridX, cell.gridY);
-      const draft = this.cellDrafts.get(key) ?? this.createCellDraft(cell.gridX, cell.gridY);
+      const draft = this.withBlackBase(this.cellDrafts.get(key) ?? this.createCellDraft(cell.gridX, cell.gridY));
       seen.add(key);
       cells.push({
         gridX: cell.gridX,
@@ -295,7 +346,7 @@ export class MapEditor {
         gridX,
         gridY,
         draft: {
-          ...draft,
+          ...this.withBlackBase(draft),
           name: this.getCellMapName(gridX, gridY),
           worldMap,
         },
@@ -328,6 +379,7 @@ export class MapEditor {
 
   private async shouldOpenPicker(asset: EditorTilesetAsset): Promise<boolean> {
     if (asset.tileWidth && asset.tileHeight) return false;
+    if (asset.solidColor !== undefined) return false;
 
     const size = await loadImageSize(asset.url);
     if (!size) return false;
@@ -379,14 +431,14 @@ export class MapEditor {
       this.cellDrafts.clear();
 
       for (const cell of worldSave.cells) {
-        this.cellDrafts.set(cellKey(cell.gridX, cell.gridY), cell.draft);
+        this.cellDrafts.set(cellKey(cell.gridX, cell.gridY), this.withBlackBase(cell.draft));
       }
 
       const current = this.worldMapGrid.current;
       const currentDraft = this.cellDrafts.get(cellKey(current.gridX, current.gridY))
         ?? this.createCellDraft(current.gridX, current.gridY);
 
-      await this.placement.loadDraft(currentDraft);
+      await this.placement.loadDraft(this.withBlackBase(currentDraft));
       console.info('[MapEditor] Loaded saved world.', {
         cells: worldSave.cells.length,
       });
@@ -394,7 +446,10 @@ export class MapEditor {
     }
 
     const draft = this.storage.load();
-    if (!draft) return;
+    if (!draft) {
+      await this.placement.loadDraft(this.createCellDraft(0, 0));
+      return;
+    }
 
     this.worldMapGrid.load(draft.worldMap);
     this.cellDrafts.clear();
@@ -403,10 +458,10 @@ export class MapEditor {
 
     this.cellDrafts.set(
       cellKey(current.gridX, current.gridY),
-      draft,
+      this.withBlackBase(draft),
     );
 
-    await this.placement.loadDraft(draft);
+    await this.placement.loadDraft(this.withBlackBase(draft));
   }
 
   private exportJson(): void {
@@ -418,7 +473,8 @@ export class MapEditor {
     if (!ok) return;
 
     this.placement.clear();
-    this.persistCurrentCellDraft();
+    this.cellDrafts.set(cellKey(this.worldMapGrid.current.gridX, this.worldMapGrid.current.gridY), this.createCellDraft(this.worldMapGrid.current.gridX, this.worldMapGrid.current.gridY));
+    void this.placement.replaceDraft(this.createCellDraft(this.worldMapGrid.current.gridX, this.worldMapGrid.current.gridY));
   }
 
   private screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
