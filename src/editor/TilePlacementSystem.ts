@@ -236,8 +236,11 @@ export class TilePlacementSystem {
     asset: EditorTilesetAsset,
     texture: PixiTexture,
   ): Sprite {
-    const sourceTexture = placement.sourceRect
-      ? createSlicedTexture(texture, placement.sourceRect)
+    const safeSourceRect = placement.sourceRect
+      ? shrinkSourceRect(placement.sourceRect, texture)
+      : undefined;
+    const sourceTexture = safeSourceRect
+      ? createSlicedTexture(texture, safeSourceRect)
       : texture;
     enforceNearestScale(sourceTexture);
 
@@ -356,6 +359,18 @@ function snap(value: number, size: number): number {
 function normalizePlacementScale(scale: number | undefined): number {
   if (!Number.isFinite(scale)) return 1;
   return Math.max(0.1, scale ?? 1);
+}
+
+function shrinkSourceRect(sourceRect: EditorSourceRect, texture: PixiTexture): EditorSourceRect {
+  const inset = sourceRect.width > 2 && sourceRect.height > 2 ? 1 : 0;
+  const maxWidth = Math.max(1, Math.floor(texture.width));
+  const maxHeight = Math.max(1, Math.floor(texture.height));
+  const x = clamp(sourceRect.x + inset, 0, maxWidth - 1);
+  const y = clamp(sourceRect.y + inset, 0, maxHeight - 1);
+  const width = clamp(sourceRect.width - inset * 2, 1, maxWidth - x);
+  const height = clamp(sourceRect.height - inset * 2, 1, maxHeight - y);
+
+  return { x, y, width, height };
 }
 
 function createSlicedTexture(texture: PixiTexture, sourceRect: EditorSourceRect): PixiTexture {
