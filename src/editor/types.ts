@@ -1,5 +1,16 @@
 export type EditorLayerId = 'ground' | 'object' | 'collision';
 
+export type EditorResourceType = 'tree' | 'stone';
+
+export type EditorPlacementGameplay =
+  | {
+      kind: 'resource';
+      resourceType: EditorResourceType;
+      blocksMovement?: boolean;
+      maxHp?: number;
+      respawnMs?: number;
+    };
+
 export type EditorTilesetAsset = {
   id: string;
   name: string;
@@ -11,6 +22,8 @@ export type EditorTilesetAsset = {
   tileHeight?: number;
   /** Optional solid fill color used for editor-generated paint tiles. */
   solidColor?: number;
+  /** Optional default gameplay metadata applied when this sprite is placed. */
+  gameplayDefaults?: EditorPlacementGameplay;
 };
 
 export type EditorTilesetCategory = {
@@ -47,6 +60,8 @@ export type EditorTilePlacement = {
   solidColor?: number;
   /** If true, near-black pixels are rendered transparent for this placement. */
   transparentBlack?: boolean;
+  /** Gameplay metadata inferred from the sprite path or assigned by editor tools. */
+  gameplay?: EditorPlacementGameplay;
 };
 
 export type EditorMapCoord = {
