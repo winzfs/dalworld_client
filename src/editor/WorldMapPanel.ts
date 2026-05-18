@@ -121,10 +121,7 @@ export class WorldMapPanel {
 
     button.textContent = exists ? `${gridX},${gridY}` : '+';
     button.title = exists ? `이동: ${gridX},${gridY}` : `생성: ${gridX},${gridY}`;
-    button.onclick = () => {
-      this.options.grid.selectCell(gridX, gridY);
-      this.options.onSelectCell(gridX, gridY);
-    };
+    button.onclick = () => this.options.onSelectCell(gridX, gridY);
 
     return button;
   }
@@ -134,9 +131,8 @@ export class WorldMapPanel {
     button.className = 'world-map-action';
     button.textContent = label;
     button.onclick = () => {
-      const cell = this.options.grid.createNeighbor(dx, dy);
-      this.options.grid.selectCell(cell.gridX, cell.gridY);
-      this.options.onSelectCell(cell.gridX, cell.gridY);
+      const current = this.options.grid.current;
+      this.options.onSelectCell(current.gridX + dx, current.gridY + dy);
     };
     return button;
   }
