@@ -110,20 +110,10 @@ export class GameApp {
       );
     }
 
-    const nearbyGather = me
-      ? this.resourceRenderer.getClosestAlive(
-          this.latestResources,
-          me.x,
-          me.y,
-          this.gameplayConfig.gatherRange,
-        )
-      : null;
-
     this.hud.render({
       status: this.status,
       tick: this.latestTick,
       player: me,
-      nearbyGather,
       latencyMs: this.network.latencyMs,
     });
   }
