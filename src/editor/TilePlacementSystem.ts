@@ -1,4 +1,4 @@
-import { Assets, Container, Graphics, Rectangle, Sprite, Texture, type Texture as PixiTexture } from 'pixi.js';
+import { Assets, Container, Graphics, Rectangle, SCALE_MODES, Sprite, Texture, type Texture as PixiTexture } from 'pixi.js';
 import type { EditorMapDraft, EditorSourceRect, EditorTilePlacement, EditorTilesetAsset } from './types';
 import { EditorState } from './EditorState';
 import { TILESET_CATEGORIES } from './tilesetManifest';
@@ -191,17 +191,22 @@ export class TilePlacementSystem {
     const sourceTexture = placement.sourceRect
       ? createSlicedTexture(texture, placement.sourceRect)
       : texture;
+    enforceNearestScale(sourceTexture);
+
     const sprite = new Sprite(sourceTexture);
     const scale = normalizePlacementScale(placement.scale);
 
     sprite.label = `editor-tile:${placement.id}`;
     sprite.x = placement.x;
     sprite.y = placement.y;
+    sprite.roundPixels = true;
 
     const baseWidth = placement.sourceRect?.width ?? asset.tileWidth ?? sourceTexture.width;
     const baseHeight = placement.sourceRect?.height ?? asset.tileHeight ?? sourceTexture.height;
-    sprite.width = baseWidth * scale;
-    sprite.height = baseHeight * scale;
+    sprite.scale.set(
+      (baseWidth / sourceTexture.width) * scale,
+      (baseHeight / sourceTexture.height) * scale,
+    );
 
     sprite.zIndex = layerZIndex(placement.layer);
 
@@ -231,10 +236,15 @@ export class TilePlacementSystem {
   private loadTexture(url: string): Promise<PixiTexture | null> {
     let promise = this.textureCache.get(url);
     if (!promise) {
-      promise = Assets.load<PixiTexture>(url).catch((error: unknown) => {
-        console.warn(`[MapEditor] Failed to load tile asset: ${url}`, error);
-        return null;
-      });
+      promise = Assets.load<PixiTexture>(url)
+        .then((texture) => {
+          enforceNearestScale(texture);
+          return texture;
+        })
+        .catch((error: unknown) => {
+          console.warn(`[MapEditor] Failed to load tile asset: ${url}`, error);
+          return null;
+        });
       this.textureCache.set(url, promise);
     }
     return promise;
@@ -270,10 +280,16 @@ function normalizePlacementScale(scale: number | undefined): number {
 }
 
 function createSlicedTexture(texture: PixiTexture, sourceRect: EditorSourceRect): PixiTexture {
-  return new Texture({
+  const sliced = new Texture({
     source: texture.source,
     frame: new Rectangle(sourceRect.x, sourceRect.y, sourceRect.width, sourceRect.height),
   });
+  enforceNearestScale(sliced);
+  return sliced;
+}
+
+function enforceNearestScale(texture: PixiTexture): void {
+  texture.source.scaleMode = SCALE_MODES.NEAREST;
 }
 
 function layerZIndex(layer: EditorTilePlacement['layer']): number {
