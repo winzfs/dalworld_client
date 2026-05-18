@@ -1,4 +1,5 @@
 import type { GameNetwork } from '../../net/network';
+import { getActiveCell } from '../../worldMap/activeCellStore';
 import type { InputState } from '../InputController';
 import type { PlayerSnapshot } from '../../protocol/messages';
 
@@ -30,6 +31,7 @@ export class InputSendSystem {
 
     this.accumulator = 0;
     const player = context.player;
+    const activeCell = getActiveCell();
 
     this.network.send({
       type: 'input',
@@ -38,6 +40,8 @@ export class InputSendSystem {
       facing: context.input.facing,
       clientX: player?.x,
       clientY: player?.y,
+      cellX: activeCell.gridX,
+      cellY: activeCell.gridY,
     });
   }
 
