@@ -5,6 +5,9 @@ import { FEMALE_ADVENTURER, type FemaleAdventurerAnim } from '../assets/femaleAd
 import { loadSpriteStrip } from './spriteStrip';
 
 const REQUIRED_ANIMS: FemaleAdventurerAnim[] = ['idle', 'walk'];
+const PLAYER_SHADOW_SCALE = 2;
+const PLAYER_FOOT_Y = FEMALE_ADVENTURER.frameHeight * FEMALE_ADVENTURER.scale * (1 - FEMALE_ADVENTURER.anchor.y);
+const PLAYER_SHADOW_Y = Math.round(PLAYER_FOOT_Y);
 const PLAYER_SHADOW_SOURCES = [
   '/assets/characters/female_adventurer/Shadow.png',
   '/assets/characters/female_adventurer/shadow.png',
@@ -187,15 +190,12 @@ export class PlayerRenderer {
   private makeShadow(): Sprite | Graphics {
     if (this.shadowTexture) {
       const shadow = new Sprite(this.shadowTexture);
-      shadow.anchor.set(0.5, 0.5);
-      shadow.position.set(0, 0);
-      shadow.scale.set(1.7, 0.9);
-      shadow.alpha = 0.42;
+      this.configureShadowSprite(shadow);
       return shadow;
     }
 
     return new Graphics()
-      .ellipse(0, 2, 23, 10)
+      .ellipse(0, PLAYER_SHADOW_Y, 23 * PLAYER_SHADOW_SCALE, 10 * PLAYER_SHADOW_SCALE)
       .fill({ color: 0x000000, alpha: 0.28 });
   }
 
@@ -203,16 +203,20 @@ export class PlayerRenderer {
     if (!this.shadowTexture || v.shadow instanceof Sprite) return;
 
     const sprite = new Sprite(this.shadowTexture);
-    sprite.anchor.set(0.5, 0.5);
-    sprite.position.set(0, 0);
-    sprite.scale.set(1.7, 0.9);
-    sprite.alpha = 0.42;
+    this.configureShadowSprite(sprite);
 
     const index = v.c.getChildIndex(v.shadow);
     v.c.removeChild(v.shadow);
     v.shadow.destroy();
     v.shadow = sprite;
     v.c.addChildAt(sprite, index);
+  }
+
+  private configureShadowSprite(shadow: Sprite): void {
+    shadow.anchor.set(0.5, 0.5);
+    shadow.position.set(0, PLAYER_SHADOW_Y);
+    shadow.scale.set(PLAYER_SHADOW_SCALE);
+    shadow.alpha = 0.42;
   }
 
   private apply(v: View): void {
