@@ -20,6 +20,7 @@ import { SnapshotSystem } from './systems/SnapshotSystem';
 import { CameraSystem } from './systems/CameraSystem';
 import { HudSystem } from './systems/HudSystem';
 import { ServerMessageRouter } from './systems/ServerMessageRouter';
+import { MapEditor } from '../editor/MapEditor';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -40,6 +41,8 @@ export class GameApp {
   private readonly movementSystem = new ClientMovementSystem();
   private readonly inputSendSystem: InputSendSystem;
   private readonly snapshotSystem = new SnapshotSystem();
+  private readonly mapEditor: MapEditor | null;
+
   private meadowRenderer: ProceduralMeadowRenderer | null = null;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
@@ -83,6 +86,15 @@ export class GameApp {
         void this.loadWorldMap();
       },
     });
+
+    this.mapEditor = isEditorEnabled()
+      ? new MapEditor({
+          app: this.app,
+          world: this.world,
+          tileSize: 32,
+          mapName: 'dalworld-map',
+        })
+      : null;
   }
 
   async start(mount: HTMLElement): Promise<void> {
@@ -100,6 +112,8 @@ export class GameApp {
     this.app.stage.addChild(this.world);
     this.drawWorldBackground();
     await this.loadWorldMap();
+
+    this.mapEditor?.start();
 
     this.network.onStatus((status) => {
       this.status = status;
@@ -230,4 +244,8 @@ export class GameApp {
         .stroke({ color: 0x2c4a55, width: 1 });
     }
   }
+}
+
+function isEditorEnabled(): boolean {
+  return new URLSearchParams(window.location.search).get('editor') === '1';
 }
