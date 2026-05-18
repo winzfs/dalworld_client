@@ -17,13 +17,14 @@ import { MonsterRenderer } from '../render/MonsterRenderer';
 import { DebugHud } from '../render/DebugHud';
 import { MobileControls } from '../render/MobileControls';
 import { ProceduralMeadowRenderer } from '../render/ProceduralMeadowRenderer';
+import { getMonsterConfig } from '../assets/monsters';
 
 const INPUT_SEND_HZ = 30;
-const MONSTER_COLLISION_RADIUS = 40;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, playerSpeed: 220, gatherRange: 80 };
 
 type MoveDelta = { x: number; y: number };
+type CollisionCircle = { x: number; y: number; radius: number };
 
 export class GameApp {
   private readonly app = new Application();
@@ -171,28 +172,25 @@ export class GameApp {
     let resolved = delta;
 
     for (const monster of this.latestMonsters) {
-      const minDistance = playerRadius + MONSTER_COLLISION_RADIUS;
+      const circle = getMonsterCollisionCircle(monster);
+      const minDistance = playerRadius + circle.radius;
       const nextX = currentX + resolved.x;
       const nextY = currentY + resolved.y;
-      const nextDistanceSq = squaredDistance(nextX, nextY, monster.x, monster.y);
+      const nextDistanceSq = squaredDistance(nextX, nextY, circle.x, circle.y);
 
       if (nextDistanceSq >= minDistance * minDistance) continue;
 
-      const normalX = currentX - monster.x;
-      const normalY = currentY - monster.y;
+      const normalX = currentX - circle.x;
+      const normalY = currentY - circle.y;
       const normalLength = Math.hypot(normalX, normalY);
 
-      if (normalLength <= 0.0001) {
-        continue;
-      }
+      if (normalLength <= 0.0001) continue;
 
       const nx = normalX / normalLength;
       const ny = normalY / normalLength;
       const intoObstacle = resolved.x * -nx + resolved.y * -ny;
 
-      if (intoObstacle <= 0) {
-        continue;
-      }
+      if (intoObstacle <= 0) continue;
 
       resolved = {
         x: resolved.x + nx * intoObstacle,
@@ -211,10 +209,11 @@ export class GameApp {
     playerRadius: number,
   ): boolean {
     for (const monster of this.latestMonsters) {
-      const minDistance = playerRadius + MONSTER_COLLISION_RADIUS;
+      const circle = getMonsterCollisionCircle(monster);
+      const minDistance = playerRadius + circle.radius;
       const minDistanceSq = minDistance * minDistance;
-      const currentDistanceSq = squaredDistance(currentX, currentY, monster.x, monster.y);
-      const nextDistanceSq = squaredDistance(nextX, nextY, monster.x, monster.y);
+      const currentDistanceSq = squaredDistance(currentX, currentY, circle.x, circle.y);
+      const nextDistanceSq = squaredDistance(nextX, nextY, circle.x, circle.y);
 
       if (nextDistanceSq >= minDistanceSq) continue;
 
@@ -392,6 +391,15 @@ function getMoveDirection(keys: MovementKeys): { x: number; y: number } | null {
 
   const length = Math.hypot(x, y) || 1;
   return { x: x / length, y: y / length };
+}
+
+function getMonsterCollisionCircle(monster: MonsterSnapshot): CollisionCircle {
+  const collision = getMonsterConfig(monster.type).collision;
+  return {
+    x: monster.x + collision.offsetX,
+    y: monster.y + collision.offsetY,
+    radius: collision.radius,
+  };
 }
 
 function squaredDistance(ax: number, ay: number, bx: number, by: number): number {
