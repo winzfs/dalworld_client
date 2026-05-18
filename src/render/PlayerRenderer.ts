@@ -6,7 +6,7 @@ import { loadSpriteStrip } from './spriteStrip';
 
 const REQUIRED_ANIMS: FemaleAdventurerAnim[] = ['idle', 'walk'];
 const PLAYER_SHADOW_SCALE = 2;
-const PLAYER_SHADOW_Y = -28;
+const PLAYER_SHADOW_Y = -4;
 const PLAYER_SHADOW_SOURCES = [
   '/assets/characters/female_adventurer/Shadow.png',
   '/assets/characters/female_adventurer/shadow.png',
@@ -152,7 +152,7 @@ export class PlayerRenderer {
   private makeView(p: PlayerSnapshot, local: boolean): View {
     const c = new Container();
     const ring = new Graphics()
-      .ellipse(0, -6, 20, 10)
+      .ellipse(0, -10, 20, 10)
       .stroke({ color: 0xffd166, width: 2, alpha: 0.9 });
     const fallback = new Graphics();
     const hp = new Graphics();
@@ -250,7 +250,7 @@ export class PlayerRenderer {
 
   private drawFallback(v: View): void {
     v.fallback.clear();
-    v.fallback.circle(0, 0, 18).fill({ color: v.local ? 0x55d6be : 0xffd166 });
+    v.fallback.circle(0, -16, 18).fill({ color: v.local ? 0x55d6be : 0xffd166 });
   }
 
   private drawHp(g: Graphics, hp: number, maxHp: number): void {
@@ -261,8 +261,8 @@ export class PlayerRenderer {
     const width = 44;
     const ratio = Math.max(0, hp / maxHp);
 
-    g.rect(-width / 2 - 2, -76, width + 4, 7).fill({ color: 0x222831 });
-    g.rect(-width / 2, -74, width * ratio, 3).fill({ color: 0xef476f });
+    g.rect(-width / 2 - 2, -120, width + 4, 7).fill({ color: 0x222831 });
+    g.rect(-width / 2, -118, width * ratio, 3).fill({ color: 0xef476f });
   }
 }
 
