@@ -1,6 +1,8 @@
 // 서버 src/protocol/messages.ts 와 동일한 프로토콜.
 // 모노레포 의존을 피하기 위해 클라이언트 측에 복사해 둔다.
 
+import type { GameWorldMap } from '../worldMap/types';
+
 export type MovementKeys = {
   up: boolean;
   down: boolean;
@@ -106,6 +108,8 @@ export type ServerToClientMessage =
       world: WorldInfo;
       /** New servers send this. Optional keeps older deployed Worker builds compatible. */
       gameplay?: PublicGameplayConfig;
+      /** Editor-authored runtime map. Optional keeps older deployed Worker builds compatible. */
+      map?: GameWorldMap | null;
       serverTime: number;
     }
   | {
