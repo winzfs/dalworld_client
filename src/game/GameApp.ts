@@ -25,10 +25,13 @@ import { MapEditor } from '../editor/MapEditor';
 import { EditorCameraSystem } from '../editor/EditorCameraSystem';
 import { EditorMinimap } from '../editor/EditorMinimap';
 import { getRuntimeWorldMap } from '../worldMap/runtimeMapStore';
+import { createActiveCellMapView } from '../worldMap/activeCellMapView';
+import { getActiveCell, hasCell, setActiveCell } from '../worldMap/activeCellStore';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, playerSpeed: 220, gatherRange: 80 };
+const CELL_EDGE_PADDING = 24;
 
 export class GameApp {
   private readonly app = new Application();
@@ -54,6 +57,7 @@ export class GameApp {
 
   private meadowRenderer: ProceduralMeadowRenderer | null = null;
   private editorTransitioning = false;
+  private cellTransitioning = false;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
   private gameplayConfig: PublicGameplayConfig = DEFAULT_GAMEPLAY;
@@ -191,6 +195,7 @@ export class GameApp {
 
   private update(dt: number): void {
     this.applyLocalMovement(dt);
+    this.handleRuntimeCellTransition();
 
     this.inputSendSystem.update(
       {
@@ -242,6 +247,48 @@ export class GameApp {
     this.playerRenderer.sync(this.snapshotSystem.snapshot.players, this.myPlayerId);
   }
 
+  private handleRuntimeCellTransition(): void {
+    const map = getRuntimeWorldMap();
+    const me = this.findMe();
+    if (!map || !me || this.cellTransitioning) return;
+
+    const active = getActiveCell();
+    let nextGridX = active.gridX;
+    let nextGridY = active.gridY;
+    let nextX = me.x;
+    let nextY = me.y;
+
+    if (me.x >= map.cellSize - this.gameplayConfig.playerRadius) {
+      nextGridX += 1;
+      nextX = CELL_EDGE_PADDING;
+    } else if (me.x <= this.gameplayConfig.playerRadius) {
+      nextGridX -= 1;
+      nextX = map.cellSize - CELL_EDGE_PADDING;
+    }
+
+    if (me.y >= map.cellSize - this.gameplayConfig.playerRadius) {
+      nextGridY += 1;
+      nextY = CELL_EDGE_PADDING;
+    } else if (me.y <= this.gameplayConfig.playerRadius) {
+      nextGridY -= 1;
+      nextY = map.cellSize - CELL_EDGE_PADDING;
+    }
+
+    if (nextGridX === active.gridX && nextGridY === active.gridY) return;
+    if (!hasCell(map, nextGridX, nextGridY)) return;
+
+    this.cellTransitioning = true;
+    setActiveCell(nextGridX, nextGridY);
+    me.x = nextX;
+    me.y = nextY;
+    this.snapshotSystem.setLocalPlayer(me);
+    this.playerRenderer.sync(this.snapshotSystem.snapshot.players, this.myPlayerId);
+
+    void this.loadWorldMap().finally(() => {
+      this.cellTransitioning = false;
+    });
+  }
+
   private handleGatherInput(): void {
     if (!this.input.consumeGather()) return;
 
@@ -268,7 +315,7 @@ export class GameApp {
     }
 
     if (runtimeMap) {
-      await this.worldMapRenderer.render(runtimeMap);
+      await this.worldMapRenderer.render(createActiveCellMapView(runtimeMap));
       this.background.visible = false;
       return;
     }
