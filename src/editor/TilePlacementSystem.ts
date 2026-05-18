@@ -35,19 +35,11 @@ export class TilePlacementSystem {
   ) {
     this.layer.label = 'editor-tile-placement-layer';
     this.layer.sortableChildren = true;
-    this.draft = {
-      version: 1,
-      name: options.mapName,
-      tileSize: options.tileSize,
-      placements: [],
-    };
+    this.draft = createEmptyDraft(options.mapName, options.tileSize);
   }
 
   get mapDraft(): EditorMapDraft {
-    return {
-      ...this.draft,
-      placements: this.draft.placements.map((placement) => ({ ...placement })),
-    };
+    return cloneDraft(this.draft);
   }
 
   async placeAt(worldX: number, worldY: number): Promise<void> {
@@ -93,11 +85,9 @@ export class TilePlacementSystem {
   async loadDraft(draft: EditorMapDraft): Promise<void> {
     this.clear();
     this.draft.name = draft.name;
-    this.draft.placements.push(...draft.placements.map((placement) => ({
-      ...placement,
-      scale: normalizePlacementScale(placement.scale),
-      sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
-    })));
+    this.draft.tileSize = draft.tileSize || this.draft.tileSize;
+    this.draft.worldMap = draft.worldMap;
+    this.draft.placements.push(...normalizePlacements(draft.placements));
 
     for (const placement of this.draft.placements) {
       const asset = findAssetById(placement.assetId) ?? {
@@ -110,13 +100,21 @@ export class TilePlacementSystem {
     }
   }
 
+  async replaceDraft(draft: EditorMapDraft): Promise<void> {
+    await this.loadDraft(draft);
+  }
+
   clear(): void {
+    this.destroyDisplays();
+    this.draft.placements.length = 0;
+  }
+
+  private destroyDisplays(): void {
     for (const display of this.displays.values()) {
       display.destroy();
     }
 
     this.displays.clear();
-    this.draft.placements.length = 0;
   }
 
   private createPlacementAt(worldX: number, worldY: number): EditorTilePlacement | null {
@@ -268,6 +266,38 @@ export class TilePlacementSystem {
       display.destroy();
     }
   }
+}
+
+function createEmptyDraft(name: string, tileSize: number): EditorMapDraft {
+  return {
+    version: 1,
+    name,
+    tileSize,
+    placements: [],
+  };
+}
+
+function cloneDraft(draft: EditorMapDraft): EditorMapDraft {
+  return {
+    ...draft,
+    worldMap: draft.worldMap ? {
+      ...draft.worldMap,
+      current: { ...draft.worldMap.current },
+      cells: draft.worldMap.cells.map((cell) => ({ ...cell })),
+    } : undefined,
+    placements: draft.placements.map((placement) => ({
+      ...placement,
+      sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
+    })),
+  };
+}
+
+function normalizePlacements(placements: EditorTilePlacement[]): EditorTilePlacement[] {
+  return placements.map((placement) => ({
+    ...placement,
+    scale: normalizePlacementScale(placement.scale),
+    sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
+  }));
 }
 
 function snap(value: number, size: number): number {
