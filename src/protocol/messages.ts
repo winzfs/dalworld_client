@@ -11,7 +11,7 @@ export type MovementKeys = {
 export type Facing = 'up' | 'down' | 'left' | 'right';
 
 export type ResourceType = 'tree' | 'stone';
-export type MonsterType = 'wild_slime';
+export type MonsterType = 'wild_slime' | 'sheep';
 export type MonsterStateName = 'idle' | 'chase' | 'attack';
 export type ItemType = 'wood' | 'stone';
 
