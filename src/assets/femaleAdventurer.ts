@@ -1,36 +1,68 @@
 import type { Facing } from '../protocol/messages';
 
-export type FemaleAdventurerAnim = 'idle' | 'walk';
+export type FemaleAdventurerAnim = 'idle' | 'walk' | 'dash' | 'jump' | 'death';
 
-export const FEMALE_ADVENTURER_FRAME_WIDTH = 48;
-export const FEMALE_ADVENTURER_FRAME_HEIGHT = 64;
-export const FEMALE_ADVENTURER_FRAME_COUNT = 8;
-
-export const FEMALE_ADVENTURER_FPS: Record<FemaleAdventurerAnim, number> = {
-  idle: 7,
-  walk: 10,
+export type FemaleAdventurerConfig = {
+  id: 'female_adventurer';
+  frameWidth: number;
+  frameHeight: number;
+  frameCount: number;
+  scale: number;
+  anchor: { x: number; y: number };
+  facings: readonly Facing[];
+  animations: readonly FemaleAdventurerAnim[];
+  fps: Record<FemaleAdventurerAnim, number>;
+  sheets: Record<FemaleAdventurerAnim, Record<Facing, string>>;
 };
 
-/**
- * Runtime asset paths for The Female Adventurer - Free.
- * Put the extracted PNG folders under:
- * public/assets/characters/female_adventurer/
- *
- * The current server protocol exposes 4-way Facing only, so diagonal strips are
- * intentionally not selected here yet. They can be enabled later once the
- * authoritative snapshot protocol sends 8-way direction values.
- */
-export const FEMALE_ADVENTURER_SHEETS: Record<FemaleAdventurerAnim, Record<Facing, string>> = {
-  idle: {
-    down: '/assets/characters/female_adventurer/Idle/Idle_Down.png',
-    up: '/assets/characters/female_adventurer/Idle/Idle_Up.png',
-    left: '/assets/characters/female_adventurer/Idle/Idle_Left_Down.png',
-    right: '/assets/characters/female_adventurer/Idle/Idle_Right_Down.png',
+const BASE = '/assets/characters/female_adventurer';
+
+export const FEMALE_ADVENTURER: FemaleAdventurerConfig = {
+  id: 'female_adventurer',
+  frameWidth: 48,
+  frameHeight: 64,
+  frameCount: 8,
+  scale: 1.5,
+  anchor: { x: 0.5, y: 0.8 },
+  facings: ['down', 'left', 'up', 'right'],
+  animations: ['idle', 'walk', 'dash', 'jump', 'death'],
+  fps: {
+    idle: 7,
+    walk: 10,
+    dash: 14,
+    jump: 10,
+    death: 8,
   },
-  walk: {
-    down: '/assets/characters/female_adventurer/Walk/walk_Down.png',
-    up: '/assets/characters/female_adventurer/Walk/walk_Up.png',
-    left: '/assets/characters/female_adventurer/Walk/walk_Left_Down.png',
-    right: '/assets/characters/female_adventurer/Walk/walk_Right_Down.png',
+  sheets: {
+    idle: {
+      down: `${BASE}/Idle/Idle_Down.png`,
+      up: `${BASE}/Idle/Idle_Up.png`,
+      left: `${BASE}/Idle/Idle_Left_Down.png`,
+      right: `${BASE}/Idle/Idle_Right_Down.png`,
+    },
+    walk: {
+      down: `${BASE}/Walk/walk_Down.png`,
+      up: `${BASE}/Walk/walk_Up.png`,
+      left: `${BASE}/Walk/walk_Left_Down.png`,
+      right: `${BASE}/Walk/walk_Right_Down.png`,
+    },
+    dash: {
+      down: `${BASE}/Dash/Dash_Down.png`,
+      up: `${BASE}/Dash/Dash_Up.png`,
+      left: `${BASE}/Dash/Dash_Left_Down.png`,
+      right: `${BASE}/Dash/Dash_Right_Down.png`,
+    },
+    jump: {
+      down: `${BASE}/Jump - NEW/Normal/Jump_Down.png`,
+      up: `${BASE}/Jump - NEW/Normal/Jump_up.png`,
+      left: `${BASE}/Jump - NEW/Normal/Jump_Left_Down.png`,
+      right: `${BASE}/Jump - NEW/Normal/Jump_Right_Down.png`,
+    },
+    death: {
+      down: `${BASE}/Death/death_Down.png`,
+      up: `${BASE}/Death/death_Up.png`,
+      left: `${BASE}/Death/death_Left_Down.png`,
+      right: `${BASE}/Death/death_Right_Down.png`,
+    },
   },
 };
