@@ -3,6 +3,7 @@ import type {
   PlayerSnapshot,
   ResourceSnapshot,
 } from '../../protocol/messages';
+import { getActiveCell } from '../../worldMap/activeCellStore';
 import type { InputState } from '../InputController';
 
 export type SnapshotSystemState = {
@@ -24,7 +25,7 @@ export type ApplySnapshotContext = {
 
 /**
  * Owns server snapshot ingestion and local-player prediction reconciliation.
- * For now, local movement is client-led, so the local player's predicted x/y is preserved.
+ * The local player keeps client-predicted cell-local position and active cell while the server validates it.
  */
 export class SnapshotSystem {
   private state: SnapshotSystemState = {
@@ -86,14 +87,22 @@ export class SnapshotSystem {
     const serverMe = serverPlayers.find((player) => player.id === myPlayerId) ?? null;
     if (!serverMe) return this.state.localPlayer;
 
+    const activeCell = getActiveCell();
+
     if (!this.state.localPlayer) {
-      return { ...serverMe };
+      return {
+        ...serverMe,
+        cellX: activeCell.gridX,
+        cellY: activeCell.gridY,
+      };
     }
 
     return {
       ...serverMe,
       x: this.state.localPlayer.x,
       y: this.state.localPlayer.y,
+      cellX: activeCell.gridX,
+      cellY: activeCell.gridY,
       facing: input.facing,
     };
   }
