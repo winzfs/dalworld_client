@@ -5,8 +5,13 @@ import { FEMALE_ADVENTURER, type FemaleAdventurerAnim } from '../assets/femaleAd
 import { loadSpriteStrip } from './spriteStrip';
 
 const REQUIRED_ANIMS: FemaleAdventurerAnim[] = ['idle', 'walk'];
-const PLAYER_SHADOW_SCALE = 2;
+const PLAYER_RENDER_HEIGHT = FEMALE_ADVENTURER.frameHeight * FEMALE_ADVENTURER.scale;
+const PLAYER_RENDER_WIDTH = FEMALE_ADVENTURER.frameWidth * FEMALE_ADVENTURER.scale;
+const PLAYER_SHADOW_SCALE = FEMALE_ADVENTURER.scale;
 const PLAYER_SHADOW_Y = -4;
+const PLAYER_RING_Y = -Math.round(5 * FEMALE_ADVENTURER.scale);
+const PLAYER_FALLBACK_Y = -Math.round(8 * FEMALE_ADVENTURER.scale);
+const PLAYER_HP_Y = -Math.round(PLAYER_RENDER_HEIGHT - 8);
 const PLAYER_SHADOW_SOURCES = [
   '/assets/characters/female_adventurer/Shadow.png',
   '/assets/characters/female_adventurer/shadow.png',
@@ -152,7 +157,7 @@ export class PlayerRenderer {
   private makeView(p: PlayerSnapshot, local: boolean): View {
     const c = new Container();
     const ring = new Graphics()
-      .ellipse(0, -10, 20, 10)
+      .ellipse(0, PLAYER_RING_Y, PLAYER_RENDER_WIDTH * 0.21, FEMALE_ADVENTURER.scale * 5)
       .stroke({ color: 0xffd166, width: 2, alpha: 0.9 });
     const fallback = new Graphics();
     const hp = new Graphics();
@@ -250,7 +255,7 @@ export class PlayerRenderer {
 
   private drawFallback(v: View): void {
     v.fallback.clear();
-    v.fallback.circle(0, -16, 18).fill({ color: v.local ? 0x55d6be : 0xffd166 });
+    v.fallback.circle(0, PLAYER_FALLBACK_Y, 9 * FEMALE_ADVENTURER.scale).fill({ color: v.local ? 0x55d6be : 0xffd166 });
   }
 
   private drawHp(g: Graphics, hp: number, maxHp: number): void {
@@ -258,11 +263,11 @@ export class PlayerRenderer {
     g.visible = hp < maxHp;
     if (!g.visible) return;
 
-    const width = 44;
+    const width = 22 * FEMALE_ADVENTURER.scale;
     const ratio = Math.max(0, hp / maxHp);
 
-    g.rect(-width / 2 - 2, -120, width + 4, 7).fill({ color: 0x222831 });
-    g.rect(-width / 2, -118, width * ratio, 3).fill({ color: 0xef476f });
+    g.rect(-width / 2 - 2, PLAYER_HP_Y - 2, width + 4, 7).fill({ color: 0x222831 });
+    g.rect(-width / 2, PLAYER_HP_Y, width * ratio, 3).fill({ color: 0xef476f });
   }
 }
 
