@@ -116,6 +116,7 @@ export class GameApp {
       player: me,
       latencyMs: this.network.latencyMs,
     });
+    this.windows.renderInventory(me?.inventory ?? null);
   }
 
   private applyLocalMovement(dt: number): void {
