@@ -1,4 +1,5 @@
 import type { EditorMapDraft, EditorWorldSave } from './types';
+import { uploadWorldMap } from '../worldMap/uploadWorldMap';
 
 const STORAGE_PREFIX = 'dalworld:editor-map:';
 const WORLD_STORAGE_PREFIX = 'dalworld:editor-world:';
@@ -25,7 +26,17 @@ export class MapStorage {
   }
 
   saveWorld(world: EditorWorldSave): boolean {
-    return this.writeJson(this.worldKey, world);
+    const saved = this.writeJson(this.worldKey, world);
+
+    void uploadWorldMap(world)
+      .then(() => {
+        console.info('[MapStorage] Uploaded editor world map to server.');
+      })
+      .catch((error: unknown) => {
+        console.warn('[MapStorage] Local save completed, but server map upload failed.', error);
+      });
+
+    return saved;
   }
 
   loadWorld(): EditorWorldSave | null {
