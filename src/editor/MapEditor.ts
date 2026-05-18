@@ -6,6 +6,7 @@ import { MapStorage } from './MapStorage';
 import { TilePickerWindow } from './TilePickerWindow';
 import { WorldMapGrid } from './WorldMapGrid';
 import { WorldMapPanel } from './WorldMapPanel';
+import { EditorGridOverlay } from './EditorGridOverlay';
 import type { EditorMapDraft, EditorTilesetAsset } from './types';
 
 export type MapEditorOptions = {
@@ -36,6 +37,7 @@ export class MapEditor {
   private readonly picker: TilePickerWindow;
   private readonly worldMapGrid: WorldMapGrid;
   private readonly worldMapPanel: WorldMapPanel;
+  private readonly gridOverlay: EditorGridOverlay;
   private readonly storage: MapStorage;
   private readonly uiRoot: HTMLElement;
   private readonly cellDrafts = new Map<string, EditorMapDraft>();
@@ -82,6 +84,10 @@ export class MapEditor {
     this.uiRoot = options.uiRoot ?? document.body;
     this.storage = new MapStorage(mapName);
     this.worldMapGrid = new WorldMapGrid({ cellSize: this.worldWidth });
+    this.gridOverlay = new EditorGridOverlay(this.state, {
+      width: this.worldWidth,
+      height: this.worldHeight,
+    });
 
     this.placement = new TilePlacementSystem(this.state, {
       tileSize: options.tileSize ?? 32,
@@ -129,6 +135,8 @@ export class MapEditor {
     if (this.enabled) return;
 
     this.enabled = true;
+    this.options.world.sortableChildren = true;
+    this.options.world.addChild(this.gridOverlay.layer);
     this.options.world.addChild(this.placement.layer);
     this.panel.mount(this.uiRoot);
     this.picker.mount(this.uiRoot);
@@ -154,6 +162,10 @@ export class MapEditor {
     this.picker.element.remove();
     this.worldMapPanel.element.remove();
 
+    if (this.gridOverlay.layer.parent) {
+      this.gridOverlay.layer.parent.removeChild(this.gridOverlay.layer);
+    }
+
     if (this.placement.layer.parent) {
       this.placement.layer.parent.removeChild(this.placement.layer);
     }
@@ -162,6 +174,7 @@ export class MapEditor {
   setWorldSize(width: number, height: number): void {
     this.worldWidth = width;
     this.worldHeight = height;
+    this.gridOverlay.setWorldSize(width, height);
   }
 
   async transitionWorldCell(transition: WorldCellTransition): Promise<void> {
@@ -193,7 +206,7 @@ export class MapEditor {
 
   private paintFromPointerEvent(event: PointerEvent): void {
     const worldPoint = this.screenToWorld(event.clientX, event.clientY);
-    const tileSize = this.placement.mapDraft.tileSize;
+    const tileSize = this.state.gridSize;
     const x = Math.floor(worldPoint.x / tileSize) * tileSize;
     const y = Math.floor(worldPoint.y / tileSize) * tileSize;
     const paintKey = `${this.state.activeLayer}:${x}:${y}`;
