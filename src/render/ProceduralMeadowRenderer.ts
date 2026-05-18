@@ -5,9 +5,15 @@ const TILE_SIZE = 16;
 const TILESET_COLUMNS = 12;
 const RENDER_SCALE = 4;
 
-const GRASS_TILES = [14, 20, 95, 96, 97, 98, 99, 100, 101, 108, 109, 110, 111, 112, 113];
-const DARK_GRASS_TILES = [0, 1, 2, 3, 4, 5, 12, 13, 15, 16, 17];
-const DIRT_TILES = [6, 7, 8, 9, 10, 11, 18, 19, 21, 22, 23];
+/**
+ * Only use visually filled ground tiles for the base pass.
+ * Edge/corner/transition tiles from the Tiled wang set leave transparent gaps
+ * when placed randomly, so those are intentionally excluded here.
+ */
+const BASE_GRASS_TILES = [14, 20];
+const DETAIL_GRASS_TILES = [96, 97, 98, 99, 100, 101, 108, 109, 110, 111, 112, 113];
+const DARK_GRASS_DETAIL_TILES = [96, 97, 98, 99, 100, 101];
+const DIRT_DETAIL_TILES = [108, 109, 110, 111, 112, 113];
 
 export type ProceduralMeadowOptions = {
   worldWidth: number;
@@ -44,32 +50,49 @@ export class ProceduralMeadowRenderer {
 
     for (let y = 0; y < rows; y += 1) {
       for (let x = 0; x < cols; x += 1) {
-        const tileId = this.pickTile(x, y);
-        const sprite = new Sprite(this.getTileTexture(sheet, tileId));
-        sprite.x = x * TILE_SIZE * RENDER_SCALE;
-        sprite.y = y * TILE_SIZE * RENDER_SCALE;
-        sprite.scale.set(RENDER_SCALE);
-        this.layer.addChild(sprite);
+        this.placeTile(sheet, this.pickBaseTile(x, y), x, y, 0);
+
+        const detailTile = this.pickDetailTile(x, y);
+        if (detailTile !== null) {
+          this.placeTile(sheet, detailTile, x, y, 1);
+        }
       }
     }
 
     this.ready = true;
   }
 
-  private pickTile(x: number, y: number): number {
+  private placeTile(sheet: Texture, tileId: number, x: number, y: number, zIndex: number): void {
+    const sprite = new Sprite(this.getTileTexture(sheet, tileId));
+    sprite.x = x * TILE_SIZE * RENDER_SCALE;
+    sprite.y = y * TILE_SIZE * RENDER_SCALE;
+    sprite.zIndex = zIndex;
+    sprite.scale.set(RENDER_SCALE);
+    this.layer.addChild(sprite);
+  }
+
+  private pickBaseTile(x: number, y: number): number {
+    return pickWeighted(BASE_GRASS_TILES, x, y, this.seed + 11);
+  }
+
+  private pickDetailTile(x: number, y: number): number | null {
     const patch = noise2d(x * 0.08, y * 0.08, this.seed);
     const detail = noise2d(x * 0.43 + 19.7, y * 0.43 - 3.1, this.seed + 77);
     const speckle = rand2d(x, y, this.seed + 1337);
 
-    if (patch > 0.72 && detail > 0.46) {
-      return pickWeighted(DIRT_TILES, x, y, this.seed + 3);
+    if (patch > 0.74 && detail > 0.58) {
+      return pickWeighted(DIRT_DETAIL_TILES, x, y, this.seed + 3);
     }
 
-    if (patch < 0.22 || speckle > 0.93) {
-      return pickWeighted(DARK_GRASS_TILES, x, y, this.seed + 5);
+    if (patch < 0.18 || speckle > 0.96) {
+      return pickWeighted(DARK_GRASS_DETAIL_TILES, x, y, this.seed + 5);
     }
 
-    return pickWeighted(GRASS_TILES, x, y, this.seed + 7);
+    if (speckle > 0.9) {
+      return pickWeighted(DETAIL_GRASS_TILES, x, y, this.seed + 7);
+    }
+
+    return null;
   }
 
   private getTileTexture(sheet: Texture, tileId: number): Texture {
