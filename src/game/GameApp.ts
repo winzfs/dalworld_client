@@ -1,6 +1,7 @@
 import { Application, Container, Graphics } from 'pixi.js';
 import { GameNetwork, getDefaultWebSocketUrl, type NetworkStatus } from '../net/network';
 import type {
+  MonsterSnapshot,
   MovementKeys,
   PlayerSnapshot,
   PublicGameplayConfig,
@@ -18,6 +19,7 @@ import { MobileControls } from '../render/MobileControls';
 import { ProceduralMeadowRenderer } from '../render/ProceduralMeadowRenderer';
 
 const INPUT_SEND_HZ = 30;
+const MONSTER_COLLISION_RADIUS = 40;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, playerSpeed: 220, gatherRange: 80 };
 
@@ -42,6 +44,7 @@ export class GameApp {
   private latestTick = 0;
   private latestPlayers: PlayerSnapshot[] = [];
   private latestResources: ResourceSnapshot[] = [];
+  private latestMonsters: MonsterSnapshot[] = [];
   private inputSeq = 0;
   private inputAccumulator = 0;
   private mobileControls: MobileControls | null = null;
@@ -130,13 +133,28 @@ export class GameApp {
     if (direction) {
       const radius = this.gameplayConfig.playerRadius;
       const speed = this.gameplayConfig.playerSpeed;
+      const nextX = clamp(me.x + direction.x * speed * dt, radius, this.worldInfo.width - radius);
+      const nextY = clamp(me.y + direction.y * speed * dt, radius, this.worldInfo.height - radius);
 
-      me.x = clamp(me.x + direction.x * speed * dt, radius, this.worldInfo.width - radius);
-      me.y = clamp(me.y + direction.y * speed * dt, radius, this.worldInfo.height - radius);
+      if (this.canPlayerMoveTo(nextX, nextY, radius)) {
+        me.x = nextX;
+        me.y = nextY;
+      }
+
       me.facing = this.input.state.facing;
     }
 
     this.playerRenderer.sync(this.latestPlayers, this.myPlayerId);
+  }
+
+  private canPlayerMoveTo(nextX: number, nextY: number, playerRadius: number): boolean {
+    for (const monster of this.latestMonsters) {
+      if (circlesOverlap(nextX, nextY, playerRadius, monster.x, monster.y, MONSTER_COLLISION_RADIUS)) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private sendInputIfDue(dt: number): void {
@@ -196,6 +214,7 @@ export class GameApp {
         this.latestTick = message.tick;
         this.latestPlayers = this.mergeServerPlayers(message.players);
         this.latestResources = message.resources;
+        this.latestMonsters = message.monsters;
         this.playerRenderer.sync(this.latestPlayers, this.myPlayerId);
         this.resourceRenderer.sync(message.resources);
         this.monsterRenderer.sync(message.monsters);
@@ -302,6 +321,20 @@ function getMoveDirection(keys: MovementKeys): { x: number; y: number } | null {
 
   const length = Math.hypot(x, y) || 1;
   return { x: x / length, y: y / length };
+}
+
+function circlesOverlap(
+  ax: number,
+  ay: number,
+  ar: number,
+  bx: number,
+  by: number,
+  br: number,
+): boolean {
+  const minDistance = ar + br;
+  const dx = ax - bx;
+  const dy = ay - by;
+  return dx * dx + dy * dy < minDistance * minDistance;
 }
 
 function clamp(value: number, min: number, max: number): number {
