@@ -20,6 +20,7 @@ async function main() {
 
   console.log(`[tilesets] Generated ${outputFile}`);
   console.log(`[tilesets] Categories: ${categories.length}`);
+  console.log(`[tilesets] Assets: ${categories.reduce((total, category) => total + category.assets.length, 0)}`);
 }
 
 async function readCategories(root) {
@@ -33,7 +34,11 @@ async function readCategories(root) {
   for (const directory of directories) {
     const categoryId = normalizeId(directory.name);
     const categoryPath = path.join(root, directory.name);
-    const assets = await readAssets(categoryPath, categoryId, directory.name);
+    const assets = await readAssetsRecursive({
+      categoryPath,
+      categoryId,
+      folderName: directory.name,
+    });
 
     categories.push({
       id: categoryId,
@@ -45,29 +50,62 @@ async function readCategories(root) {
   return categories;
 }
 
-async function readAssets(categoryPath, categoryId, folderName) {
-  const entries = await readdir(categoryPath, { withFileTypes: true });
+async function readAssetsRecursive({ categoryPath, categoryId, folderName }) {
+  const files = await walkImageFiles(categoryPath);
 
-  return entries
-    .filter((entry) => entry.isFile() && imageExtensions.has(path.extname(entry.name).toLowerCase()))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((entry) => {
-      const basename = path.basename(entry.name, path.extname(entry.name));
+  return files
+    .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
+    .map((file) => {
+      const basename = path.basename(file.name, path.extname(file.name));
+      const relativeUrlPath = file.relativePath.split(path.sep).join('/');
+      const relativeIdPath = file.relativePath
+        .slice(0, -path.extname(file.relativePath).length)
+        .split(path.sep)
+        .map(normalizeId)
+        .filter(Boolean)
+        .join('-');
+
       return {
-        id: `${categoryId}-${normalizeId(basename)}`,
+        id: `${categoryId}-${relativeIdPath}`,
         name: toTitle(basename),
         categoryId,
-        url: `/assets/tilesets/${folderName}/${entry.name}`,
+        url: `/assets/tilesets/${folderName}/${relativeUrlPath}`,
         tileWidth: defaultTileSize,
         tileHeight: defaultTileSize,
       };
     });
 }
 
+async function walkImageFiles(root, current = root) {
+  const entries = await readdir(current, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(current, entry.name);
+
+    if (entry.isDirectory()) {
+      files.push(...await walkImageFiles(root, fullPath));
+      continue;
+    }
+
+    if (!entry.isFile()) continue;
+    if (!imageExtensions.has(path.extname(entry.name).toLowerCase())) continue;
+
+    files.push({
+      name: entry.name,
+      fullPath,
+      relativePath: path.relative(root, fullPath),
+    });
+  }
+
+  return files;
+}
+
 function renderManifest(categories) {
   return `import type { EditorTilesetCategory } from './types';\n\n` +
 `/**\n` +
 ` * Auto-generated from public/assets/tilesets.\n` +
+` * Supports nested folders. The first folder below tilesets becomes the category.\n` +
 ` * Run \`npm run tilesets:generate\` after adding/removing tileset images.\n` +
 ` */\n` +
 `export const TILESET_CATEGORIES: EditorTilesetCategory[] = ${JSON.stringify(categories, null, 2)};\n`;
