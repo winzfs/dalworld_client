@@ -6,6 +6,7 @@ export class GameWorldMapRenderer {
 
   private readonly textureCache = new Map<string, Promise<PixiTexture | null>>();
   private readonly displays: Array<Sprite | Graphics> = [];
+  private renderGeneration = 0;
 
   constructor(private readonly world: Container) {
     this.layer.label = 'game-world-map-layer';
@@ -14,7 +15,13 @@ export class GameWorldMapRenderer {
   }
 
   async render(map: GameWorldMap | null): Promise<void> {
+    const generation = ++this.renderGeneration;
     this.clear();
+
+    if (!this.layer.parent) {
+      this.world.addChild(this.layer);
+    }
+
     if (!map) return;
 
     const placements = map.cells
@@ -28,6 +35,12 @@ export class GameWorldMapRenderer {
 
     for (const placement of placements) {
       const display = await this.createDisplay(placement);
+
+      if (generation !== this.renderGeneration) {
+        display.destroy();
+        return;
+      }
+
       display.zIndex = getLayerZ(placement.layer);
       this.displays.push(display);
       this.layer.addChild(display);
@@ -35,6 +48,7 @@ export class GameWorldMapRenderer {
   }
 
   destroy(): void {
+    this.renderGeneration += 1;
     this.clear();
     if (this.layer.parent) {
       this.layer.parent.removeChild(this.layer);
@@ -44,7 +58,9 @@ export class GameWorldMapRenderer {
 
   private clear(): void {
     for (const display of this.displays) {
-      display.destroy();
+      if (!display.destroyed) {
+        display.destroy();
+      }
     }
     this.displays.length = 0;
     this.layer.removeChildren();
