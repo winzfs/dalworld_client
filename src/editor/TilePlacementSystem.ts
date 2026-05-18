@@ -170,7 +170,10 @@ export class TilePlacementSystem {
   }
 
   private upsertPlacement(placement: EditorTilePlacement): void {
-    const existing = this.findPlacementAt(placement.x, placement.y, placement.layer);
+    const existing = placement.transparentBlack
+      ? this.findMatchingTransparentOverlay(placement)
+      : this.findPlacementAt(placement.x, placement.y, placement.layer);
+
     if (existing) {
       this.removePlacement(existing.id);
     }
@@ -270,7 +273,7 @@ export class TilePlacementSystem {
       (baseHeight / normalTexture.height) * scale,
     );
 
-    sprite.zIndex = layerZIndex(placement.layer);
+    sprite.zIndex = layerZIndex(placement.layer) + (placement.transparentBlack ? 0.5 : 0);
 
     if (placement.transparentBlack) {
       void this.loadTransparentTexture(asset.url, safeSourceRect).then((transparentTexture) => {
@@ -340,6 +343,17 @@ export class TilePlacementSystem {
     return this.draft.placements.find(
       (placement) => placement.x === x && placement.y === y && placement.layer === layer,
     ) ?? null;
+  }
+
+  private findMatchingTransparentOverlay(placement: EditorTilePlacement): EditorTilePlacement | null {
+    return this.draft.placements.find((existing) => (
+      existing.transparentBlack === true &&
+      existing.x === placement.x &&
+      existing.y === placement.y &&
+      existing.layer === placement.layer &&
+      existing.assetId === placement.assetId &&
+      sameSourceRect(existing.sourceRect, placement.sourceRect)
+    )) ?? null;
   }
 
   private removePlacement(id: string): void {
@@ -420,6 +434,12 @@ function createSlicedTexture(texture: PixiTexture, sourceRect: EditorSourceRect)
 
 function enforceNearestScale(texture: PixiTexture): void {
   texture.source.scaleMode = SCALE_MODES.NEAREST;
+}
+
+function sameSourceRect(a: EditorSourceRect | undefined, b: EditorSourceRect | undefined): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
 function layerZIndex(layer: EditorTilePlacement['layer']): number {
