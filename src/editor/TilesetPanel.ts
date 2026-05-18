@@ -13,6 +13,7 @@ export class TilesetPanel {
   readonly element: HTMLDivElement;
 
   private readonly header: HTMLDivElement;
+  private readonly scaleContainer: HTMLDivElement;
   private readonly toolContainer: HTMLDivElement;
   private readonly actionContainer: HTMLDivElement;
   private readonly categoryContainer: HTMLDivElement;
@@ -35,6 +36,9 @@ export class TilesetPanel {
     this.header.className = 'map-editor-header';
     this.header.textContent = 'Map Editor';
 
+    this.scaleContainer = document.createElement('div');
+    this.scaleContainer.className = 'map-editor-scale';
+
     this.toolContainer = document.createElement('div');
     this.toolContainer.className = 'map-editor-tools';
 
@@ -49,6 +53,7 @@ export class TilesetPanel {
 
     this.element.append(
       this.header,
+      this.scaleContainer,
       this.toolContainer,
       this.actionContainer,
       this.categoryContainer,
@@ -65,10 +70,49 @@ export class TilesetPanel {
   }
 
   private render(): void {
+    this.renderScaleControls();
     this.renderTools();
     this.renderActions();
     this.renderCategories();
     this.renderAssets();
+  }
+
+  private renderScaleControls(): void {
+    this.scaleContainer.innerHTML = '';
+
+    const label = document.createElement('span');
+    label.className = 'map-editor-scale-label';
+    label.textContent = '스케일';
+
+    const decreaseButton = document.createElement('button');
+    decreaseButton.className = 'map-editor-scale-button';
+    decreaseButton.textContent = '◀';
+    decreaseButton.onclick = () => this.state.decreaseBrushScale();
+
+    const value = document.createElement('input');
+    value.className = 'map-editor-scale-input';
+    value.type = 'number';
+    value.min = '0.1';
+    value.max = '10';
+    value.step = '0.1';
+    value.value = this.state.brushScale.toFixed(1);
+    value.onchange = () => this.state.setBrushScale(Number(value.value));
+    value.onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        value.blur();
+      }
+    };
+
+    const suffix = document.createElement('span');
+    suffix.className = 'map-editor-scale-suffix';
+    suffix.textContent = 'x';
+
+    const increaseButton = document.createElement('button');
+    increaseButton.className = 'map-editor-scale-button';
+    increaseButton.textContent = '▶';
+    increaseButton.onclick = () => this.state.increaseBrushScale();
+
+    this.scaleContainer.append(label, decreaseButton, value, suffix, increaseButton);
   }
 
   private renderTools(): void {
