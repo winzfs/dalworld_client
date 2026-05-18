@@ -1,19 +1,8 @@
 import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import type { Facing, PlayerSnapshot } from '../protocol/messages';
 import { Interpolator2D } from '../game/interpolation';
-import {
-  FEMALE_ADVENTURER_FPS,
-  FEMALE_ADVENTURER_FRAME_COUNT,
-  FEMALE_ADVENTURER_FRAME_HEIGHT,
-  FEMALE_ADVENTURER_FRAME_WIDTH,
-  FEMALE_ADVENTURER_SHEETS,
-  type FemaleAdventurerAnim,
-} from '../assets/femaleAdventurer';
+import { FEMALE_ADVENTURER, type FemaleAdventurerAnim } from '../assets/femaleAdventurer';
 import { loadSpriteStrip } from './spriteStrip';
-
-const SCALE = 1.5;
-const FACINGS: Facing[] = ['down', 'left', 'up', 'right'];
-const ANIMS: FemaleAdventurerAnim[] = ['idle', 'walk'];
 
 type View = {
   c: Container;
@@ -28,6 +17,7 @@ type View = {
   interp: Interpolator2D;
   targetX: number;
   targetY: number;
+  currentAnim: FemaleAdventurerAnim | null;
 };
 
 type Frames = Record<FemaleAdventurerAnim, Record<Facing, Texture[]>>;
@@ -66,6 +56,7 @@ export class PlayerRenderer {
         v.facing = p.facing;
         v.local = local;
         v.frame = -1;
+        v.currentAnim = null;
         this.apply(v);
         v.ring.visible = local;
       }
@@ -87,8 +78,15 @@ export class PlayerRenderer {
       const pos = v.interp.update(dt);
       v.c.position.set(Math.round(pos.x), Math.round(pos.y));
 
-      const anim = this.getAnim(v);
-      const frame = Math.floor((v.t += dt) * FEMALE_ADVENTURER_FPS[anim]) % FEMALE_ADVENTURER_FRAME_COUNT;
+      const anim = this.selectAnim(v);
+
+      if (anim !== v.currentAnim) {
+        v.currentAnim = anim;
+        v.frame = -1;
+        v.t = 0;
+      }
+
+      const frame = Math.floor((v.t += dt) * FEMALE_ADVENTURER.fps[anim]) % FEMALE_ADVENTURER.frameCount;
 
       if (frame !== v.frame) {
         v.frame = frame;
@@ -103,15 +101,15 @@ export class PlayerRenderer {
     try {
       const frames = {} as Frames;
 
-      for (const anim of ANIMS) {
+      for (const anim of FEMALE_ADVENTURER.animations) {
         frames[anim] = {} as Record<Facing, Texture[]>;
 
-        for (const facing of FACINGS) {
+        for (const facing of FEMALE_ADVENTURER.facings) {
           frames[anim][facing] = await loadSpriteStrip(
-            FEMALE_ADVENTURER_SHEETS[anim][facing],
-            FEMALE_ADVENTURER_FRAME_WIDTH,
-            FEMALE_ADVENTURER_FRAME_HEIGHT,
-            FEMALE_ADVENTURER_FRAME_COUNT,
+            FEMALE_ADVENTURER.sheets[anim][facing],
+            FEMALE_ADVENTURER.frameWidth,
+            FEMALE_ADVENTURER.frameHeight,
+            FEMALE_ADVENTURER.frameCount,
           );
         }
       }
@@ -120,6 +118,7 @@ export class PlayerRenderer {
 
       for (const v of this.views.values()) {
         v.frame = -1;
+        v.currentAnim = null;
         this.apply(v);
       }
     } catch (error) {
@@ -152,6 +151,7 @@ export class PlayerRenderer {
       interp: new Interpolator2D(p.x, p.y, local ? 30 : 12),
       targetX: p.x,
       targetY: p.y,
+      currentAnim: null,
     };
 
     this.apply(v);
@@ -161,14 +161,14 @@ export class PlayerRenderer {
   private apply(v: View): void {
     if (!this.frames) return;
 
-    const anim = this.getAnim(v);
+    const anim = this.selectAnim(v);
     const list = this.frames[anim][v.facing];
     const tex = list[Math.max(0, v.frame) % list.length];
 
     if (!v.sprite) {
       v.sprite = new Sprite(tex);
-      v.sprite.anchor.set(0.5, 0.8);
-      v.sprite.scale.set(SCALE);
+      v.sprite.anchor.set(FEMALE_ADVENTURER.anchor.x, FEMALE_ADVENTURER.anchor.y);
+      v.sprite.scale.set(FEMALE_ADVENTURER.scale);
       v.c.addChildAt(v.sprite, 0);
     } else {
       v.sprite.texture = tex;
@@ -177,7 +177,7 @@ export class PlayerRenderer {
     v.sprite.tint = v.local ? 0xffffff : 0xfff1cf;
   }
 
-  private getAnim(v: View): FemaleAdventurerAnim {
+  private selectAnim(v: View): FemaleAdventurerAnim {
     return v.moving ? 'walk' : 'idle';
   }
 
