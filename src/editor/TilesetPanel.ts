@@ -8,6 +8,8 @@ export type TilesetPanelActions = {
   onExport: () => void;
   onClear: () => void;
   onPickAsset: (asset: EditorTilesetAsset) => void;
+  onFillAll: () => void;
+  onRandomFill: (chancePercent: number) => void;
 };
 
 export class TilesetPanel {
@@ -16,6 +18,7 @@ export class TilesetPanel {
   private readonly header: HTMLDivElement;
   private readonly scaleContainer: HTMLDivElement;
   private readonly toolContainer: HTMLDivElement;
+  private readonly fillContainer: HTMLDivElement;
   private readonly actionContainer: HTMLDivElement;
   private readonly categoryContainer: HTMLDivElement;
   private readonly assetContainer: HTMLDivElement;
@@ -23,6 +26,7 @@ export class TilesetPanel {
   private dragging = false;
   private dragOffsetX = 0;
   private dragOffsetY = 0;
+  private randomChancePercent = 30;
 
   constructor(
     private readonly state: EditorState,
@@ -43,6 +47,9 @@ export class TilesetPanel {
     this.toolContainer = document.createElement('div');
     this.toolContainer.className = 'map-editor-tools';
 
+    this.fillContainer = document.createElement('div');
+    this.fillContainer.className = 'map-editor-fill';
+
     this.actionContainer = document.createElement('div');
     this.actionContainer.className = 'map-editor-actions';
 
@@ -56,6 +63,7 @@ export class TilesetPanel {
       this.header,
       this.scaleContainer,
       this.toolContainer,
+      this.fillContainer,
       this.actionContainer,
       this.categoryContainer,
       this.assetContainer,
@@ -73,6 +81,7 @@ export class TilesetPanel {
   private render(): void {
     this.renderScaleControls();
     this.renderTools();
+    this.renderFillControls();
     this.renderActions();
     this.renderCategories();
     this.renderAssets();
@@ -123,6 +132,34 @@ export class TilesetPanel {
     const eraseButton = this.createModeButton('삭제', 'erase');
 
     this.toolContainer.append(paintButton, eraseButton);
+  }
+
+  private renderFillControls(): void {
+    this.fillContainer.innerHTML = '';
+
+    const fillButton = this.createActionButton('전체 Fill', this.actions.onFillAll);
+
+    const chanceInput = document.createElement('input');
+    chanceInput.className = 'map-editor-percent-input';
+    chanceInput.type = 'number';
+    chanceInput.min = '0';
+    chanceInput.max = '100';
+    chanceInput.step = '1';
+    chanceInput.value = String(this.randomChancePercent);
+    chanceInput.onchange = () => {
+      this.randomChancePercent = normalizeChance(Number(chanceInput.value));
+      chanceInput.value = String(this.randomChancePercent);
+    };
+
+    const percent = document.createElement('span');
+    percent.className = 'map-editor-percent-suffix';
+    percent.textContent = '%';
+
+    const randomButton = this.createActionButton('랜덤 Fill', () => {
+      this.actions.onRandomFill(this.randomChancePercent);
+    });
+
+    this.fillContainer.append(fillButton, chanceInput, percent, randomButton);
   }
 
   private renderActions(): void {
@@ -234,4 +271,9 @@ export class TilesetPanel {
     this.header.addEventListener('pointerup', stopDragging);
     this.header.addEventListener('pointercancel', stopDragging);
   }
+}
+
+function normalizeChance(value: number): number {
+  if (!Number.isFinite(value)) return 30;
+  return Math.min(100, Math.max(0, Math.round(value)));
 }
