@@ -3,6 +3,10 @@ import { TILESET_CATEGORIES } from './tilesetManifest';
 
 type EditorStateListener = () => void;
 
+const MIN_BRUSH_SCALE = 0.1;
+const MAX_BRUSH_SCALE = 10;
+const BRUSH_SCALE_STEP = 0.1;
+
 export class EditorState {
   private readonly listeners = new Set<EditorStateListener>();
 
@@ -10,6 +14,7 @@ export class EditorState {
   selectedAsset: EditorTilesetAsset | null = TILESET_CATEGORIES[0]?.assets[0] ?? null;
   activeLayer: EditorLayerId = 'ground';
   mode: EditorToolMode = 'paint';
+  brushScale = 1;
 
   subscribe(listener: EditorStateListener): () => void {
     this.listeners.add(listener);
@@ -44,9 +49,34 @@ export class EditorState {
     this.emit();
   }
 
+  setBrushScale(scale: number): void {
+    const next = normalizeBrushScale(scale);
+    if (this.brushScale === next) return;
+    this.brushScale = next;
+    this.emit();
+  }
+
+  adjustBrushScale(delta: number): void {
+    this.setBrushScale(this.brushScale + delta);
+  }
+
+  decreaseBrushScale(): void {
+    this.adjustBrushScale(-BRUSH_SCALE_STEP);
+  }
+
+  increaseBrushScale(): void {
+    this.adjustBrushScale(BRUSH_SCALE_STEP);
+  }
+
   private emit(): void {
     for (const listener of this.listeners) {
       listener();
     }
   }
+}
+
+function normalizeBrushScale(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  const clamped = Math.min(MAX_BRUSH_SCALE, Math.max(MIN_BRUSH_SCALE, value));
+  return Math.round(clamped * 100) / 100;
 }
