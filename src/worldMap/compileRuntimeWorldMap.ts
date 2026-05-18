@@ -1,5 +1,5 @@
-import type { EditorTilePlacement, EditorWorldSave } from '../editor/types';
-import type { GameWorldMap, WorldMapPlacement, WorldMapSourceRect } from './types';
+import type { EditorPlacementGameplay, EditorTilePlacement, EditorWorldSave } from '../editor/types';
+import type { GameWorldMap, WorldMapPlacement, WorldMapPlacementGameplay, WorldMapSourceRect } from './types';
 
 const DEFAULT_CELL_SIZE = 3000;
 const MIN_SCALE = 0.1;
@@ -40,6 +40,9 @@ function compilePlacement(placement: EditorTilePlacement): WorldMapPlacement {
   const sourceRect = compileSourceRect(placement.sourceRect);
   if (sourceRect) compiled.sourceRect = sourceRect;
 
+  const gameplay = compileGameplay(placement.gameplay);
+  if (gameplay) compiled.gameplay = gameplay;
+
   if (Number.isFinite(placement.solidColor)) {
     compiled.solidColor = placement.solidColor;
   }
@@ -49,6 +52,22 @@ function compilePlacement(placement: EditorTilePlacement): WorldMapPlacement {
   }
 
   return compiled;
+}
+
+function compileGameplay(gameplay: EditorPlacementGameplay | undefined): WorldMapPlacementGameplay | undefined {
+  if (!gameplay) return undefined;
+
+  if (gameplay.kind === 'resource') {
+    return {
+      kind: 'resource',
+      resourceType: gameplay.resourceType,
+      blocksMovement: gameplay.blocksMovement === true,
+      maxHp: normalizeOptionalPositiveNumber(gameplay.maxHp),
+      respawnMs: normalizeOptionalPositiveNumber(gameplay.respawnMs),
+    };
+  }
+
+  return undefined;
 }
 
 function compileSourceRect(sourceRect: EditorTilePlacement['sourceRect']): WorldMapSourceRect | undefined {
@@ -77,4 +96,9 @@ function normalizeFiniteNumber(value: number | undefined, fallback: number): num
 function normalizePositiveNumber(value: number | undefined, fallback: number): number {
   const normalized = normalizeFiniteNumber(value, fallback);
   return normalized > 0 ? normalized : fallback;
+}
+
+function normalizeOptionalPositiveNumber(value: number | undefined): number | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  return (value as number) > 0 ? value : undefined;
 }
