@@ -1,4 +1,5 @@
 import type { GameWorldMap, WorldMapPlacement } from './types';
+import { getActiveCell, getCell } from './activeCellStore';
 
 let currentMap: GameWorldMap | null = null;
 
@@ -13,22 +14,9 @@ export function getRuntimeWorldMap(): GameWorldMap | null {
 export function getCollisionPlacements(): WorldMapPlacement[] {
   if (!currentMap) return [];
 
-  const out: WorldMapPlacement[] = [];
+  const active = getActiveCell();
+  const cell = getCell(currentMap, active.gridX, active.gridY);
+  if (!cell) return [];
 
-  for (const cell of currentMap.cells) {
-    const offsetX = cell.gridX * currentMap.cellSize;
-    const offsetY = cell.gridY * currentMap.cellSize;
-
-    for (const placement of cell.placements) {
-      if (placement.layer !== 'collision') continue;
-
-      out.push({
-        ...placement,
-        x: placement.x + offsetX,
-        y: placement.y + offsetY,
-      });
-    }
-  }
-
-  return out;
+  return cell.placements.filter((placement) => placement.layer === 'collision');
 }
