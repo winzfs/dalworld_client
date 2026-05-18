@@ -21,6 +21,7 @@ import { CameraSystem } from './systems/CameraSystem';
 import { HudSystem } from './systems/HudSystem';
 import { ServerMessageRouter } from './systems/ServerMessageRouter';
 import { MapEditor } from '../editor/MapEditor';
+import { EditorCameraSystem } from '../editor/EditorCameraSystem';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -32,7 +33,9 @@ export class GameApp {
   private readonly background = new Graphics();
   private readonly input = new InputController();
   private readonly network: GameNetwork;
+  private readonly camera: Camera;
   private readonly cameraSystem: CameraSystem;
+  private readonly editorCameraSystem: EditorCameraSystem;
   private readonly hudSystem: HudSystem;
   private readonly messageRouter: ServerMessageRouter;
   private readonly playerRenderer: PlayerRenderer;
@@ -41,6 +44,7 @@ export class GameApp {
   private readonly movementSystem = new ClientMovementSystem();
   private readonly inputSendSystem: InputSendSystem;
   private readonly snapshotSystem = new SnapshotSystem();
+  private readonly editorMode: boolean;
   private readonly mapEditor: MapEditor | null;
 
   private meadowRenderer: ProceduralMeadowRenderer | null = null;
@@ -52,9 +56,12 @@ export class GameApp {
   private mobileControls: MobileControls | null = null;
 
   constructor() {
+    this.editorMode = isEditorEnabled();
     this.network = new GameNetwork(getDefaultWebSocketUrl());
     this.inputSendSystem = new InputSendSystem(this.network, INPUT_SEND_HZ);
-    this.cameraSystem = new CameraSystem(new Camera(this.world));
+    this.camera = new Camera(this.world);
+    this.cameraSystem = new CameraSystem(this.camera);
+    this.editorCameraSystem = new EditorCameraSystem(this.camera);
     this.hudSystem = new HudSystem(new GameHud(), new GameWindows());
 
     this.world.addChild(this.background);
@@ -75,6 +82,8 @@ export class GameApp {
       },
       setWorldInfo: (world) => {
         this.worldInfo = world;
+        this.mapEditor?.setWorldSize(world.width, world.height);
+        this.editorCameraSystem.setWorldSize(world);
       },
       setGameplayConfig: (gameplay) => {
         this.gameplayConfig = gameplay ?? DEFAULT_GAMEPLAY;
@@ -87,17 +96,21 @@ export class GameApp {
       },
     });
 
-    this.mapEditor = isEditorEnabled()
+    this.mapEditor = this.editorMode
       ? new MapEditor({
           app: this.app,
           world: this.world,
           tileSize: 32,
           mapName: 'dalworld-map',
+          worldWidth: this.worldInfo.width,
+          worldHeight: this.worldInfo.height,
         })
       : null;
   }
 
   async start(mount: HTMLElement): Promise<void> {
+    document.body.classList.toggle('is-map-editor-mode', this.editorMode);
+
     await this.app.init({
       background: '#1d2b34',
       antialias: false,
@@ -113,7 +126,12 @@ export class GameApp {
     this.drawWorldBackground();
     await this.loadWorldMap();
 
-    this.mapEditor?.start();
+    if (this.editorMode) {
+      this.editorCameraSystem.setWorldSize(this.worldInfo);
+      this.mapEditor?.start();
+      this.app.ticker.add((ticker) => this.updateEditor(ticker.deltaMS / 1000));
+      return;
+    }
 
     this.network.onStatus((status) => {
       this.status = status;
@@ -123,6 +141,16 @@ export class GameApp {
     this.network.connect();
 
     this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
+  }
+
+  private updateEditor(dt: number): void {
+    this.editorCameraSystem.update({
+      input: this.input.state,
+      world: this.worldInfo,
+      screenWidth: this.app.renderer.width,
+      screenHeight: this.app.renderer.height,
+      dt,
+    });
   }
 
   private update(dt: number): void {
