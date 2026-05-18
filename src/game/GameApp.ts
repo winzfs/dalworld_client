@@ -86,7 +86,7 @@ export class GameApp {
     this.runtimeWorldSystem = new RuntimeWorldSystem({
       world: this.world,
       background: this.background,
-      worldInfo: this.worldInfo,
+      getWorldInfo: () => this.worldInfo,
       cameraSystem: this.cameraSystem,
       worldMapRenderer: this.worldMapRenderer,
     });
