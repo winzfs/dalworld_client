@@ -22,6 +22,7 @@ import { HudSystem } from './systems/HudSystem';
 import { ServerMessageRouter } from './systems/ServerMessageRouter';
 import { MapEditor } from '../editor/MapEditor';
 import { EditorCameraSystem } from '../editor/EditorCameraSystem';
+import { EditorMinimap } from '../editor/EditorMinimap';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -46,6 +47,7 @@ export class GameApp {
   private readonly snapshotSystem = new SnapshotSystem();
   private readonly editorMode: boolean;
   private readonly mapEditor: MapEditor | null;
+  private readonly editorMinimap: EditorMinimap | null;
 
   private meadowRenderer: ProceduralMeadowRenderer | null = null;
   private editorTransitioning = false;
@@ -85,6 +87,7 @@ export class GameApp {
         this.worldInfo = world;
         this.mapEditor?.setWorldSize(world.width, world.height);
         this.editorCameraSystem.setWorldSize(world);
+        this.editorMinimap?.setWorldSize(world.width, world.height);
       },
       setGameplayConfig: (gameplay) => {
         this.gameplayConfig = gameplay ?? DEFAULT_GAMEPLAY;
@@ -106,6 +109,14 @@ export class GameApp {
           worldWidth: this.worldInfo.width,
           worldHeight: this.worldInfo.height,
           onMoveCameraTo: (x, y) => this.editorCameraSystem.setPosition(x, y),
+        })
+      : null;
+
+    this.editorMinimap = this.editorMode
+      ? new EditorMinimap({
+          worldWidth: this.worldInfo.width,
+          worldHeight: this.worldInfo.height,
+          onMoveTo: (x, y) => this.editorCameraSystem.setPosition(x, y),
         })
       : null;
   }
@@ -131,6 +142,7 @@ export class GameApp {
     if (this.editorMode) {
       this.editorCameraSystem.setWorldSize(this.worldInfo);
       this.mapEditor?.start();
+      this.editorMinimap?.mount(document.body);
       this.app.ticker.add((ticker) => this.updateEditor(ticker.deltaMS / 1000));
       return;
     }
@@ -152,6 +164,13 @@ export class GameApp {
       screenWidth: this.app.renderer.width,
       screenHeight: this.app.renderer.height,
       dt,
+    });
+
+    const view = this.editorCameraSystem.getView();
+    this.editorMinimap?.render({
+      ...view,
+      screenWidth: this.app.renderer.width,
+      screenHeight: this.app.renderer.height,
     });
 
     if (transition && this.mapEditor && !this.editorTransitioning) {
