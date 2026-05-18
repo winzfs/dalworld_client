@@ -1,0 +1,78 @@
+import type { ServerToClientMessage, WorldInfo, PublicGameplayConfig } from '../../protocol/messages';
+import type { InputState } from '../InputController';
+import type { SnapshotSystem } from './SnapshotSystem';
+import type { CameraSystem } from './CameraSystem';
+import type { PlayerRenderer } from '../../render/PlayerRenderer';
+import type { ResourceRenderer } from '../../render/ResourceRenderer';
+import type { MonsterRenderer } from '../../render/MonsterRenderer';
+
+export type ServerMessageRouterContext = {
+  input: InputState;
+  snapshotSystem: SnapshotSystem;
+  cameraSystem: CameraSystem;
+  playerRenderer: PlayerRenderer;
+  resourceRenderer: ResourceRenderer;
+  monsterRenderer: MonsterRenderer;
+  getMyPlayerId: () => string | null;
+  setMyPlayerId: (playerId: string) => void;
+  setWorldInfo: (world: WorldInfo) => void;
+  setGameplayConfig: (gameplay: PublicGameplayConfig | undefined) => void;
+  redrawWorld: () => void;
+  reloadWorldMap: () => void;
+};
+
+/**
+ * Routes server messages to client systems.
+ * Keeps GameApp from growing one switch-case per gameplay feature.
+ */
+export class ServerMessageRouter {
+  constructor(private readonly context: ServerMessageRouterContext) {}
+
+  handle(message: ServerToClientMessage): void {
+    switch (message.type) {
+      case 'welcome':
+        this.handleWelcome(message);
+        return;
+
+      case 'snapshot':
+        this.handleSnapshot(message);
+        return;
+
+      case 'event':
+        this.handleEvent(message);
+        return;
+
+      case 'pong':
+        return;
+    }
+  }
+
+  private handleWelcome(message: Extract<ServerToClientMessage, { type: 'welcome' }>): void {
+    this.context.setMyPlayerId(message.playerId);
+    this.context.setWorldInfo(message.world);
+    this.context.setGameplayConfig(message.gameplay);
+    this.context.cameraSystem.setWorldSize(message.world);
+    this.context.redrawWorld();
+    this.context.reloadWorldMap();
+  }
+
+  private handleSnapshot(message: Extract<ServerToClientMessage, { type: 'snapshot' }>): void {
+    const snapshot = this.context.snapshotSystem.apply({
+      myPlayerId: this.context.getMyPlayerId(),
+      input: this.context.input,
+      players: message.players,
+      resources: message.resources,
+      monsters: message.monsters,
+      tick: message.tick,
+    });
+
+    this.context.playerRenderer.sync(snapshot.players, this.context.getMyPlayerId());
+    this.context.resourceRenderer.sync(snapshot.resources);
+    this.context.monsterRenderer.sync(snapshot.monsters);
+  }
+
+  private handleEvent(_message: Extract<ServerToClientMessage, { type: 'event' }>): void {
+    // Gameplay events will be dispatched here as systems are added:
+    // combat text, effects, loot notifications, chat, quest updates, etc.
+  }
+}
