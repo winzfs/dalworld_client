@@ -179,12 +179,19 @@ export class TilePlacementSystem {
   }
 
   private async createDisplay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Promise<void> {
-    const display = placement.layer === 'collision'
-      ? this.createCollisionOverlay(placement, asset)
-      : await this.createVisualDisplay(placement, asset);
+    try {
+      const display = placement.layer === 'collision'
+        ? this.createCollisionOverlay(placement, asset)
+        : await this.createVisualDisplay(placement, asset);
 
-    this.displays.set(placement.id, display);
-    this.layer.addChild(display);
+      this.displays.set(placement.id, display);
+      this.layer.addChild(display);
+    } catch (error) {
+      console.warn('[MapEditor] Failed to render placement. Using fallback tile.', error);
+      const fallback = this.createFallbackTile(placement, asset);
+      this.displays.set(placement.id, fallback);
+      this.layer.addChild(fallback);
+    }
   }
 
   private async createVisualDisplay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Promise<PlacedDisplay> {
@@ -242,15 +249,12 @@ export class TilePlacementSystem {
     const safeSourceRect = placement.sourceRect
       ? shrinkSourceRect(placement.sourceRect, texture)
       : undefined;
-    const sourceTexture = placement.transparentBlack
-      ? await this.loadTransparentTexture(asset.url, safeSourceRect)
-      : safeSourceRect
-        ? createSlicedTexture(texture, safeSourceRect)
-        : texture;
-    const resolvedTexture = sourceTexture ?? texture;
-    enforceNearestScale(resolvedTexture);
+    const normalTexture = safeSourceRect
+      ? createSlicedTexture(texture, safeSourceRect)
+      : texture;
+    enforceNearestScale(normalTexture);
 
-    const sprite = new Sprite(resolvedTexture);
+    const sprite = new Sprite(normalTexture);
     const scale = normalizePlacementScale(placement.scale);
 
     sprite.label = `editor-tile:${placement.id}`;
@@ -259,14 +263,23 @@ export class TilePlacementSystem {
     sprite.roundPixels = true;
     sprite.alpha = 1;
 
-    const baseWidth = placement.sourceRect?.width ?? asset.tileWidth ?? resolvedTexture.width;
-    const baseHeight = placement.sourceRect?.height ?? asset.tileHeight ?? resolvedTexture.height;
+    const baseWidth = placement.sourceRect?.width ?? asset.tileWidth ?? normalTexture.width;
+    const baseHeight = placement.sourceRect?.height ?? asset.tileHeight ?? normalTexture.height;
     sprite.scale.set(
-      (baseWidth / resolvedTexture.width) * scale,
-      (baseHeight / resolvedTexture.height) * scale,
+      (baseWidth / normalTexture.width) * scale,
+      (baseHeight / normalTexture.height) * scale,
     );
 
     sprite.zIndex = layerZIndex(placement.layer);
+
+    if (placement.transparentBlack) {
+      void this.loadTransparentTexture(asset.url, safeSourceRect).then((transparentTexture) => {
+        const currentDisplay = this.displays.get(placement.id);
+        if (!transparentTexture || currentDisplay !== sprite) return;
+        enforceNearestScale(transparentTexture);
+        sprite.texture = transparentTexture;
+      });
+    }
 
     return sprite;
   }
