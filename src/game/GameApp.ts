@@ -145,15 +145,15 @@ export class GameApp {
       const nextX = clamp(me.x + delta.x, radius, this.worldInfo.width - radius);
       const nextY = clamp(me.y + delta.y, radius, this.worldInfo.height - radius);
 
-      if (this.canPlayerOccupy(nextX, nextY, radius)) {
+      if (this.canPlayerMoveFromTo(me.x, me.y, nextX, nextY, radius)) {
         me.x = nextX;
         me.y = nextY;
       } else {
         const axisX = clamp(me.x + delta.x, radius, this.worldInfo.width - radius);
-        if (this.canPlayerOccupy(axisX, me.y, radius)) me.x = axisX;
+        if (this.canPlayerMoveFromTo(me.x, me.y, axisX, me.y, radius)) me.x = axisX;
 
         const axisY = clamp(me.y + delta.y, radius, this.worldInfo.height - radius);
-        if (this.canPlayerOccupy(me.x, axisY, radius)) me.y = axisY;
+        if (this.canPlayerMoveFromTo(me.x, me.y, me.x, axisY, radius)) me.y = axisY;
       }
 
       me.facing = this.input.state.facing;
@@ -203,11 +203,26 @@ export class GameApp {
     return resolved;
   }
 
-  private canPlayerOccupy(x: number, y: number, playerRadius: number): boolean {
+  private canPlayerMoveFromTo(
+    currentX: number,
+    currentY: number,
+    nextX: number,
+    nextY: number,
+    playerRadius: number,
+  ): boolean {
     for (const monster of this.latestMonsters) {
-      if (circlesOverlap(x, y, playerRadius, monster.x, monster.y, MONSTER_COLLISION_RADIUS)) {
-        return false;
-      }
+      const minDistance = playerRadius + MONSTER_COLLISION_RADIUS;
+      const minDistanceSq = minDistance * minDistance;
+      const currentDistanceSq = squaredDistance(currentX, currentY, monster.x, monster.y);
+      const nextDistanceSq = squaredDistance(nextX, nextY, monster.x, monster.y);
+
+      if (nextDistanceSq >= minDistanceSq) continue;
+
+      // 이미 충돌체 안에 들어간 상태에서는 완전히 빠져나오기 전이라도
+      // 몬스터와의 거리가 증가하는 이동은 허용해야 조작 불능이 생기지 않는다.
+      if (currentDistanceSq < minDistanceSq && nextDistanceSq > currentDistanceSq) continue;
+
+      return false;
     }
 
     return true;
@@ -383,20 +398,6 @@ function squaredDistance(ax: number, ay: number, bx: number, by: number): number
   const dx = ax - bx;
   const dy = ay - by;
   return dx * dx + dy * dy;
-}
-
-function circlesOverlap(
-  ax: number,
-  ay: number,
-  ar: number,
-  bx: number,
-  by: number,
-  br: number,
-): boolean {
-  const minDistance = ar + br;
-  const dx = ax - bx;
-  const dy = ay - by;
-  return dx * dx + dy * dy < minDistance * minDistance;
 }
 
 function clamp(value: number, min: number, max: number): number {
