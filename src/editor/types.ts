@@ -5,10 +5,10 @@ export type EditorTilesetAsset = {
   name: string;
   categoryId: string;
   url: string;
-  width?: number;
-  height?: number;
-  tileWidth: number;
-  tileHeight: number;
+  /** Optional explicit placement width. Uses texture width when omitted. */
+  tileWidth?: number;
+  /** Optional explicit placement height. Uses texture height when omitted. */
+  tileHeight?: number;
 };
 
 export type EditorTilesetCategory = {
