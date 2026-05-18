@@ -15,6 +15,7 @@ import { ResourceRenderer } from '../render/ResourceRenderer';
 import { MonsterRenderer } from '../render/MonsterRenderer';
 import { DebugHud } from '../render/DebugHud';
 import { MobileControls } from '../render/MobileControls';
+import { ProceduralMeadowRenderer } from '../render/ProceduralMeadowRenderer';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -31,6 +32,7 @@ export class GameApp {
   private readonly playerRenderer: PlayerRenderer;
   private readonly resourceRenderer: ResourceRenderer;
   private readonly monsterRenderer: MonsterRenderer;
+  private meadowRenderer: ProceduralMeadowRenderer | null = null;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
   private gameplayConfig: PublicGameplayConfig = DEFAULT_GAMEPLAY;
@@ -67,6 +69,7 @@ export class GameApp {
     this.mobileControls = new MobileControls(this.input);
     this.app.stage.addChild(this.world);
     this.drawWorldBackground();
+    await this.loadWorldMap();
 
     this.network.onStatus((status) => {
       this.status = status;
@@ -186,6 +189,7 @@ export class GameApp {
         this.gameplayConfig = message.gameplay ?? DEFAULT_GAMEPLAY;
         this.camera.setWorldSize(message.world.width, message.world.height);
         this.drawWorldBackground();
+        void this.loadWorldMap();
         return;
 
       case 'snapshot': {
@@ -203,6 +207,28 @@ export class GameApp {
 
       case 'pong':
         return;
+    }
+  }
+
+  private async loadWorldMap(): Promise<void> {
+    if (this.meadowRenderer) {
+      this.world.removeChild(this.meadowRenderer.layer);
+      this.meadowRenderer.layer.destroy({ children: true });
+    }
+
+    this.meadowRenderer = new ProceduralMeadowRenderer(this.world, {
+      worldWidth: this.worldInfo.width,
+      worldHeight: this.worldInfo.height,
+      seed: 20260518,
+    });
+
+    try {
+      await this.meadowRenderer.load();
+      this.world.setChildIndex(this.meadowRenderer.layer, 1);
+      this.background.visible = false;
+    } catch (error) {
+      console.warn('Failed to load procedural meadow map. Using fallback background.', error);
+      this.background.visible = true;
     }
   }
 
