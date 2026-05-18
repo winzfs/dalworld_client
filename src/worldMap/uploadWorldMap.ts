@@ -1,4 +1,5 @@
 import type { EditorWorldSave } from '../editor/types';
+import { getServerHttpPath } from '../net/serverHttp';
 
 export async function uploadWorldMap(world: EditorWorldSave): Promise<void> {
   const payload = {
@@ -13,7 +14,7 @@ export async function uploadWorldMap(world: EditorWorldSave): Promise<void> {
     })),
   };
 
-  const response = await fetch('/maps/default', {
+  const response = await fetch(getServerHttpPath('/maps/default'), {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -24,4 +25,6 @@ export async function uploadWorldMap(world: EditorWorldSave): Promise<void> {
   if (!response.ok) {
     throw new Error(`Failed to upload world map: ${response.status}`);
   }
+
+  console.info('[WorldMap] Uploaded world cells:', payload.cells.map((cell) => `${cell.gridX}:${cell.gridY}`));
 }
