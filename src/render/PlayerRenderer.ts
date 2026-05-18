@@ -6,7 +6,7 @@ import { loadSpriteStrip } from './spriteStrip';
 
 const REQUIRED_ANIMS: FemaleAdventurerAnim[] = ['idle', 'walk'];
 const PLAYER_SHADOW_SCALE = 2;
-const PLAYER_SHADOW_Y = 2;
+const PLAYER_SHADOW_Y = -10;
 const PLAYER_SHADOW_SOURCES = [
   '/assets/characters/female_adventurer/Shadow.png',
   '/assets/characters/female_adventurer/shadow.png',
