@@ -195,9 +195,16 @@ export class TilesetPanel {
     if (this.state.selectedAsset?.id === BLACK_SOLID_ASSET.id) {
       blackButton.classList.add('is-active');
     }
+
+    const transparentBlackButton = this.createActionButton('검정투명', () => this.state.toggleTransparentBlack());
+    transparentBlackButton.classList.add('map-editor-transparent-black');
+    if (this.state.transparentBlack) {
+      transparentBlackButton.classList.add('is-active');
+    }
+
     const worldMapButton = this.createActionButton('월드맵', this.actions.onToggleWorldMap);
 
-    this.toolContainer.append(paintButton, eraseButton, blackButton, worldMapButton);
+    this.toolContainer.append(paintButton, eraseButton, blackButton, transparentBlackButton, worldMapButton);
   }
 
   private renderFillControls(): void {
