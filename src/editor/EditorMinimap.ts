@@ -1,3 +1,5 @@
+import type { EditorTilePlacement } from './types';
+
 export type EditorMinimapView = {
   x: number;
   y: number;
@@ -22,6 +24,7 @@ export class EditorMinimap {
   private worldWidth: number;
   private worldHeight: number;
   private dragging = false;
+  private placements: EditorTilePlacement[] = [];
 
   constructor(private readonly options: EditorMinimapOptions) {
     this.worldWidth = options.worldWidth;
@@ -57,6 +60,10 @@ export class EditorMinimap {
     this.worldHeight = height;
   }
 
+  setPlacements(placements: EditorTilePlacement[]): void {
+    this.placements = placements.map((placement) => ({ ...placement }));
+  }
+
   render(view: EditorMinimapView): void {
     const ctx = this.ctx;
     const rect = this.worldToMinimapRect(view);
@@ -72,6 +79,8 @@ export class EditorMinimap {
     ctx.fillStyle = 'rgba(71, 184, 129, 0.22)';
     ctx.fillRect(6, 6, MINIMAP_SIZE - 12, MINIMAP_SIZE - 12);
 
+    this.renderPlacements(ctx);
+
     ctx.strokeStyle = '#ffd166';
     ctx.lineWidth = 2;
     ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
@@ -80,6 +89,20 @@ export class EditorMinimap {
     ctx.beginPath();
     ctx.arc(rect.centerX, rect.centerY, 3, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  private renderPlacements(ctx: CanvasRenderingContext2D): void {
+    const scaleX = MINIMAP_SIZE / this.worldWidth;
+    const scaleY = MINIMAP_SIZE / this.worldHeight;
+
+    for (const placement of this.placements) {
+      const x = clamp(placement.x * scaleX, 0, MINIMAP_SIZE - 1);
+      const y = clamp(placement.y * scaleY, 0, MINIMAP_SIZE - 1);
+      const size = Math.max(2, Math.min(6, (placement.sourceRect?.width ?? 32) * placement.scale * scaleX));
+
+      ctx.fillStyle = colorForLayer(placement.layer);
+      ctx.fillRect(x, y, size, size);
+    }
   }
 
   private attachPointerHandlers(): void {
@@ -136,6 +159,17 @@ export class EditorMinimap {
       centerX,
       centerY,
     };
+  }
+}
+
+function colorForLayer(layer: EditorTilePlacement['layer']): string {
+  switch (layer) {
+    case 'ground':
+      return 'rgba(123, 220, 142, 0.9)';
+    case 'object':
+      return 'rgba(255, 209, 102, 0.95)';
+    case 'collision':
+      return 'rgba(239, 71, 111, 0.95)';
   }
 }
 
