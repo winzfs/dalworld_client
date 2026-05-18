@@ -39,7 +39,10 @@ export class TilePlacementSystem {
   }
 
   get mapDraft(): EditorMapDraft {
-    return cloneDraft(this.draft);
+    return cloneDraft({
+      ...this.draft,
+      tileSize: this.state.gridSize,
+    });
   }
 
   async placeAt(worldX: number, worldY: number): Promise<void> {
@@ -73,8 +76,8 @@ export class TilePlacementSystem {
   }
 
   eraseAt(worldX: number, worldY: number): void {
-    const x = snap(worldX, this.draft.tileSize);
-    const y = snap(worldY, this.draft.tileSize);
+    const x = snap(worldX, this.state.gridSize);
+    const y = snap(worldY, this.state.gridSize);
     const placement = this.findPlacementAt(x, y, this.state.activeLayer);
 
     if (placement) {
@@ -127,8 +130,8 @@ export class TilePlacementSystem {
       assetId: asset.id,
       assetUrl: asset.url,
       categoryId: asset.categoryId,
-      x: snap(worldX, this.draft.tileSize),
-      y: snap(worldY, this.draft.tileSize),
+      x: snap(worldX, this.state.gridSize),
+      y: snap(worldY, this.state.gridSize),
       layer: this.state.activeLayer,
       scale: this.state.brushScale,
       sourceRect: brush.sourceRect ? { ...brush.sourceRect } : undefined,
@@ -140,9 +143,10 @@ export class TilePlacementSystem {
     shouldPlace: (x: number, y: number) => boolean,
   ): EditorTilePlacement[] {
     const placements: EditorTilePlacement[] = [];
+    const gridSize = this.state.gridSize;
 
-    for (let y = 0; y < options.height; y += this.draft.tileSize) {
-      for (let x = 0; x < options.width; x += this.draft.tileSize) {
+    for (let y = 0; y < options.height; y += gridSize) {
+      for (let x = 0; x < options.width; x += gridSize) {
         if (!shouldPlace(x, y)) continue;
         const placement = this.createPlacementAt(x, y);
         if (placement) placements.push(placement);
@@ -219,8 +223,8 @@ export class TilePlacementSystem {
     tile.y = placement.y;
     tile.zIndex = layerZIndex(placement.layer);
 
-    const width = (placement.sourceRect?.width ?? asset.tileWidth ?? this.draft.tileSize) * scale;
-    const height = (placement.sourceRect?.height ?? asset.tileHeight ?? this.draft.tileSize) * scale;
+    const width = (placement.sourceRect?.width ?? asset.tileWidth ?? this.state.gridSize) * scale;
+    const height = (placement.sourceRect?.height ?? asset.tileHeight ?? this.state.gridSize) * scale;
 
     tile
       .rect(0, 0, width, height)
