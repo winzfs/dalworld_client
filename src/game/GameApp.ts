@@ -1,6 +1,7 @@
 import { Application, Container, Graphics } from 'pixi.js';
 import { GameNetwork, getDefaultWebSocketUrl, type NetworkStatus } from '../net/network';
 import type {
+  MovementKeys,
   PlayerSnapshot,
   PublicGameplayConfig,
   ResourceSnapshot,
@@ -17,7 +18,7 @@ import { MobileControls } from '../render/MobileControls';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
-const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, gatherRange: 80 };
+const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, playerSpeed: 220, gatherRange: 80 };
 
 export class GameApp {
   private readonly app = new Application();
@@ -77,6 +78,7 @@ export class GameApp {
   }
 
   private update(dt: number): void {
+    this.applyLocalMovement(dt);
     this.sendInputIfDue(dt);
     this.handleGatherInput();
     this.playerRenderer.update(dt);
@@ -113,6 +115,26 @@ export class GameApp {
     });
   }
 
+  private applyLocalMovement(dt: number): void {
+    const me = this.findMe();
+    if (!me) return;
+
+    const direction = getMoveDirection(this.input.state.keys);
+    if (!direction) {
+      this.playerRenderer.sync(this.latestPlayers, this.myPlayerId);
+      return;
+    }
+
+    const radius = this.gameplayConfig.playerRadius;
+    const speed = this.gameplayConfig.playerSpeed;
+
+    me.x = clamp(me.x + direction.x * speed * dt, radius, this.worldInfo.width - radius);
+    me.y = clamp(me.y + direction.y * speed * dt, radius, this.worldInfo.height - radius);
+    me.facing = this.input.state.facing;
+
+    this.playerRenderer.sync(this.latestPlayers, this.myPlayerId);
+  }
+
   private sendInputIfDue(dt: number): void {
     this.inputAccumulator += dt;
 
@@ -122,11 +144,15 @@ export class GameApp {
 
     this.inputAccumulator = 0;
 
+    const me = this.findMe();
+
     this.network.send({
       type: 'input',
       seq: ++this.inputSeq,
       keys: { ...this.input.state.keys },
       facing: this.input.state.facing,
+      clientX: me?.x,
+      clientY: me?.y,
     });
   }
 
@@ -212,4 +238,23 @@ export class GameApp {
         .stroke({ color: 0x2c4a55, width: 1 });
     }
   }
+}
+
+function getMoveDirection(keys: MovementKeys): { x: number; y: number } | null {
+  let x = 0;
+  let y = 0;
+
+  if (keys.left) x -= 1;
+  if (keys.right) x += 1;
+  if (keys.up) y -= 1;
+  if (keys.down) y += 1;
+
+  if (x === 0 && y === 0) return null;
+
+  const length = Math.hypot(x, y) || 1;
+  return { x: x / length, y: y / length };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
