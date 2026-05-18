@@ -29,6 +29,7 @@ export class EditorState {
   brushScale = 1;
   gridSize = 32;
   gridVisible = true;
+  transparentBlack = false;
 
   subscribe(listener: EditorStateListener): () => void {
     this.listeners.add(listener);
@@ -107,6 +108,11 @@ export class EditorState {
 
   toggleGridVisible(): void {
     this.gridVisible = !this.gridVisible;
+    this.emit();
+  }
+
+  toggleTransparentBlack(): void {
+    this.transparentBlack = !this.transparentBlack;
     this.emit();
   }
 
