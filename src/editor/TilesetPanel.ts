@@ -189,6 +189,7 @@ export class TilesetPanel {
     this.toolContainer.innerHTML = '';
 
     const paintButton = this.createModeButton('배치', 'paint');
+    const pickerButton = this.createModeButton('피커', 'picker');
     const eraseButton = this.createModeButton('삭제', 'erase');
     const blackButton = this.createActionButton('Black', () => this.state.selectBlackBrush());
     blackButton.classList.add('map-editor-black-brush');
@@ -204,7 +205,7 @@ export class TilesetPanel {
 
     const worldMapButton = this.createActionButton('월드맵', this.actions.onToggleWorldMap);
 
-    this.toolContainer.append(paintButton, eraseButton, blackButton, transparentBlackButton, worldMapButton);
+    this.toolContainer.append(paintButton, pickerButton, eraseButton, blackButton, transparentBlackButton, worldMapButton);
   }
 
   private renderFillControls(): void {
