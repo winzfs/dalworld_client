@@ -1,11 +1,10 @@
 import type { NetworkStatus } from '../net/network';
-import type { PlayerSnapshot, ResourceSnapshot } from '../protocol/messages';
+import type { PlayerSnapshot } from '../protocol/messages';
 
 export type GameHudState = {
   status: NetworkStatus;
   tick: number;
   player: PlayerSnapshot | null;
-  nearbyGather: ResourceSnapshot | null;
   latencyMs: number;
 };
 
@@ -23,8 +22,6 @@ type HudRefs = {
   networkText: HTMLSpanElement;
   pingText: HTMLSpanElement;
   tickText: HTMLSpanElement;
-  prompt: HTMLDivElement;
-  promptText: HTMLSpanElement;
 };
 
 export class GameHud {
@@ -55,14 +52,6 @@ export class GameHud {
     this.refs.networkText.className = `ui-network-value status-${state.status}`;
     this.refs.pingText.textContent = state.latencyMs > 0 ? `${state.latencyMs}ms` : '—';
     this.refs.tickText.textContent = String(state.tick);
-
-    if (state.nearbyGather) {
-      this.refs.prompt.hidden = false;
-      this.refs.promptText.textContent = `E 키로 ${getResourceLabel(state.nearbyGather.type)} 채집`;
-    } else {
-      this.refs.prompt.hidden = true;
-      this.refs.promptText.textContent = '';
-    }
   }
 }
 
@@ -91,8 +80,6 @@ function createOrGetHud(): HudRefs {
     networkText: query(root, '[data-ui="network"]'),
     pingText: query(root, '[data-ui="ping"]'),
     tickText: query(root, '[data-ui="tick"]'),
-    prompt: query(root, '[data-ui="prompt"]'),
-    promptText: query(root, '[data-ui="prompt-text"]'),
   };
 }
 
@@ -115,18 +102,6 @@ function getHudMarkup(): string {
       <div class="ui-debug-row"><span>Tick</span><b data-ui="tick">0</b></div>
       <div class="ui-debug-row"><span>Pos</span><b data-ui="pos">—</b></div>
     </section>
-
-    <section class="ui-prompt" data-ui="prompt" hidden>
-      <kbd>E</kbd>
-      <span data-ui="prompt-text"></span>
-    </section>
-
-    <section class="ui-hotbar" aria-label="Hotbar">
-      <button class="ui-slot is-active" type="button">1</button>
-      <button class="ui-slot" type="button">2</button>
-      <button class="ui-slot" type="button">3</button>
-      <button class="ui-slot" type="button">4</button>
-    </section>
   `;
 }
 
@@ -148,13 +123,4 @@ function query<T extends Element>(root: ParentNode, selector: string): T {
 function setBar(fill: HTMLDivElement, value: number, max: number): void {
   const ratio = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
   fill.style.transform = `scaleX(${ratio})`;
-}
-
-function getResourceLabel(type: ResourceSnapshot['type']): string {
-  switch (type) {
-    case 'tree':
-      return '나무';
-    case 'stone':
-      return '돌';
-  }
 }
