@@ -1,4 +1,4 @@
-import type { ServerToClientMessage, WorldInfo, PublicGameplayConfig } from '../../protocol/messages';
+import type { ResourceSnapshot, ServerToClientMessage, WorldInfo, PublicGameplayConfig } from '../../protocol/messages';
 import { PROTOCOL_VERSION } from '../../protocol/version';
 import type { InputState } from '../InputController';
 import type { SnapshotSystem } from './SnapshotSystem';
@@ -6,6 +6,7 @@ import type { CameraSystem } from './CameraSystem';
 import type { PlayerRenderer } from '../../render/PlayerRenderer';
 import type { ResourceRenderer } from '../../render/ResourceRenderer';
 import type { MonsterRenderer } from '../../render/MonsterRenderer';
+import { getActiveCell } from '../../worldMap/activeCellStore';
 import { setRuntimeWorldMap } from '../../worldMap/runtimeMapStore';
 
 export type ServerMessageRouterContext = {
@@ -77,7 +78,7 @@ export class ServerMessageRouter {
     });
 
     this.context.playerRenderer.sync(snapshot.players, this.context.getMyPlayerId());
-    this.context.resourceRenderer.sync(snapshot.resources);
+    this.context.resourceRenderer.sync(filterActiveCellResources(snapshot.resources));
     this.context.monsterRenderer.sync(snapshot.monsters);
   }
 
@@ -85,4 +86,12 @@ export class ServerMessageRouter {
     // Gameplay events will be dispatched here as systems are added:
     // combat text, effects, loot notifications, chat, quest updates, etc.
   }
+}
+
+function filterActiveCellResources(resources: ResourceSnapshot[]): ResourceSnapshot[] {
+  const active = getActiveCell();
+  return resources.filter((resource) => (
+    resource.cellX === active.gridX &&
+    resource.cellY === active.gridY
+  ));
 }
