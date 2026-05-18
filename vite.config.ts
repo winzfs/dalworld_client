@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 
+// Local development proxies both realtime sockets and map HTTP APIs to the Worker.
 export default defineConfig({
   server: {
     port: 5173,
