@@ -20,7 +20,7 @@ export class EditorGridOverlay {
     this.width = options.width;
     this.height = options.height;
     this.layer.label = 'editor-grid-overlay-layer';
-    this.layer.zIndex = 9999;
+    this.layer.zIndex = 0;
     this.layer.addChild(this.graphics);
     this.state.subscribe(() => this.render());
     this.render();
@@ -49,8 +49,8 @@ export class EditorGridOverlay {
         .lineTo(x, this.height)
         .stroke({
           color: major ? 0xffd166 : 0xffffff,
-          alpha: major ? 0.26 : 0.11,
-          width: major ? 1.2 : 1,
+          alpha: major ? 0.22 : 0.08,
+          width: major ? 1 : 1,
         });
     }
 
@@ -61,8 +61,8 @@ export class EditorGridOverlay {
         .lineTo(this.width, y)
         .stroke({
           color: major ? 0xffd166 : 0xffffff,
-          alpha: major ? 0.26 : 0.11,
-          width: major ? 1.2 : 1,
+          alpha: major ? 0.22 : 0.08,
+          width: major ? 1 : 1,
         });
     }
   }
