@@ -108,6 +108,8 @@ export type ServerEvent =
 export type ServerToClientMessage =
   | {
       type: 'welcome';
+      /** New servers send this. Optional keeps older deployed Worker builds compatible. */
+      protocolVersion?: number;
       playerId: string;
       world: WorldInfo;
       /** New servers send this. Optional keeps older deployed Worker builds compatible. */
