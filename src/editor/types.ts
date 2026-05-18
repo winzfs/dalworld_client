@@ -17,6 +17,18 @@ export type EditorTilesetCategory = {
   assets: EditorTilesetAsset[];
 };
 
+export type EditorSourceRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type EditorBrush = {
+  asset: EditorTilesetAsset;
+  sourceRect?: EditorSourceRect;
+};
+
 export type EditorTilePlacement = {
   id: string;
   assetId: string;
@@ -27,6 +39,8 @@ export type EditorTilePlacement = {
   layer: EditorLayerId;
   /** Scale captured when this object was placed. Existing placements do not change when brush scale changes. */
   scale: number;
+  /** Optional source rectangle used when placing one tile cut from a larger tileset image. */
+  sourceRect?: EditorSourceRect;
 };
 
 export type EditorMapDraft = {
