@@ -45,6 +45,8 @@ export type EditorTilePlacement = {
   sourceRect?: EditorSourceRect;
   /** Optional solid fill color. When present, renderer does not load an external texture. */
   solidColor?: number;
+  /** If true, near-black pixels are rendered transparent for this placement. */
+  transparentBlack?: boolean;
 };
 
 export type EditorMapCoord = {
