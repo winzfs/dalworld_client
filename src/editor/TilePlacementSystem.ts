@@ -1,8 +1,9 @@
 import { Assets, Container, Graphics, Rectangle, SCALE_MODES, Sprite, Texture, type Texture as PixiTexture } from 'pixi.js';
-import type { EditorMapDraft, EditorSourceRect, EditorTilePlacement, EditorTilesetAsset } from './types';
+import type { EditorMapDraft, EditorPlacementGameplay, EditorSourceRect, EditorTilePlacement, EditorTilesetAsset } from './types';
 import { EditorState } from './EditorState';
 import { TILESET_CATEGORIES } from './tilesetManifest';
 import { createTransparentBlackTexture } from './createTransparentBlackTexture';
+import { inferSpriteGameplay } from './inferSpriteGameplay';
 
 export type TilePlacementSystemOptions = {
   tileSize: number;
@@ -113,6 +114,9 @@ export class TilePlacementSystem {
             categoryId: placement.categoryId,
             url: placement.assetUrl,
           };
+      if (!placement.gameplay) {
+        placement.gameplay = inferSpriteGameplay(asset);
+      }
       await this.createDisplay(placement, asset);
     }
   }
@@ -140,6 +144,7 @@ export class TilePlacementSystem {
 
     const asset = brush.asset;
     const isCollision = this.state.activeLayer === 'collision';
+    const gameplay = isCollision ? undefined : inferSpriteGameplay(asset);
     return {
       id: crypto.randomUUID(),
       assetId: isCollision ? 'editor-collision-cell' : asset.id,
@@ -154,6 +159,7 @@ export class TilePlacementSystem {
         : brush.sourceRect ? { ...brush.sourceRect } : undefined,
       solidColor: isCollision ? undefined : asset.solidColor,
       transparentBlack: !isCollision && asset.solidColor === undefined && this.state.transparentBlack,
+      gameplay,
     };
   }
 
@@ -410,6 +416,7 @@ function clonePlacement(placement: EditorTilePlacement): EditorTilePlacement {
   return {
     ...placement,
     sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
+    gameplay: placement.gameplay ? cloneGameplay(placement.gameplay) : undefined,
   };
 }
 
@@ -418,7 +425,12 @@ function normalizePlacements(placements: EditorTilePlacement[]): EditorTilePlace
     ...placement,
     scale: normalizePlacementScale(placement.scale),
     sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
+    gameplay: placement.gameplay ? cloneGameplay(placement.gameplay) : undefined,
   }));
+}
+
+function cloneGameplay(gameplay: EditorPlacementGameplay): EditorPlacementGameplay {
+  return { ...gameplay };
 }
 
 function snap(value: number, size: number): number {
