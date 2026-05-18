@@ -48,9 +48,9 @@ export class EditorGridOverlay {
         .moveTo(x, 0)
         .lineTo(x, this.height)
         .stroke({
-          color: major ? 0xffd166 : 0xffffff,
-          alpha: major ? 0.22 : 0.08,
-          width: major ? 1 : 1,
+          color: major ? 0xffd166 : 0xf7f0dd,
+          alpha: major ? 0.46 : 0.24,
+          width: major ? 1.5 : 1,
         });
     }
 
@@ -60,9 +60,9 @@ export class EditorGridOverlay {
         .moveTo(0, y)
         .lineTo(this.width, y)
         .stroke({
-          color: major ? 0xffd166 : 0xffffff,
-          alpha: major ? 0.22 : 0.08,
-          width: major ? 1 : 1,
+          color: major ? 0xffd166 : 0xf7f0dd,
+          alpha: major ? 0.46 : 0.24,
+          width: major ? 1.5 : 1,
         });
     }
   }
