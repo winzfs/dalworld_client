@@ -44,6 +44,19 @@ export class TilePlacementSystem {
     });
   }
 
+  pickAt(worldX: number, worldY: number): EditorTilePlacement | null {
+    const candidates = this.draft.placements
+      .filter((placement) => containsPoint(placement, worldX, worldY, this.state.gridSize))
+      .sort((a, b) => {
+        const zDiff = placementZIndex(b) - placementZIndex(a);
+        if (zDiff !== 0) return zDiff;
+        return this.draft.placements.indexOf(b) - this.draft.placements.indexOf(a);
+      });
+
+    const picked = candidates.find((placement) => placement.assetId !== 'editor-black-base') ?? candidates[0];
+    return picked ? clonePlacement(picked) : null;
+  }
+
   async placeAt(worldX: number, worldY: number): Promise<void> {
     if (this.state.mode === 'erase') {
       this.eraseAt(worldX, worldY);
@@ -389,10 +402,14 @@ function cloneDraft(draft: EditorMapDraft): EditorMapDraft {
       current: { ...draft.worldMap.current },
       cells: draft.worldMap.cells.map((cell) => ({ ...cell })),
     } : undefined,
-    placements: draft.placements.map((placement) => ({
-      ...placement,
-      sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
-    })),
+    placements: draft.placements.map((placement) => clonePlacement(placement)),
+  };
+}
+
+function clonePlacement(placement: EditorTilePlacement): EditorTilePlacement {
+  return {
+    ...placement,
+    sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
   };
 }
 
@@ -406,6 +423,23 @@ function normalizePlacements(placements: EditorTilePlacement[]): EditorTilePlace
 
 function snap(value: number, size: number): number {
   return Math.floor(value / size) * size;
+}
+
+function containsPoint(placement: EditorTilePlacement, worldX: number, worldY: number, fallbackSize: number): boolean {
+  const scale = normalizePlacementScale(placement.scale);
+  const width = (placement.sourceRect?.width ?? fallbackSize) * scale;
+  const height = (placement.sourceRect?.height ?? fallbackSize) * scale;
+
+  return (
+    worldX >= placement.x &&
+    worldY >= placement.y &&
+    worldX < placement.x + width &&
+    worldY < placement.y + height
+  );
+}
+
+function placementZIndex(placement: EditorTilePlacement): number {
+  return layerZIndex(placement.layer) + (placement.transparentBlack ? 0.5 : 0);
 }
 
 function normalizePlacementScale(scale: number | undefined): number {
