@@ -65,6 +65,7 @@ export type WorldInfo = {
 
 export type PublicGameplayConfig = {
   playerRadius: number;
+  playerSpeed: number;
   gatherRange: number;
 };
 
@@ -80,6 +81,8 @@ export type ClientToServerMessage =
       seq: number;
       keys: MovementKeys;
       facing?: Facing;
+      clientX?: number;
+      clientY?: number;
     }
   | {
       type: 'gather';
@@ -94,7 +97,7 @@ export type ServerEvent =
   | { type: 'player_left'; playerId: string }
   | { type: 'resource_hit'; resourceId: string; resourceType: ResourceType; hpRemaining: number }
   | { type: 'resource_destroyed'; resourceId: string; resourceType: ResourceType }
-  | { type: 'item_gained'; playerId: string; item: ItemType; amount: number };
+  | { type: 'item_gained'; playerId: string; item: ItemType; amount };
 
 export type ServerToClientMessage =
   | {
