@@ -18,6 +18,7 @@ import { ProceduralMeadowRenderer } from '../render/ProceduralMeadowRenderer';
 import { GameHud } from '../ui/GameHud';
 import { GameWindows } from '../ui/GameWindows';
 import { ClientMovementSystem } from './systems/ClientMovementSystem';
+import { InputSendSystem } from './systems/InputSendSystem';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -36,6 +37,7 @@ export class GameApp {
   private readonly resourceRenderer: ResourceRenderer;
   private readonly monsterRenderer: MonsterRenderer;
   private readonly movementSystem = new ClientMovementSystem();
+  private readonly inputSendSystem: InputSendSystem;
   private meadowRenderer: ProceduralMeadowRenderer | null = null;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
@@ -47,12 +49,11 @@ export class GameApp {
   private latestPlayers: PlayerSnapshot[] = [];
   private latestResources: ResourceSnapshot[] = [];
   private latestMonsters: MonsterSnapshot[] = [];
-  private inputSeq = 0;
-  private inputAccumulator = 0;
   private mobileControls: MobileControls | null = null;
 
   constructor() {
     this.network = new GameNetwork(getDefaultWebSocketUrl());
+    this.inputSendSystem = new InputSendSystem(this.network, INPUT_SEND_HZ);
     this.camera = new Camera(this.world);
     this.world.addChild(this.background);
     this.resourceRenderer = new ResourceRenderer(this.world);
@@ -89,7 +90,15 @@ export class GameApp {
 
   private update(dt: number): void {
     this.applyLocalMovement(dt);
-    this.sendInputIfDue(dt);
+
+    this.inputSendSystem.update(
+      {
+        input: this.input.state,
+        player: this.findMe(),
+      },
+      dt,
+    );
+
     this.handleGatherInput();
     this.playerRenderer.update(dt);
     this.monsterRenderer.update(dt);
@@ -138,27 +147,6 @@ export class GameApp {
     this.playerRenderer.sync(this.latestPlayers, this.myPlayerId);
   }
 
-  private sendInputIfDue(dt: number): void {
-    this.inputAccumulator += dt;
-
-    if (this.inputAccumulator < 1 / INPUT_SEND_HZ) {
-      return;
-    }
-
-    this.inputAccumulator = 0;
-
-    const me = this.findMe();
-
-    this.network.send({
-      type: 'input',
-      seq: ++this.inputSeq,
-      keys: { ...this.input.state.keys },
-      facing: this.input.state.facing,
-      clientX: me?.x,
-      clientY: me?.y,
-    });
-  }
-
   private handleGatherInput(): void {
     if (!this.input.consumeGather()) return;
 
@@ -172,11 +160,7 @@ export class GameApp {
       this.gameplayConfig.gatherRange,
     );
 
-    this.network.send({
-      type: 'gather',
-      seq: ++this.inputSeq,
-      resourceId: target?.id,
-    });
+    this.inputSendSystem.sendGather(target?.id);
   }
 
   private handleServerMessage(message: ServerToClientMessage): void {
