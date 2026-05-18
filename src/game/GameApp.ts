@@ -19,6 +19,7 @@ import { ClientMovementSystem } from './systems/ClientMovementSystem';
 import { InputSendSystem } from './systems/InputSendSystem';
 import { SnapshotSystem } from './systems/SnapshotSystem';
 import { CameraSystem } from './systems/CameraSystem';
+import { HudSystem } from './systems/HudSystem';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -30,9 +31,8 @@ export class GameApp {
   private readonly background = new Graphics();
   private readonly input = new InputController();
   private readonly network: GameNetwork;
-  private readonly hud = new GameHud();
-  private readonly windows = new GameWindows();
   private readonly cameraSystem: CameraSystem;
+  private readonly hudSystem: HudSystem;
   private readonly playerRenderer: PlayerRenderer;
   private readonly resourceRenderer: ResourceRenderer;
   private readonly monsterRenderer: MonsterRenderer;
@@ -51,11 +51,11 @@ export class GameApp {
     this.network = new GameNetwork(getDefaultWebSocketUrl());
     this.inputSendSystem = new InputSendSystem(this.network, INPUT_SEND_HZ);
     this.cameraSystem = new CameraSystem(new Camera(this.world));
+    this.hudSystem = new HudSystem(new GameHud(), new GameWindows());
     this.world.addChild(this.background);
     this.resourceRenderer = new ResourceRenderer(this.world);
     this.monsterRenderer = new MonsterRenderer(this.world);
     this.playerRenderer = new PlayerRenderer(this.world);
-    void this.windows;
   }
 
   async start(mount: HTMLElement): Promise<void> {
@@ -108,14 +108,12 @@ export class GameApp {
       screenHeight: this.app.renderer.height,
     });
 
-    this.hud.render({
+    this.hudSystem.update({
       status: this.status,
       tick: this.snapshotSystem.snapshot.tick,
       player: me,
       latencyMs: this.network.latencyMs,
     });
-
-    this.windows.renderInventory(me?.inventory ?? null);
   }
 
   private applyLocalMovement(dt: number): void {
