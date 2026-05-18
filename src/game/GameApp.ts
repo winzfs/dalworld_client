@@ -326,8 +326,20 @@ export class GameApp {
     }
 
     if (runtimeMap) {
-      await this.worldMapRenderer.render(createActiveCellMapView(runtimeMap));
-      this.background.visible = false;
+      this.worldInfo = {
+        ...this.worldInfo,
+        width: runtimeMap.cellSize,
+        height: runtimeMap.cellSize,
+      };
+      this.cameraSystem.setWorldSize(this.worldInfo);
+      this.drawWorldBackground();
+      this.background.visible = true;
+
+      try {
+        await this.worldMapRenderer.render(createActiveCellMapView(runtimeMap));
+      } catch (error) {
+        console.error('[GameApp] Failed to render active world cell.', error);
+      }
       return;
     }
 
