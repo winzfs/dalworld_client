@@ -6,7 +6,7 @@ import { MapStorage } from './MapStorage';
 import { TilePickerWindow } from './TilePickerWindow';
 import { WorldMapGrid } from './WorldMapGrid';
 import { WorldMapPanel } from './WorldMapPanel';
-import type { EditorTilesetAsset } from './types';
+import type { EditorMapDraft, EditorTilesetAsset } from './types';
 
 export type MapEditorOptions = {
   app: Application;
@@ -35,6 +35,7 @@ export class MapEditor {
   private readonly worldMapPanel: WorldMapPanel;
   private readonly storage: MapStorage;
   private readonly uiRoot: HTMLElement;
+  private readonly cellDrafts = new Map<string, EditorMapDraft>();
   private enabled = false;
   private worldWidth: number;
   private worldHeight: number;
@@ -58,8 +59,9 @@ export class MapEditor {
     this.worldMapGrid = new WorldMapGrid({ cellSize: this.worldWidth });
     this.placement = new TilePlacementSystem(this.state, {
       tileSize: options.tileSize ?? 32,
-      mapName,
+      mapName: this.getCellMapName(0, 0),
     });
+    this.cellDrafts.set(cellKey(0, 0), this.placement.mapDraft);
     this.picker = new TilePickerWindow({
       defaultGridSize: options.tileSize ?? 32,
       onPick: (asset, sourceRect) => {
@@ -68,7 +70,9 @@ export class MapEditor {
     });
     this.worldMapPanel = new WorldMapPanel({
       grid: this.worldMapGrid,
-      onSelectCell: (gridX, gridY) => this.selectWorldCell(gridX, gridY),
+      onSelectCell: (gridX, gridY) => {
+        void this.selectWorldCell(gridX, gridY);
+      },
     });
     this.panel = new TilesetPanel(this.state, {
       onSave: () => this.save(),
@@ -102,6 +106,7 @@ export class MapEditor {
   stop(): void {
     if (!this.enabled) return;
 
+    this.persistCurrentCellDraft();
     this.enabled = false;
     this.options.app.canvas.removeEventListener('pointerdown', this.pointerDownHandler);
     this.panel.element.remove();
@@ -118,11 +123,40 @@ export class MapEditor {
     this.worldHeight = height;
   }
 
-  private selectWorldCell(gridX: number, gridY: number): void {
-    // The current implementation keeps each 3000x3000 map as a logical editor cell.
-    // Per-cell placement persistence is connected in the next step.
+  private async selectWorldCell(gridX: number, gridY: number): Promise<void> {
+    this.persistCurrentCellDraft();
+
+    const key = cellKey(gridX, gridY);
+    const draft = this.cellDrafts.get(key) ?? this.createCellDraft(gridX, gridY);
+    this.cellDrafts.set(key, draft);
+
+    await this.placement.replaceDraft(draft);
     this.options.onMoveCameraTo?.(this.worldWidth / 2, this.worldHeight / 2);
     console.info(`[MapEditor] Selected world cell ${gridX},${gridY}`);
+  }
+
+  private persistCurrentCellDraft(): void {
+    const current = this.worldMapGrid.current;
+    this.cellDrafts.set(cellKey(current.gridX, current.gridY), {
+      ...this.placement.mapDraft,
+      name: this.getCellMapName(current.gridX, current.gridY),
+      worldMap: this.worldMapGrid.snapshot,
+    });
+  }
+
+  private createCellDraft(gridX: number, gridY: number): EditorMapDraft {
+    return {
+      version: 1,
+      name: this.getCellMapName(gridX, gridY),
+      tileSize: this.options.tileSize ?? 32,
+      worldMap: this.worldMapGrid.snapshot,
+      placements: [],
+    };
+  }
+
+  private getCellMapName(gridX: number, gridY: number): string {
+    const baseName = this.options.mapName ?? 'dalworld-map';
+    return `${baseName}-${gridX}-${gridY}`;
   }
 
   private pickAsset(asset: EditorTilesetAsset): void {
@@ -165,6 +199,7 @@ export class MapEditor {
   }
 
   private save(): void {
+    this.persistCurrentCellDraft();
     this.storage.save({
       ...this.placement.mapDraft,
       worldMap: this.worldMapGrid.snapshot,
@@ -180,11 +215,14 @@ export class MapEditor {
     }
 
     this.worldMapGrid.load(draft.worldMap);
+    this.cellDrafts.clear();
+    this.cellDrafts.set(cellKey(this.worldMapGrid.current.gridX, this.worldMapGrid.current.gridY), draft);
     await this.placement.loadDraft(draft);
     console.info('[MapEditor] Loaded map draft.', draft);
   }
 
   private exportJson(): void {
+    this.persistCurrentCellDraft();
     this.storage.downloadJson({
       ...this.placement.mapDraft,
       worldMap: this.worldMapGrid.snapshot,
@@ -195,6 +233,7 @@ export class MapEditor {
     const ok = window.confirm('현재 배치된 타일을 전부 삭제할까요? 저장 버튼을 누르기 전까지 저장본은 유지됩니다.');
     if (!ok) return;
     this.placement.clear();
+    this.persistCurrentCellDraft();
   }
 
   private screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
@@ -225,4 +264,8 @@ function loadImageSize(url: string): Promise<{ width: number; height: number } |
     image.onerror = () => resolve(null);
     image.src = url;
   });
+}
+
+function cellKey(gridX: number, gridY: number): string {
+  return `${gridX}:${gridY}`;
 }
