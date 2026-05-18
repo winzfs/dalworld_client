@@ -269,9 +269,11 @@ export class GameApp {
     }
 
     if (me.y >= map.cellSize - CELL_TRANSFER_TRIGGER_PADDING) {
+      // Moving down into the cell below: enter from the new cell's top edge.
       nextGridY += 1;
       nextY = CELL_EDGE_PADDING;
     } else if (me.y <= CELL_TRANSFER_TRIGGER_PADDING) {
+      // Moving up into the cell above: enter from the new cell's bottom edge.
       nextGridY -= 1;
       nextY = map.cellSize - CELL_EDGE_PADDING;
     }
