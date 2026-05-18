@@ -6,6 +6,7 @@ type EditorStateListener = () => void;
 const MIN_BRUSH_SCALE = 0.1;
 const MAX_BRUSH_SCALE = 10;
 const BRUSH_SCALE_STEP = 0.1;
+const GRID_SIZE_OPTIONS = [16, 32, 64] as const;
 
 const defaultAsset = TILESET_CATEGORIES[0]?.assets[0] ?? null;
 
@@ -18,6 +19,8 @@ export class EditorState {
   activeLayer: EditorLayerId = 'ground';
   mode: EditorToolMode = 'paint';
   brushScale = 1;
+  gridSize = 32;
+  gridVisible = true;
 
   subscribe(listener: EditorStateListener): () => void {
     this.listeners.add(listener);
@@ -82,6 +85,18 @@ export class EditorState {
     this.adjustBrushScale(BRUSH_SCALE_STEP);
   }
 
+  setGridSize(size: number): void {
+    const next = normalizeGridSize(size);
+    if (this.gridSize === next) return;
+    this.gridSize = next;
+    this.emit();
+  }
+
+  toggleGridVisible(): void {
+    this.gridVisible = !this.gridVisible;
+    this.emit();
+  }
+
   private emit(): void {
     for (const listener of this.listeners) {
       listener();
@@ -93,4 +108,10 @@ function normalizeBrushScale(value: number): number {
   if (!Number.isFinite(value)) return 1;
   const clamped = Math.min(MAX_BRUSH_SCALE, Math.max(MIN_BRUSH_SCALE, value));
   return Math.round(clamped * 10) / 10;
+}
+
+function normalizeGridSize(value: number): number {
+  if (!Number.isFinite(value)) return 32;
+  const rounded = Math.round(value);
+  return GRID_SIZE_OPTIONS.includes(rounded as (typeof GRID_SIZE_OPTIONS)[number]) ? rounded : 32;
 }
