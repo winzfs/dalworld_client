@@ -12,6 +12,7 @@ import { ResourceRenderer } from '../render/ResourceRenderer';
 import { MonsterRenderer } from '../render/MonsterRenderer';
 import { MobileControls } from '../render/MobileControls';
 import { ProceduralMeadowRenderer } from '../render/ProceduralMeadowRenderer';
+import { GameWorldMapRenderer } from '../render/GameWorldMapRenderer';
 import { GameHud } from '../ui/GameHud';
 import { GameWindows } from '../ui/GameWindows';
 import { ClientMovementSystem } from './systems/ClientMovementSystem';
@@ -23,6 +24,7 @@ import { ServerMessageRouter } from './systems/ServerMessageRouter';
 import { MapEditor } from '../editor/MapEditor';
 import { EditorCameraSystem } from '../editor/EditorCameraSystem';
 import { EditorMinimap } from '../editor/EditorMinimap';
+import { getRuntimeWorldMap } from '../worldMap/runtimeMapStore';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -42,6 +44,7 @@ export class GameApp {
   private readonly playerRenderer: PlayerRenderer;
   private readonly resourceRenderer: ResourceRenderer;
   private readonly monsterRenderer: MonsterRenderer;
+  private readonly worldMapRenderer: GameWorldMapRenderer;
   private readonly movementSystem = new ClientMovementSystem();
   private readonly inputSendSystem: InputSendSystem;
   private readonly snapshotSystem = new SnapshotSystem();
@@ -68,6 +71,7 @@ export class GameApp {
     this.hudSystem = new HudSystem(new GameHud(), new GameWindows());
 
     this.world.addChild(this.background);
+    this.worldMapRenderer = new GameWorldMapRenderer(this.world);
     this.resourceRenderer = new ResourceRenderer(this.world);
     this.monsterRenderer = new MonsterRenderer(this.world);
     this.playerRenderer = new PlayerRenderer(this.world);
@@ -255,10 +259,21 @@ export class GameApp {
   }
 
   private async loadWorldMap(): Promise<void> {
+    const runtimeMap = getRuntimeWorldMap();
+
     if (this.meadowRenderer) {
       this.world.removeChild(this.meadowRenderer.layer);
       this.meadowRenderer.layer.destroy({ children: true });
+      this.meadowRenderer = null;
     }
+
+    if (runtimeMap) {
+      await this.worldMapRenderer.render(runtimeMap);
+      this.background.visible = false;
+      return;
+    }
+
+    await this.worldMapRenderer.render(null);
 
     this.meadowRenderer = new ProceduralMeadowRenderer(this.world, {
       worldWidth: this.worldInfo.width,
