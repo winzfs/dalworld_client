@@ -122,7 +122,8 @@ body.is-map-editor-mode #dalworld-mobile .gather-btn {
 .map-editor-tool.is-active,
 .map-editor-category.is-active,
 .map-editor-grid-button.is-active,
-.map-editor-layer.is-active {
+.map-editor-layer.is-active,
+.map-editor-action.is-active {
   border-color: rgba(255, 209, 102, 0.95);
   background: rgba(255, 209, 102, 0.28);
   color: #fff1bf;
@@ -163,80 +164,3 @@ body.is-map-editor-mode #dalworld-mobile .gather-btn {
 .map-editor-asset.is-selected { border-color: #ffd166; box-shadow: 0 0 0 2px rgba(255,209,102,.18) inset; color: #ffe4a3; }
 .map-editor-asset img { width: 42px; height: 42px; object-fit: contain; image-rendering: pixelated; }
 .map-editor-asset span { width: 100%; overflow: hidden; font-size: 11px; font-weight: 800; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-
-.tile-picker-window {
-  left: 360px;
-  top: 20px;
-  width: min(720px, calc(100vw - 380px));
-  max-height: min(760px, calc(100vh - 40px));
-  overflow: hidden;
-}
-.tile-picker-window[hidden],
-.world-map-panel[hidden] { display: none !important; }
-.tile-picker-close,
-.world-map-close { width: 28px; height: 28px; font-size: 18px; }
-.tile-picker-controls { display: flex; align-items: center; gap: 8px; padding: 10px; border-bottom: 1px solid rgba(255,255,255,.1); }
-.tile-picker-controls label { font-size: 12px; font-weight: 800; color: rgba(255,255,255,.78); }
-.tile-picker-confirm { min-height: 30px; padding: 6px 10px; }
-.tile-picker-confirm:disabled { opacity: .45; cursor: not-allowed; }
-.tile-picker-body { max-height: min(640px, calc(100vh - 150px)); overflow: auto; padding: 12px; }
-.tile-picker-image-wrap { position: relative; display: inline-block; overflow: hidden; background-color: rgba(255,255,255,.04); background-image: linear-gradient(to right, rgba(255,255,255,.16) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,.16) 1px, transparent 1px); background-size: var(--tile-picker-grid, 32px) var(--tile-picker-grid, 32px); image-rendering: pixelated; touch-action: none; }
-.tile-picker-image { display: block; max-width: 100%; image-rendering: pixelated; }
-.tile-picker-selection { position: absolute; border: 2px solid #ffd166; background: rgba(255,209,102,.2); box-sizing: border-box; pointer-events: none; }
-
-.world-map-panel {
-  width: 280px;
-  overflow: hidden;
-  z-index: 230;
-}
-.world-map-controls { padding: 10px; border-bottom: 1px solid rgba(255,255,255,.1); }
-.world-map-info { margin-bottom: 8px; color: rgba(255,255,255,.82); font-size: 12px; font-weight: 800; }
-.world-map-create-row { display: flex; gap: 6px; }
-.world-map-action { width: 38px; height: 32px; }
-.world-map-grid { display: grid; gap: 6px; padding: 10px; justify-content: center; }
-.world-map-cell { width: 44px; height: 44px; border-radius: 12px; color: rgba(255,255,255,.55); background: rgba(255,255,255,.035); touch-action: manipulation; }
-.world-map-cell.exists { color: #dff8e8; background: rgba(71,184,129,.18); border-color: rgba(71,184,129,.55); }
-.world-map-cell.is-current { color: #1b1f23; background: #ffd166; border-color: #ffe4a3; box-shadow: 0 0 0 2px rgba(255,209,102,.28); }
-
-.editor-minimap {
-  right: 16px;
-  top: 16px;
-  z-index: 210;
-  padding: 10px;
-}
-.editor-minimap-title {
-  margin-bottom: 6px;
-  color: #ffe4a3;
-  font-size: 12px;
-  font-weight: 900;
-}
-.editor-minimap-canvas {
-  display: block;
-  width: 180px;
-  height: 180px;
-  border-radius: 12px;
-  cursor: pointer;
-  touch-action: none;
-}
-
-#dalworld-mobile { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
-#dalworld-mobile.desktop-hidden .joystick,
-#dalworld-mobile.desktop-hidden .gather-btn { display: none; }
-body.is-map-editor-mode #dalworld-mobile.desktop-hidden .joystick { display: block; }
-#dalworld-mobile .joystick { position: absolute; left: 32px; bottom: 32px; width: 160px; height: 160px; border-radius: 50%; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.18); pointer-events: auto; touch-action: none; }
-#dalworld-mobile .joystick-knob { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; border-radius: 50%; background: rgba(85,214,190,.85); transform: translate(-50%, -50%); pointer-events: none; }
-#dalworld-mobile .action-btn { position: absolute; pointer-events: auto; border: none; border-radius: 50%; font: 600 18px/1 ui-sans-serif, system-ui; color: #102027; cursor: pointer; touch-action: manipulation; }
-#dalworld-mobile .gather-btn { right: 36px; bottom: 56px; width: 88px; height: 88px; background: #ffd166; box-shadow: 0 4px 12px rgba(0,0,0,.4); }
-#dalworld-mobile .fullscreen-btn { right: 16px; top: 16px; width: 44px; height: 44px; background: rgba(255,255,255,.85); font-size: 20px; }
-
-@media (max-width: 720px) {
-  .ui-debug-panel { display: none; }
-  .inventory-body { grid-template-columns: 1fr; }
-  .inventory-detail { min-height: 120px; }
-  .inventory-grid { grid-template-columns: repeat(5, 1fr); }
-  .map-editor-panel { width: min(320px, calc(100vw - 24px)); }
-  .tile-picker-window { left: 12px; top: 90px; width: calc(100vw - 24px); }
-  .world-map-panel { left: 12px !important; right: auto !important; top: 96px !important; width: min(280px, calc(100vw - 24px)); }
-  .editor-minimap { right: 12px; top: auto; bottom: 212px; padding: 8px; }
-  .editor-minimap-canvas { width: 132px; height: 132px; }
-}
