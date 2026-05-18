@@ -43,14 +43,35 @@ export class MapEditor {
   private worldWidth: number;
   private worldHeight: number;
   private transitioning = false;
+  private paintingPointerId: number | null = null;
+  private lastPaintKey: string | null = null;
 
   private readonly pointerDownHandler = (event: PointerEvent) => {
+    if (!this.canPaintFromEvent(event)) return;
+
+    this.paintingPointerId = event.pointerId;
+    this.lastPaintKey = null;
+    this.options.app.canvas.setPointerCapture(event.pointerId);
+    this.paintFromPointerEvent(event);
+  };
+
+  private readonly pointerMoveHandler = (event: PointerEvent) => {
     if (!this.enabled) return;
-    if (event.button !== 0) return;
+    if (this.paintingPointerId !== event.pointerId) return;
     if (isEditorUiTarget(event.target)) return;
 
-    const worldPoint = this.screenToWorld(event.clientX, event.clientY);
-    void this.placement.placeAt(worldPoint.x, worldPoint.y);
+    this.paintFromPointerEvent(event);
+  };
+
+  private readonly pointerUpHandler = (event: PointerEvent) => {
+    if (this.paintingPointerId !== event.pointerId) return;
+
+    this.paintingPointerId = null;
+    this.lastPaintKey = null;
+
+    if (this.options.app.canvas.hasPointerCapture(event.pointerId)) {
+      this.options.app.canvas.releasePointerCapture(event.pointerId);
+    }
   };
 
   constructor(private readonly options: MapEditorOptions) {
@@ -113,6 +134,9 @@ export class MapEditor {
     this.picker.mount(this.uiRoot);
     this.worldMapPanel.mount(this.uiRoot);
     this.options.app.canvas.addEventListener('pointerdown', this.pointerDownHandler);
+    this.options.app.canvas.addEventListener('pointermove', this.pointerMoveHandler);
+    this.options.app.canvas.addEventListener('pointerup', this.pointerUpHandler);
+    this.options.app.canvas.addEventListener('pointercancel', this.pointerUpHandler);
   }
 
   stop(): void {
@@ -120,7 +144,12 @@ export class MapEditor {
 
     this.persistCurrentCellDraft();
     this.enabled = false;
+    this.paintingPointerId = null;
+    this.lastPaintKey = null;
     this.options.app.canvas.removeEventListener('pointerdown', this.pointerDownHandler);
+    this.options.app.canvas.removeEventListener('pointermove', this.pointerMoveHandler);
+    this.options.app.canvas.removeEventListener('pointerup', this.pointerUpHandler);
+    this.options.app.canvas.removeEventListener('pointercancel', this.pointerUpHandler);
     this.panel.element.remove();
     this.picker.element.remove();
     this.worldMapPanel.element.remove();
@@ -151,6 +180,28 @@ export class MapEditor {
     });
 
     this.transitioning = false;
+  }
+
+  private canPaintFromEvent(event: PointerEvent): boolean {
+    return (
+      this.enabled &&
+      event.button === 0 &&
+      this.paintingPointerId === null &&
+      !isEditorUiTarget(event.target)
+    );
+  }
+
+  private paintFromPointerEvent(event: PointerEvent): void {
+    const worldPoint = this.screenToWorld(event.clientX, event.clientY);
+    const tileSize = this.placement.mapDraft.tileSize;
+    const x = Math.floor(worldPoint.x / tileSize) * tileSize;
+    const y = Math.floor(worldPoint.y / tileSize) * tileSize;
+    const paintKey = `${this.state.activeLayer}:${x}:${y}`;
+
+    if (paintKey === this.lastPaintKey) return;
+
+    this.lastPaintKey = paintKey;
+    void this.placement.placeAt(worldPoint.x, worldPoint.y);
   }
 
   private async selectWorldCell(
@@ -306,7 +357,8 @@ function isEditorUiTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (
     target.closest('.map-editor-panel') !== null ||
     target.closest('.tile-picker-window') !== null ||
-    target.closest('.world-map-panel') !== null
+    target.closest('.world-map-panel') !== null ||
+    target.closest('.editor-minimap') !== null
   );
 }
 
