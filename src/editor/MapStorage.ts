@@ -6,8 +6,8 @@ const WORLD_STORAGE_PREFIX = 'dalworld:editor-world:';
 export class MapStorage {
   constructor(private readonly mapName: string) {}
 
-  save(draft: EditorMapDraft): void {
-    window.localStorage.setItem(this.key, JSON.stringify(draft));
+  save(draft: EditorMapDraft): boolean {
+    return this.writeJson(this.key, draft);
   }
 
   load(): EditorMapDraft | null {
@@ -18,13 +18,14 @@ export class MapStorage {
       const parsed = JSON.parse(raw) as EditorMapDraft;
       if (!isValidDraft(parsed)) return null;
       return parsed;
-    } catch {
+    } catch (error) {
+      console.warn('[MapStorage] Failed to parse map draft.', error);
       return null;
     }
   }
 
-  saveWorld(world: EditorWorldSave): void {
-    window.localStorage.setItem(this.worldKey, JSON.stringify(world));
+  saveWorld(world: EditorWorldSave): boolean {
+    return this.writeJson(this.worldKey, world);
   }
 
   loadWorld(): EditorWorldSave | null {
@@ -35,7 +36,8 @@ export class MapStorage {
       const parsed = JSON.parse(raw) as EditorWorldSave;
       if (!isValidWorldSave(parsed)) return this.migrateSingleDraftToWorld();
       return parsed;
-    } catch {
+    } catch (error) {
+      console.warn('[MapStorage] Failed to parse world save.', error);
       return this.migrateSingleDraftToWorld();
     }
   }
@@ -69,6 +71,16 @@ export class MapStorage {
       },
       cells: [{ gridX: 0, gridY: 0, draft }],
     };
+  }
+
+  private writeJson(key: string, value: unknown): boolean {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (error) {
+      console.error('[MapStorage] Failed to save editor map data.', error);
+      return false;
+    }
   }
 
   private download(filename: string, value: unknown): void {
