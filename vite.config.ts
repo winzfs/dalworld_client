@@ -9,6 +9,10 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      '/maps': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+      },
     },
   },
   build: {
