@@ -68,4 +68,16 @@ export type EditorMapDraft = {
   placements: EditorTilePlacement[];
 };
 
+export type EditorWorldCellDraft = EditorMapCoord & {
+  draft: EditorMapDraft;
+};
+
+export type EditorWorldSave = {
+  version: 1;
+  name: string;
+  tileSize: number;
+  worldMap: EditorWorldMapDraft;
+  cells: EditorWorldCellDraft[];
+};
+
 export type EditorToolMode = 'paint' | 'erase';
