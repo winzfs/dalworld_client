@@ -6,6 +6,7 @@ import type {
   PublicGameplayConfig,
   WorldInfo,
 } from '../../protocol/messages';
+import { getCollisionPlacements } from '../../worldMap/runtimeMapStore';
 
 export type ClientMovementContext = {
   player: PlayerSnapshot | null;
@@ -131,6 +132,20 @@ function canPlayerMoveFromTo(
   playerRadius: number,
   monsters: MonsterSnapshot[],
 ): boolean {
+  for (const placement of getCollisionPlacements()) {
+    const width = placement.sourceRect?.width ?? 32;
+    const height = placement.sourceRect?.height ?? 32;
+
+    if (
+      nextX + playerRadius > placement.x &&
+      nextX - playerRadius < placement.x + width &&
+      nextY + playerRadius > placement.y &&
+      nextY - playerRadius < placement.y + height
+    ) {
+      return false;
+    }
+  }
+
   for (const monster of monsters) {
     const circle = getMonsterCollisionCircle(monster);
     const minDistance = playerRadius + circle.radius;
@@ -140,8 +155,6 @@ function canPlayerMoveFromTo(
 
     if (nextDistanceSq >= minDistanceSq) continue;
 
-    // 이미 충돌체 안에 들어간 상태에서는 완전히 빠져나오기 전이라도
-    // 몬스터와의 거리가 증가하는 이동은 허용해야 조작 불능이 생기지 않는다.
     if (currentDistanceSq < minDistanceSq && nextDistanceSq > currentDistanceSq) continue;
 
     return false;
