@@ -126,18 +126,21 @@ export class TilePlacementSystem {
     if (!brush) return null;
 
     const asset = brush.asset;
+    const isCollision = this.state.activeLayer === 'collision';
     return {
       id: crypto.randomUUID(),
-      assetId: asset.id,
-      assetUrl: asset.url,
-      categoryId: asset.categoryId,
+      assetId: isCollision ? 'editor-collision-cell' : asset.id,
+      assetUrl: isCollision ? 'editor://collision-cell' : asset.url,
+      categoryId: isCollision ? 'editor' : asset.categoryId,
       x: snap(worldX, this.state.gridSize),
       y: snap(worldY, this.state.gridSize),
       layer: this.state.activeLayer,
-      scale: this.state.brushScale,
-      sourceRect: brush.sourceRect ? { ...brush.sourceRect } : undefined,
-      solidColor: asset.solidColor,
-      transparentBlack: asset.solidColor === undefined && this.state.transparentBlack,
+      scale: isCollision ? 1 : this.state.brushScale,
+      sourceRect: isCollision
+        ? { x: 0, y: 0, width: this.state.gridSize, height: this.state.gridSize }
+        : brush.sourceRect ? { ...brush.sourceRect } : undefined,
+      solidColor: isCollision ? undefined : asset.solidColor,
+      transparentBlack: !isCollision && asset.solidColor === undefined && this.state.transparentBlack,
     };
   }
 
@@ -184,7 +187,7 @@ export class TilePlacementSystem {
   private async createDisplay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Promise<void> {
     try {
       const display = placement.layer === 'collision'
-        ? this.createCollisionOverlay(placement, asset)
+        ? this.createCollisionOverlay(placement)
         : await this.createVisualDisplay(placement, asset);
 
       this.displays.set(placement.id, display);
@@ -225,11 +228,10 @@ export class TilePlacementSystem {
     return tile;
   }
 
-  private createCollisionOverlay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Graphics {
+  private createCollisionOverlay(placement: EditorTilePlacement): Graphics {
     const overlay = new Graphics();
-    const scale = normalizePlacementScale(placement.scale);
-    const width = (placement.sourceRect?.width ?? asset.tileWidth ?? this.state.gridSize) * scale;
-    const height = (placement.sourceRect?.height ?? asset.tileHeight ?? this.state.gridSize) * scale;
+    const width = placement.sourceRect?.width ?? this.state.gridSize;
+    const height = placement.sourceRect?.height ?? this.state.gridSize;
 
     overlay.label = `editor-collision:${placement.id}`;
     overlay.x = placement.x;
