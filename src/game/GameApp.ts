@@ -373,7 +373,7 @@ export class GameApp {
     for (let y = 0; y <= this.worldInfo.height; y += step) {
       this.background
         .moveTo(0, y)
-        .lineTo(this.worldInfo.width)
+        .lineTo(this.worldInfo.width, y)
         .stroke({ color: 0x2c4a55, width: 1 });
     }
   }
