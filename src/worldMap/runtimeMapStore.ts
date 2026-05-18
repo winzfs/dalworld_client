@@ -16,10 +16,17 @@ export function getCollisionPlacements(): WorldMapPlacement[] {
   const out: WorldMapPlacement[] = [];
 
   for (const cell of currentMap.cells) {
+    const offsetX = cell.gridX * currentMap.cellSize;
+    const offsetY = cell.gridY * currentMap.cellSize;
+
     for (const placement of cell.placements) {
-      if (placement.layer === 'collision') {
-        out.push(placement);
-      }
+      if (placement.layer !== 'collision') continue;
+
+      out.push({
+        ...placement,
+        x: placement.x + offsetX,
+        y: placement.y + offsetY,
+      });
     }
   }
 
