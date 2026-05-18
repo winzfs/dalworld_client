@@ -9,6 +9,8 @@ export type EditorTilesetAsset = {
   tileWidth?: number;
   /** Optional explicit placement height. Uses texture height when omitted. */
   tileHeight?: number;
+  /** Optional solid fill color used for editor-generated paint tiles. */
+  solidColor?: number;
 };
 
 export type EditorTilesetCategory = {
@@ -41,6 +43,8 @@ export type EditorTilePlacement = {
   scale: number;
   /** Optional source rectangle used when placing one tile cut from a larger tileset image. */
   sourceRect?: EditorSourceRect;
+  /** Optional solid fill color. When present, renderer does not load an external texture. */
+  solidColor?: number;
 };
 
 export type EditorMapCoord = {
