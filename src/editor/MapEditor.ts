@@ -4,6 +4,8 @@ import { TilesetPanel } from './TilesetPanel';
 import { TilePlacementSystem } from './TilePlacementSystem';
 import { MapStorage } from './MapStorage';
 import { TilePickerWindow } from './TilePickerWindow';
+import { WorldMapGrid } from './WorldMapGrid';
+import { WorldMapPanel } from './WorldMapPanel';
 import type { EditorTilesetAsset } from './types';
 
 export type MapEditorOptions = {
@@ -14,6 +16,7 @@ export type MapEditorOptions = {
   mapName?: string;
   worldWidth?: number;
   worldHeight?: number;
+  onMoveCameraTo?: (x: number, y: number) => void;
 };
 
 const DIRECT_SELECT_MAX_SIZE = 96;
@@ -28,6 +31,8 @@ export class MapEditor {
 
   private readonly panel: TilesetPanel;
   private readonly picker: TilePickerWindow;
+  private readonly worldMapGrid: WorldMapGrid;
+  private readonly worldMapPanel: WorldMapPanel;
   private readonly storage: MapStorage;
   private readonly uiRoot: HTMLElement;
   private enabled = false;
@@ -50,6 +55,7 @@ export class MapEditor {
     this.worldHeight = options.worldHeight ?? 3000;
     this.uiRoot = options.uiRoot ?? document.body;
     this.storage = new MapStorage(mapName);
+    this.worldMapGrid = new WorldMapGrid({ cellSize: this.worldWidth });
     this.placement = new TilePlacementSystem(this.state, {
       tileSize: options.tileSize ?? 32,
       mapName,
@@ -59,6 +65,10 @@ export class MapEditor {
       onPick: (asset, sourceRect) => {
         this.state.setSourceRect(asset, sourceRect);
       },
+    });
+    this.worldMapPanel = new WorldMapPanel({
+      grid: this.worldMapGrid,
+      onSelectCell: (gridX, gridY) => this.selectWorldCell(gridX, gridY),
     });
     this.panel = new TilesetPanel(this.state, {
       onSave: () => this.save(),
@@ -74,6 +84,7 @@ export class MapEditor {
       onRandomFill: (chancePercent) => {
         void this.fillRandom(chancePercent);
       },
+      onToggleWorldMap: () => this.worldMapPanel.toggle(),
     });
   }
 
@@ -84,6 +95,7 @@ export class MapEditor {
     this.options.world.addChild(this.placement.layer);
     this.panel.mount(this.uiRoot);
     this.picker.mount(this.uiRoot);
+    this.worldMapPanel.mount(this.uiRoot);
     this.options.app.canvas.addEventListener('pointerdown', this.pointerDownHandler);
   }
 
@@ -94,6 +106,7 @@ export class MapEditor {
     this.options.app.canvas.removeEventListener('pointerdown', this.pointerDownHandler);
     this.panel.element.remove();
     this.picker.element.remove();
+    this.worldMapPanel.element.remove();
 
     if (this.placement.layer.parent) {
       this.placement.layer.parent.removeChild(this.placement.layer);
@@ -103,6 +116,13 @@ export class MapEditor {
   setWorldSize(width: number, height: number): void {
     this.worldWidth = width;
     this.worldHeight = height;
+  }
+
+  private selectWorldCell(gridX: number, gridY: number): void {
+    // The current implementation keeps each 3000x3000 map as a logical editor cell.
+    // Per-cell placement persistence is connected in the next step.
+    this.options.onMoveCameraTo?.(this.worldWidth / 2, this.worldHeight / 2);
+    console.info(`[MapEditor] Selected world cell ${gridX},${gridY}`);
   }
 
   private pickAsset(asset: EditorTilesetAsset): void {
@@ -145,7 +165,10 @@ export class MapEditor {
   }
 
   private save(): void {
-    this.storage.save(this.placement.mapDraft);
+    this.storage.save({
+      ...this.placement.mapDraft,
+      worldMap: this.worldMapGrid.snapshot,
+    });
     console.info('[MapEditor] Saved map draft.', this.placement.mapDraft);
   }
 
@@ -156,12 +179,16 @@ export class MapEditor {
       return;
     }
 
+    this.worldMapGrid.load(draft.worldMap);
     await this.placement.loadDraft(draft);
     console.info('[MapEditor] Loaded map draft.', draft);
   }
 
   private exportJson(): void {
-    this.storage.downloadJson(this.placement.mapDraft);
+    this.storage.downloadJson({
+      ...this.placement.mapDraft,
+      worldMap: this.worldMapGrid.snapshot,
+    });
   }
 
   private clearAll(): void {
@@ -186,7 +213,8 @@ export class MapEditor {
 function isEditorUiTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (
     target.closest('.map-editor-panel') !== null ||
-    target.closest('.tile-picker-window') !== null
+    target.closest('.tile-picker-window') !== null ||
+    target.closest('.world-map-panel') !== null
   );
 }
 
