@@ -1,5 +1,5 @@
-import { Assets, Container, Graphics, Sprite, type Texture } from 'pixi.js';
-import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset } from './types';
+import { Assets, Container, Graphics, Rectangle, Sprite, Texture, type Texture as PixiTexture } from 'pixi.js';
+import type { EditorMapDraft, EditorSourceRect, EditorTilePlacement, EditorTilesetAsset } from './types';
 import { EditorState } from './EditorState';
 import { TILESET_CATEGORIES } from './tilesetManifest';
 
@@ -18,7 +18,7 @@ export class TilePlacementSystem {
 
   private readonly draft: EditorMapDraft;
   private readonly displays = new Map<string, PlacedDisplay>();
-  private readonly textureCache = new Map<string, Promise<Texture | null>>();
+  private readonly textureCache = new Map<string, Promise<PixiTexture | null>>();
 
   constructor(
     private readonly state: EditorState,
@@ -47,9 +47,10 @@ export class TilePlacementSystem {
       return;
     }
 
-    const asset = this.state.selectedAsset;
-    if (!asset) return;
+    const brush = this.state.selectedBrush;
+    if (!brush) return;
 
+    const asset = brush.asset;
     const x = snap(worldX, this.draft.tileSize);
     const y = snap(worldY, this.draft.tileSize);
     const existing = this.findPlacementAt(x, y, this.state.activeLayer);
@@ -67,6 +68,7 @@ export class TilePlacementSystem {
       y,
       layer: this.state.activeLayer,
       scale: this.state.brushScale,
+      sourceRect: brush.sourceRect ? { ...brush.sourceRect } : undefined,
     };
 
     this.draft.placements.push(placement);
@@ -89,6 +91,7 @@ export class TilePlacementSystem {
     this.draft.placements.push(...draft.placements.map((placement) => ({
       ...placement,
       scale: normalizePlacementScale(placement.scale),
+      sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
     })));
 
     for (const placement of this.draft.placements) {
@@ -124,17 +127,22 @@ export class TilePlacementSystem {
   private createSprite(
     placement: EditorTilePlacement,
     asset: EditorTilesetAsset,
-    texture: Texture,
+    texture: PixiTexture,
   ): Sprite {
-    const sprite = new Sprite(texture);
+    const sourceTexture = placement.sourceRect
+      ? createSlicedTexture(texture, placement.sourceRect)
+      : texture;
+    const sprite = new Sprite(sourceTexture);
     const scale = normalizePlacementScale(placement.scale);
 
     sprite.label = `editor-tile:${placement.id}`;
     sprite.x = placement.x;
     sprite.y = placement.y;
 
-    sprite.width = (asset.tileWidth ?? texture.width) * scale;
-    sprite.height = (asset.tileHeight ?? texture.height) * scale;
+    const baseWidth = placement.sourceRect?.width ?? asset.tileWidth ?? sourceTexture.width;
+    const baseHeight = placement.sourceRect?.height ?? asset.tileHeight ?? sourceTexture.height;
+    sprite.width = baseWidth * scale;
+    sprite.height = baseHeight * scale;
 
     sprite.zIndex = layerZIndex(placement.layer);
 
@@ -149,8 +157,8 @@ export class TilePlacementSystem {
     tile.y = placement.y;
     tile.zIndex = layerZIndex(placement.layer);
 
-    const width = (asset.tileWidth || this.draft.tileSize) * scale;
-    const height = (asset.tileHeight || this.draft.tileSize) * scale;
+    const width = (placement.sourceRect?.width ?? asset.tileWidth ?? this.draft.tileSize) * scale;
+    const height = (placement.sourceRect?.height ?? asset.tileHeight ?? this.draft.tileSize) * scale;
 
     tile
       .rect(0, 0, width, height)
@@ -161,10 +169,10 @@ export class TilePlacementSystem {
     return tile;
   }
 
-  private loadTexture(url: string): Promise<Texture | null> {
+  private loadTexture(url: string): Promise<PixiTexture | null> {
     let promise = this.textureCache.get(url);
     if (!promise) {
-      promise = Assets.load<Texture>(url).catch((error: unknown) => {
+      promise = Assets.load<PixiTexture>(url).catch((error: unknown) => {
         console.warn(`[MapEditor] Failed to load tile asset: ${url}`, error);
         return null;
       });
@@ -200,6 +208,13 @@ function snap(value: number, size: number): number {
 function normalizePlacementScale(scale: number | undefined): number {
   if (!Number.isFinite(scale)) return 1;
   return Math.max(0.1, scale ?? 1);
+}
+
+function createSlicedTexture(texture: PixiTexture, sourceRect: EditorSourceRect): PixiTexture {
+  return new Texture({
+    source: texture.source,
+    frame: new Rectangle(sourceRect.x, sourceRect.y, sourceRect.width, sourceRect.height),
+  });
 }
 
 function layerZIndex(layer: EditorTilePlacement['layer']): number {
