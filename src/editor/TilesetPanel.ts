@@ -19,11 +19,14 @@ const EDITOR_LAYERS: Array<{ id: EditorLayerId; label: string }> = [
   { id: 'collision', label: 'Block' },
 ];
 
+const GRID_SIZE_OPTIONS = [16, 32, 64];
+
 export class TilesetPanel {
   readonly element: HTMLDivElement;
 
   private readonly header: HTMLDivElement;
   private readonly scaleContainer: HTMLDivElement;
+  private readonly gridContainer: HTMLDivElement;
   private readonly layerContainer: HTMLDivElement;
   private readonly toolContainer: HTMLDivElement;
   private readonly fillContainer: HTMLDivElement;
@@ -52,6 +55,9 @@ export class TilesetPanel {
     this.scaleContainer = document.createElement('div');
     this.scaleContainer.className = 'map-editor-scale';
 
+    this.gridContainer = document.createElement('div');
+    this.gridContainer.className = 'map-editor-grid-controls';
+
     this.layerContainer = document.createElement('div');
     this.layerContainer.className = 'map-editor-layers';
 
@@ -73,6 +79,7 @@ export class TilesetPanel {
     this.element.append(
       this.header,
       this.scaleContainer,
+      this.gridContainer,
       this.layerContainer,
       this.toolContainer,
       this.fillContainer,
@@ -92,6 +99,7 @@ export class TilesetPanel {
 
   private render(): void {
     this.renderScaleControls();
+    this.renderGridControls();
     this.renderLayerControls();
     this.renderTools();
     this.renderFillControls();
@@ -136,6 +144,26 @@ export class TilesetPanel {
     increaseButton.onclick = () => this.state.increaseBrushScale();
 
     this.scaleContainer.append(label, decreaseButton, value, suffix, increaseButton);
+  }
+
+  private renderGridControls(): void {
+    this.gridContainer.innerHTML = '';
+
+    const toggleButton = document.createElement('button');
+    toggleButton.className = 'map-editor-grid-button';
+    if (this.state.gridVisible) toggleButton.classList.add('is-active');
+    toggleButton.textContent = 'Grid';
+    toggleButton.onclick = () => this.state.toggleGridVisible();
+    this.gridContainer.appendChild(toggleButton);
+
+    for (const size of GRID_SIZE_OPTIONS) {
+      const button = document.createElement('button');
+      button.className = 'map-editor-grid-button';
+      if (this.state.gridSize === size) button.classList.add('is-active');
+      button.textContent = String(size);
+      button.onclick = () => this.state.setGridSize(size);
+      this.gridContainer.appendChild(button);
+    }
   }
 
   private renderLayerControls(): void {
