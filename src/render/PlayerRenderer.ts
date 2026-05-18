@@ -6,6 +6,12 @@ import { loadSpriteStrip } from './spriteStrip';
 
 const REQUIRED_ANIMS: FemaleAdventurerAnim[] = ['idle', 'walk'];
 const PLAYER_SHADOW_SOURCES = [
+  '/assets/characters/female_adventurer/Shadow.png',
+  '/assets/characters/female_adventurer/shadow.png',
+  '/assets/characters/female_adventurer/Shadow/Shadow.png',
+  '/assets/characters/female_adventurer/shadow/shadow.png',
+  '/assets/characters/Shadow.png',
+  '/assets/characters/shadow.png',
   '/assets/tilesets/fantasy/Art/Shadows/Shadow_Round_48x24_Medium_Black.png',
   '/assets/tilesets/fantasy/Art/Shadow/Shadow_Round_48x24_Medium_Black.png',
   '/assets/tilesets/fantasy/Art/shadows/Shadow_Round_48x24_Medium_Black.png',
