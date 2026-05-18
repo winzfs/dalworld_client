@@ -7,6 +7,7 @@ export type TilesetPanelActions = {
   onLoad: () => void;
   onExport: () => void;
   onClear: () => void;
+  onPickAsset: (asset: EditorTilesetAsset) => void;
 };
 
 export class TilesetPanel {
@@ -204,7 +205,7 @@ export class TilesetPanel {
     label.textContent = asset.name;
 
     button.append(image, label);
-    button.onclick = () => this.state.selectAsset(asset);
+    button.onclick = () => this.actions.onPickAsset(asset);
 
     return button;
   }
