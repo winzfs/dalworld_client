@@ -3,6 +3,8 @@ import { EditorState } from './EditorState';
 import { TilesetPanel } from './TilesetPanel';
 import { TilePlacementSystem } from './TilePlacementSystem';
 import { MapStorage } from './MapStorage';
+import { TilePickerWindow } from './TilePickerWindow';
+import type { EditorTilesetAsset } from './types';
 
 export type MapEditorOptions = {
   app: Application;
@@ -11,6 +13,8 @@ export type MapEditorOptions = {
   tileSize?: number;
   mapName?: string;
 };
+
+const DIRECT_SELECT_MAX_SIZE = 96;
 
 /**
  * High-level editor orchestration.
@@ -21,6 +25,7 @@ export class MapEditor {
   readonly placement: TilePlacementSystem;
 
   private readonly panel: TilesetPanel;
+  private readonly picker: TilePickerWindow;
   private readonly storage: MapStorage;
   private readonly uiRoot: HTMLElement;
   private enabled = false;
@@ -43,6 +48,12 @@ export class MapEditor {
       tileSize: options.tileSize ?? 32,
       mapName,
     });
+    this.picker = new TilePickerWindow({
+      defaultGridSize: options.tileSize ?? 32,
+      onPick: (asset, sourceRect) => {
+        this.state.setSourceRect(asset, sourceRect);
+      },
+    });
     this.panel = new TilesetPanel(this.state, {
       onSave: () => this.save(),
       onLoad: () => {
@@ -50,6 +61,7 @@ export class MapEditor {
       },
       onExport: () => this.exportJson(),
       onClear: () => this.clearAll(),
+      onPickAsset: (asset) => this.pickAsset(asset),
     });
   }
 
@@ -59,6 +71,7 @@ export class MapEditor {
     this.enabled = true;
     this.options.world.addChild(this.placement.layer);
     this.panel.mount(this.uiRoot);
+    this.picker.mount(this.uiRoot);
     this.options.app.canvas.addEventListener('pointerdown', this.pointerDownHandler);
   }
 
@@ -68,10 +81,29 @@ export class MapEditor {
     this.enabled = false;
     this.options.app.canvas.removeEventListener('pointerdown', this.pointerDownHandler);
     this.panel.element.remove();
+    this.picker.element.remove();
 
     if (this.placement.layer.parent) {
       this.placement.layer.parent.removeChild(this.placement.layer);
     }
+  }
+
+  private pickAsset(asset: EditorTilesetAsset): void {
+    this.state.selectAsset(asset);
+    void this.shouldOpenPicker(asset).then((openPicker) => {
+      if (openPicker) {
+        this.picker.open(asset);
+      }
+    });
+  }
+
+  private async shouldOpenPicker(asset: EditorTilesetAsset): Promise<boolean> {
+    if (asset.tileWidth && asset.tileHeight) return false;
+
+    const size = await loadImageSize(asset.url);
+    if (!size) return false;
+
+    return size.width > DIRECT_SELECT_MAX_SIZE || size.height > DIRECT_SELECT_MAX_SIZE;
   }
 
   private save(): void {
@@ -114,5 +146,17 @@ export class MapEditor {
 }
 
 function isEditorUiTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && target.closest('.map-editor-panel') !== null;
+  return target instanceof HTMLElement && (
+    target.closest('.map-editor-panel') !== null ||
+    target.closest('.tile-picker-window') !== null
+  );
+}
+
+function loadImageSize(url: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
 }
