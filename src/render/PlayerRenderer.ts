@@ -8,10 +8,9 @@ const REQUIRED_ANIMS: FemaleAdventurerAnim[] = ['idle', 'walk'];
 const PLAYER_RENDER_HEIGHT = FEMALE_ADVENTURER.frameHeight * FEMALE_ADVENTURER.scale;
 const PLAYER_RENDER_WIDTH = FEMALE_ADVENTURER.frameWidth * FEMALE_ADVENTURER.scale;
 const PLAYER_SHADOW_SCALE = FEMALE_ADVENTURER.scale;
-const PLAYER_FOOT_Y = 0;
-const PLAYER_SHADOW_Y = PLAYER_FOOT_Y;
-const PLAYER_RING_Y = PLAYER_FOOT_Y;
-const PLAYER_FALLBACK_Y = -Math.round(8 * FEMALE_ADVENTURER.scale);
+const PLAYER_SHADOW_Y = -28;
+const PLAYER_RING_Y = -24;
+const PLAYER_FALLBACK_Y = -16;
 const PLAYER_HP_Y = -Math.round(PLAYER_RENDER_HEIGHT - 8);
 const PLAYER_SHADOW_SOURCES = [
   '/assets/characters/female_adventurer/Shadow.png',
