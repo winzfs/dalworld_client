@@ -22,7 +22,7 @@ export const FEMALE_ADVENTURER: FemaleAdventurerConfig = {
   frameWidth: 48,
   frameHeight: 64,
   frameCount: 8,
-  scale: 1.5,
+  scale: 1.72,
   anchor: { x: 0.5, y: 0.8 },
   facings: ['down', 'left', 'up', 'right'],
   animations: ['idle', 'walk', 'dash', 'jump', 'death'],
