@@ -15,7 +15,7 @@ import { MonsterRenderer } from '../render/MonsterRenderer';
 import { DebugHud } from '../render/DebugHud';
 import { MobileControls } from '../render/MobileControls';
 
-const INPUT_SEND_HZ = 20;
+const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, gatherRange: 80 };
 
@@ -69,6 +69,7 @@ export class GameApp {
     this.network.onStatus((status) => {
       this.status = status;
     });
+
     this.network.onMessage((message) => this.handleServerMessage(message));
     this.network.connect();
 
@@ -82,6 +83,7 @@ export class GameApp {
     this.monsterRenderer.update(dt);
 
     const me = this.findMe();
+
     if (me) {
       this.camera.follow(me.x, me.y, this.app.renderer.width, this.app.renderer.height);
     } else {
@@ -113,7 +115,11 @@ export class GameApp {
 
   private sendInputIfDue(dt: number): void {
     this.inputAccumulator += dt;
-    if (this.inputAccumulator < 1 / INPUT_SEND_HZ) return;
+
+    if (this.inputAccumulator < 1 / INPUT_SEND_HZ) {
+      return;
+    }
+
     this.inputAccumulator = 0;
 
     this.network.send({
@@ -126,14 +132,18 @@ export class GameApp {
 
   private handleGatherInput(): void {
     if (!this.input.consumeGather()) return;
+
     const me = this.findMe();
+
     if (!me) return;
+
     const target = this.resourceRenderer.getClosestAlive(
       this.latestResources,
       me.x,
       me.y,
       this.gameplayConfig.gatherRange,
     );
+
     this.network.send({
       type: 'gather',
       seq: ++this.inputSeq,
@@ -150,6 +160,7 @@ export class GameApp {
         this.camera.setWorldSize(message.world.width, message.world.height);
         this.drawWorldBackground();
         return;
+
       case 'snapshot':
         this.latestTick = message.tick;
         this.latestPlayers = message.players;
@@ -158,9 +169,10 @@ export class GameApp {
         this.resourceRenderer.sync(message.resources);
         this.monsterRenderer.sync(message.monsters);
         return;
+
       case 'event':
-        // TODO: toast / sound feedback per event type
         return;
+
       case 'pong':
         return;
     }
@@ -168,26 +180,31 @@ export class GameApp {
 
   private findMe(): PlayerSnapshot | null {
     if (!this.myPlayerId) return null;
+
     for (const player of this.latestPlayers) {
       if (player.id === this.myPlayerId) return player;
     }
+
     return null;
   }
 
   private drawWorldBackground(): void {
     this.background.removeChildren().forEach((child) => child.destroy());
     this.background.clear();
+
     this.background
       .rect(0, 0, this.worldInfo.width, this.worldInfo.height)
       .fill({ color: 0x223843 });
 
     const step = 200;
+
     for (let x = 0; x <= this.worldInfo.width; x += step) {
       this.background
         .moveTo(x, 0)
         .lineTo(x, this.worldInfo.height)
         .stroke({ color: 0x2c4a55, width: 1 });
     }
+
     for (let y = 0; y <= this.worldInfo.height; y += step) {
       this.background
         .moveTo(0, y)
