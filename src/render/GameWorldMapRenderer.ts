@@ -7,6 +7,7 @@ export class GameWorldMapRenderer {
 
   private readonly textureCache = new Map<string, Promise<PixiTexture | null>>();
   private readonly transparentTextureCache = new Map<string, Promise<PixiTexture | null>>();
+  private readonly ownedTextures: PixiTexture[] = [];
   private readonly displays: Array<Sprite | Graphics> = [];
   private renderGeneration = 0;
 
@@ -40,7 +41,7 @@ export class GameWorldMapRenderer {
       const display = await this.createDisplay(placement);
 
       if (generation !== this.renderGeneration) {
-        display.destroy();
+        destroyDisplayOnly(display);
         return;
       }
 
@@ -53,17 +54,19 @@ export class GameWorldMapRenderer {
   destroy(): void {
     this.renderGeneration += 1;
     this.clear();
+    for (const texture of this.ownedTextures) {
+      if (!texture.destroyed) texture.destroy(false);
+    }
+    this.ownedTextures.length = 0;
     if (this.layer.parent) {
       this.layer.parent.removeChild(this.layer);
     }
-    this.layer.destroy({ children: true });
+    this.layer.destroy({ children: false });
   }
 
   private clear(): void {
     for (const display of this.displays) {
-      if (!display.destroyed) {
-        display.destroy();
-      }
+      destroyDisplayOnly(display);
     }
     this.displays.length = 0;
     this.layer.removeChildren();
@@ -84,7 +87,7 @@ export class GameWorldMapRenderer {
       ? undefined
       : placement.sourceRect ? shrinkSourceRect(placement.sourceRect, texture) : undefined;
     const sliced = sourceRect
-      ? new Texture({ source: texture.source, frame: new Rectangle(sourceRect.x, sourceRect.y, sourceRect.width, sourceRect.height) })
+      ? this.createOwnedTexture(texture, sourceRect)
       : texture;
     enforceNearestScale(sliced);
 
@@ -97,6 +100,15 @@ export class GameWorldMapRenderer {
     sprite.roundPixels = true;
     sprite.scale.set((baseWidth / sliced.width) * scale, (baseHeight / sliced.height) * scale);
     return sprite;
+  }
+
+  private createOwnedTexture(texture: PixiTexture, sourceRect: WorldMapSourceRect): PixiTexture {
+    const sliced = new Texture({
+      source: texture.source,
+      frame: new Rectangle(sourceRect.x, sourceRect.y, sourceRect.width, sourceRect.height),
+    });
+    this.ownedTextures.push(sliced);
+    return sliced;
   }
 
   private createSolidTile(placement: WorldMapPlacement): Graphics {
@@ -158,6 +170,17 @@ export class GameWorldMapRenderer {
     }
     return promise;
   }
+}
+
+function destroyDisplayOnly(display: Sprite | Graphics): void {
+  if (display.destroyed) return;
+
+  if (display instanceof Sprite) {
+    display.destroy({ children: false, texture: false, textureSource: false });
+    return;
+  }
+
+  display.destroy({ children: false });
 }
 
 function getLayerZ(layer: WorldMapPlacement['layer']): number {
