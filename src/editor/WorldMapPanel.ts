@@ -3,6 +3,7 @@ import { WorldMapGrid } from './WorldMapGrid';
 export type WorldMapPanelOptions = {
   grid: WorldMapGrid;
   onSelectCell: (gridX: number, gridY: number) => void;
+  onDeleteCurrentCell: () => void;
 };
 
 const VIEW_RADIUS = 2;
@@ -93,7 +94,12 @@ export class WorldMapPanel {
       this.createNeighborButton('→', 1, 0),
     );
 
-    this.controls.append(info, row);
+    const deleteButton = document.createElement('button');
+    deleteButton.className = 'world-map-delete-current';
+    deleteButton.textContent = '현재맵 삭제';
+    deleteButton.onclick = () => this.options.onDeleteCurrentCell();
+
+    this.controls.append(info, row, deleteButton);
   }
 
   private renderGrid(): void {
