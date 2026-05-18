@@ -23,6 +23,8 @@ const MONSTER_COLLISION_RADIUS = 40;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, playerSpeed: 220, gatherRange: 80 };
 
+type MoveDelta = { x: number; y: number };
+
 export class GameApp {
   private readonly app = new Application();
   private readonly world = new Container();
@@ -133,17 +135,25 @@ export class GameApp {
     if (direction) {
       const radius = this.gameplayConfig.playerRadius;
       const speed = this.gameplayConfig.playerSpeed;
-      const deltaX = direction.x * speed * dt;
-      const deltaY = direction.y * speed * dt;
+      let delta: MoveDelta = {
+        x: direction.x * speed * dt,
+        y: direction.y * speed * dt,
+      };
 
-      const nextX = clamp(me.x + deltaX, radius, this.worldInfo.width - radius);
-      if (this.canPlayerOccupy(me.x, me.y, nextX, me.y, radius)) {
+      delta = this.resolveMonsterSlideDelta(me.x, me.y, delta, radius);
+
+      const nextX = clamp(me.x + delta.x, radius, this.worldInfo.width - radius);
+      const nextY = clamp(me.y + delta.y, radius, this.worldInfo.height - radius);
+
+      if (this.canPlayerOccupy(nextX, nextY, radius)) {
         me.x = nextX;
-      }
-
-      const nextY = clamp(me.y + deltaY, radius, this.worldInfo.height - radius);
-      if (this.canPlayerOccupy(me.x, me.y, me.x, nextY, radius)) {
         me.y = nextY;
+      } else {
+        const axisX = clamp(me.x + delta.x, radius, this.worldInfo.width - radius);
+        if (this.canPlayerOccupy(axisX, me.y, radius)) me.x = axisX;
+
+        const axisY = clamp(me.y + delta.y, radius, this.worldInfo.height - radius);
+        if (this.canPlayerOccupy(me.x, axisY, radius)) me.y = axisY;
       }
 
       me.facing = this.input.state.facing;
@@ -152,24 +162,52 @@ export class GameApp {
     this.playerRenderer.sync(this.latestPlayers, this.myPlayerId);
   }
 
-  private canPlayerOccupy(
+  private resolveMonsterSlideDelta(
     currentX: number,
     currentY: number,
-    nextX: number,
-    nextY: number,
+    delta: MoveDelta,
     playerRadius: number,
-  ): boolean {
+  ): MoveDelta {
+    let resolved = delta;
+
     for (const monster of this.latestMonsters) {
       const minDistance = playerRadius + MONSTER_COLLISION_RADIUS;
-      const minDistanceSq = minDistance * minDistance;
-      const currentDistanceSq = squaredDistance(currentX, currentY, monster.x, monster.y);
+      const nextX = currentX + resolved.x;
+      const nextY = currentY + resolved.y;
       const nextDistanceSq = squaredDistance(nextX, nextY, monster.x, monster.y);
 
-      if (nextDistanceSq >= minDistanceSq) continue;
+      if (nextDistanceSq >= minDistance * minDistance) continue;
 
-      if (currentDistanceSq < minDistanceSq && nextDistanceSq > currentDistanceSq) continue;
+      const normalX = currentX - monster.x;
+      const normalY = currentY - monster.y;
+      const normalLength = Math.hypot(normalX, normalY);
 
-      return false;
+      if (normalLength <= 0.0001) {
+        continue;
+      }
+
+      const nx = normalX / normalLength;
+      const ny = normalY / normalLength;
+      const intoObstacle = resolved.x * -nx + resolved.y * -ny;
+
+      if (intoObstacle <= 0) {
+        continue;
+      }
+
+      resolved = {
+        x: resolved.x + nx * intoObstacle,
+        y: resolved.y + ny * intoObstacle,
+      };
+    }
+
+    return resolved;
+  }
+
+  private canPlayerOccupy(x: number, y: number, playerRadius: number): boolean {
+    for (const monster of this.latestMonsters) {
+      if (circlesOverlap(x, y, playerRadius, monster.x, monster.y, MONSTER_COLLISION_RADIUS)) {
+        return false;
+      }
     }
 
     return true;
@@ -345,6 +383,20 @@ function squaredDistance(ax: number, ay: number, bx: number, by: number): number
   const dx = ax - bx;
   const dy = ay - by;
   return dx * dx + dy * dy;
+}
+
+function circlesOverlap(
+  ax: number,
+  ay: number,
+  ar: number,
+  bx: number,
+  by: number,
+  br: number,
+): boolean {
+  const minDistance = ar + br;
+  const dx = ax - bx;
+  const dy = ay - by;
+  return dx * dx + dy * dy < minDistance * minDistance;
 }
 
 function clamp(value: number, min: number, max: number): number {
