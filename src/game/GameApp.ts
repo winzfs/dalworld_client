@@ -18,6 +18,7 @@ import { GameWindows } from '../ui/GameWindows';
 import { ClientMovementSystem } from './systems/ClientMovementSystem';
 import { InputSendSystem } from './systems/InputSendSystem';
 import { SnapshotSystem } from './systems/SnapshotSystem';
+import { CameraSystem } from './systems/CameraSystem';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -31,7 +32,7 @@ export class GameApp {
   private readonly network: GameNetwork;
   private readonly hud = new GameHud();
   private readonly windows = new GameWindows();
-  private readonly camera: Camera;
+  private readonly cameraSystem: CameraSystem;
   private readonly playerRenderer: PlayerRenderer;
   private readonly resourceRenderer: ResourceRenderer;
   private readonly monsterRenderer: MonsterRenderer;
@@ -49,7 +50,7 @@ export class GameApp {
   constructor() {
     this.network = new GameNetwork(getDefaultWebSocketUrl());
     this.inputSendSystem = new InputSendSystem(this.network, INPUT_SEND_HZ);
-    this.camera = new Camera(this.world);
+    this.cameraSystem = new CameraSystem(new Camera(this.world));
     this.world.addChild(this.background);
     this.resourceRenderer = new ResourceRenderer(this.world);
     this.monsterRenderer = new MonsterRenderer(this.world);
@@ -100,16 +101,12 @@ export class GameApp {
 
     const me = this.findMe();
 
-    if (me) {
-      this.camera.follow(me.x, me.y, this.app.renderer.width, this.app.renderer.height);
-    } else {
-      this.camera.follow(
-        this.worldInfo.width / 2,
-        this.worldInfo.height / 2,
-        this.app.renderer.width,
-        this.app.renderer.height,
-      );
-    }
+    this.cameraSystem.update({
+      player: me,
+      world: this.worldInfo,
+      screenWidth: this.app.renderer.width,
+      screenHeight: this.app.renderer.height,
+    });
 
     this.hud.render({
       status: this.status,
@@ -164,7 +161,7 @@ export class GameApp {
         this.myPlayerId = message.playerId;
         this.worldInfo = message.world;
         this.gameplayConfig = message.gameplay ?? DEFAULT_GAMEPLAY;
-        this.camera.setWorldSize(message.world.width, message.world.height);
+        this.cameraSystem.setWorldSize(message.world);
         this.drawWorldBackground();
         void this.loadWorldMap();
         return;
