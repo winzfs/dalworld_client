@@ -112,7 +112,13 @@ export class MonsterRenderer {
         }
       }
     } catch (error) {
-      console.warn('Failed to load sheep monster sprite. Using fallback monster shape.', error);
+      console.warn('Failed to load sheep monster sprite. Using fallback sheep shape.', error);
+      this.sheepFrames = null;
+      for (const view of this.views.values()) {
+        if (view.type === 'sheep') {
+          this.applyMonsterVisual(view);
+        }
+      }
     }
   }
 
@@ -183,9 +189,49 @@ export class MonsterRenderer {
 
   private drawFallback(view: MonsterView): void {
     view.body.clear();
+
+    if (view.type === 'sheep') {
+      this.drawSheepFallback(view.body, view.state === 'chase');
+      return;
+    }
+
     view.body
       .circle(0, 0, 16)
       .fill({ color: view.state === 'chase' ? MONSTER_COLOR_CHASE : MONSTER_COLOR_IDLE });
+  }
+
+  private drawSheepFallback(body: Graphics, chasing: boolean): void {
+    const wool = chasing ? 0xfff2c7 : 0xf6f1df;
+    const outline = 0x5b5146;
+    const face = 0x8b6f54;
+
+    body
+      .ellipse(0, -18, 23, 15)
+      .fill({ color: 0x000000, alpha: 0.18 });
+
+    body
+      .circle(-14, -34, 11)
+      .fill({ color: wool })
+      .circle(0, -38, 15)
+      .fill({ color: wool })
+      .circle(14, -34, 11)
+      .fill({ color: wool })
+      .circle(-4, -28, 14)
+      .fill({ color: wool })
+      .circle(10, -27, 12)
+      .fill({ color: wool });
+
+    body
+      .ellipse(18, -32, 9, 11)
+      .fill({ color: face })
+      .circle(21, -35, 2)
+      .fill({ color: 0x111111 });
+
+    body
+      .roundRect(-14, -19, 5, 13, 2)
+      .fill({ color: outline })
+      .roundRect(7, -19, 5, 13, 2)
+      .fill({ color: outline });
   }
 }
 
