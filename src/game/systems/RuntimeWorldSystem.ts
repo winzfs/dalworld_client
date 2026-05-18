@@ -9,7 +9,7 @@ import type { CameraSystem } from './CameraSystem';
 export type RuntimeWorldSystemContext = {
   world: Container;
   background: Graphics;
-  worldInfo: WorldInfo;
+  getWorldInfo: () => WorldInfo;
   cameraSystem: CameraSystem;
   worldMapRenderer: GameWorldMapRenderer;
 };
@@ -29,7 +29,7 @@ export class RuntimeWorldSystem {
 
     if (runtimeMap) {
       const worldInfo: WorldInfo = {
-        ...this.context.worldInfo,
+        ...this.context.getWorldInfo(),
         width: runtimeMap.cellSize,
         height: runtimeMap.cellSize,
       };
@@ -49,7 +49,7 @@ export class RuntimeWorldSystem {
 
     await this.context.worldMapRenderer.render(null);
 
-    const worldInfo = this.context.worldInfo;
+    const worldInfo = this.context.getWorldInfo();
     this.meadowRenderer = new ProceduralMeadowRenderer(this.context.world, {
       worldWidth: worldInfo.width,
       worldHeight: worldInfo.height,
@@ -68,7 +68,7 @@ export class RuntimeWorldSystem {
     return { worldInfo };
   }
 
-  drawBackground(worldInfo: WorldInfo = this.context.worldInfo): void {
+  drawBackground(worldInfo: WorldInfo = this.context.getWorldInfo()): void {
     const background = this.context.background;
     background.removeChildren().forEach((child) => child.destroy());
     background.clear();
