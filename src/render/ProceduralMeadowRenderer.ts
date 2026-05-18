@@ -4,6 +4,15 @@ const TILESET_URL = '/assets/tilesets/fantasy/Art/Ground Tileset/Tileset_Ground.
 const TILE_SIZE = 16;
 const TILESET_COLUMNS = 12;
 const RENDER_SCALE = 4;
+const PROP_SCALE = 2.4;
+
+const PROP_SPRITES = [
+  '/assets/tilesets/fantasy/Art/Props/Plant_2.png',
+  '/assets/tilesets/fantasy/Art/Props/Chopped_Tree_1.png',
+  '/assets/tilesets/fantasy/Art/Props/Sack_3.png',
+  '/assets/tilesets/fantasy/Art/Props/Basket_Empty.png',
+  '/assets/tilesets/fantasy/Art/Props/HayStack_2.png',
+];
 
 /**
  * Only use visually filled ground tiles for the base pass.
@@ -35,6 +44,7 @@ export class ProceduralMeadowRenderer {
     this.worldHeight = options.worldHeight;
     this.seed = options.seed ?? 20260518;
     this.layer.label = 'procedural-meadow';
+    this.layer.sortableChildren = true;
     parent.addChild(this.layer);
   }
 
@@ -44,6 +54,7 @@ export class ProceduralMeadowRenderer {
     const image = await loadImage(TILESET_URL);
     const sheet = Texture.from(image);
     sheet.source.scaleMode = 'nearest';
+    const propTextures = await loadOptionalTextures(PROP_SPRITES);
 
     const cols = Math.ceil(this.worldWidth / (TILE_SIZE * RENDER_SCALE));
     const rows = Math.ceil(this.worldHeight / (TILE_SIZE * RENDER_SCALE));
@@ -59,6 +70,7 @@ export class ProceduralMeadowRenderer {
       }
     }
 
+    this.placeDecorations(cols, rows, propTextures);
     this.ready = true;
   }
 
@@ -69,6 +81,34 @@ export class ProceduralMeadowRenderer {
     sprite.zIndex = zIndex;
     sprite.scale.set(RENDER_SCALE);
     this.layer.addChild(sprite);
+  }
+
+  private placeDecorations(cols: number, rows: number, textures: Texture[]): void {
+    if (textures.length === 0) return;
+
+    const cellSize = TILE_SIZE * RENDER_SCALE;
+
+    for (let y = 2; y < rows - 2; y += 1) {
+      for (let x = 2; x < cols - 2; x += 1) {
+        const density = noise2d(x * 0.06 + 12.1, y * 0.06 - 6.3, this.seed + 501);
+        const roll = rand2d(x, y, this.seed + 777);
+
+        if (density < 0.48 || roll < 0.982) continue;
+
+        const texture = textures[pickStableIndex(`${x}:${y}:${this.seed}`, textures.length)];
+        const sprite = new Sprite(texture);
+        const jitterX = (rand2d(x, y, this.seed + 778) - 0.5) * cellSize * 0.55;
+        const jitterY = (rand2d(x, y, this.seed + 779) - 0.5) * cellSize * 0.55;
+
+        sprite.anchor.set(0.5, 1);
+        sprite.scale.set(PROP_SCALE);
+        sprite.x = x * cellSize + cellSize / 2 + jitterX;
+        sprite.y = y * cellSize + cellSize / 2 + jitterY;
+        sprite.zIndex = 20 + Math.round(sprite.y);
+        sprite.alpha = 0.95;
+        this.layer.addChild(sprite);
+      }
+    }
   }
 
   private pickBaseTile(x: number, y: number): number {
@@ -116,14 +156,41 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     const image = new Image();
     image.decoding = 'async';
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(`Failed to load meadow tileset: ${src}`));
+    image.onerror = () => reject(new Error(`Failed to load image: ${src}`));
     image.src = src;
   });
+}
+
+async function loadOptionalTextures(srcs: string[]): Promise<Texture[]> {
+  const results = await Promise.allSettled(srcs.map(async (src) => Texture.from(await loadImage(src))));
+  const textures: Texture[] = [];
+
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      result.value.source.scaleMode = 'nearest';
+      textures.push(result.value);
+    } else {
+      console.warn(result.reason);
+    }
+  }
+
+  return textures;
 }
 
 function pickWeighted(values: number[], x: number, y: number, seed: number): number {
   const value = rand2d(x, y, seed);
   return values[Math.floor(value * values.length) % values.length];
+}
+
+function pickStableIndex(id: string, length: number): number {
+  let hash = 2166136261;
+
+  for (let i = 0; i < id.length; i += 1) {
+    hash ^= id.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return Math.abs(hash) % length;
 }
 
 function noise2d(x: number, y: number, seed: number): number {
