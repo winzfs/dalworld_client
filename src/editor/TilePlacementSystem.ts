@@ -90,12 +90,14 @@ export class TilePlacementSystem {
     this.draft.placements.push(...normalizePlacements(draft.placements));
 
     for (const placement of this.draft.placements) {
-      const asset = findAssetById(placement.assetId) ?? {
-        id: placement.assetId,
-        name: placement.assetId,
-        categoryId: placement.categoryId,
-        url: placement.assetUrl,
-      };
+      const asset = placement.solidColor !== undefined
+        ? createSolidAsset(placement)
+        : findAssetById(placement.assetId) ?? {
+            id: placement.assetId,
+            name: placement.assetId,
+            categoryId: placement.categoryId,
+            url: placement.assetUrl,
+          };
       await this.createDisplay(placement, asset);
     }
   }
@@ -132,6 +134,7 @@ export class TilePlacementSystem {
       layer: this.state.activeLayer,
       scale: this.state.brushScale,
       sourceRect: brush.sourceRect ? { ...brush.sourceRect } : undefined,
+      solidColor: asset.solidColor,
     };
   }
 
@@ -182,10 +185,31 @@ export class TilePlacementSystem {
   }
 
   private async createVisualDisplay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Promise<PlacedDisplay> {
+    if (placement.solidColor !== undefined || asset.solidColor !== undefined) {
+      return this.createSolidTile(placement, asset);
+    }
+
     const texture = await this.loadTexture(asset.url);
     return texture
       ? this.createSprite(placement, asset, texture)
       : this.createFallbackTile(placement, asset);
+  }
+
+  private createSolidTile(placement: EditorTilePlacement, asset: EditorTilesetAsset): Graphics {
+    const tile = new Graphics();
+    const scale = normalizePlacementScale(placement.scale);
+    const width = (placement.sourceRect?.width ?? asset.tileWidth ?? this.state.gridSize) * scale;
+    const height = (placement.sourceRect?.height ?? asset.tileHeight ?? this.state.gridSize) * scale;
+
+    tile.label = `editor-solid-tile:${placement.id}`;
+    tile.x = placement.x;
+    tile.y = placement.y;
+    tile.zIndex = layerZIndex(placement.layer);
+    tile
+      .rect(0, 0, width, height)
+      .fill({ color: placement.solidColor ?? asset.solidColor ?? 0x000000, alpha: 1 });
+
+    return tile;
   }
 
   private createCollisionOverlay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Graphics {
@@ -251,9 +275,7 @@ export class TilePlacementSystem {
 
     tile
       .rect(0, 0, width, height)
-      .fill({ color: fallbackColor(asset.categoryId), alpha: 1 })
-      .rect(0, 0, width, height)
-      .stroke({ color: 0xffd166, alpha: 0.95, width: 1 });
+      .fill({ color: fallbackColor(asset.categoryId), alpha: 1 });
 
     return tile;
   }
@@ -378,6 +400,16 @@ function findAssetById(assetId: string): EditorTilesetAsset | null {
   }
 
   return null;
+}
+
+function createSolidAsset(placement: EditorTilePlacement): EditorTilesetAsset {
+  return {
+    id: placement.assetId,
+    name: placement.assetId,
+    categoryId: placement.categoryId,
+    url: placement.assetUrl,
+    solidColor: placement.solidColor,
+  };
 }
 
 function clamp(value: number, min: number, max: number): number {
