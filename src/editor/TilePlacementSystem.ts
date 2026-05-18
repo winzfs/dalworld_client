@@ -19,9 +19,6 @@ export type EditorRandomFillOptions = EditorFillOptions & {
 
 type PlacedDisplay = Sprite | Graphics;
 
-/**
- * Owns editor-only placed tile sprites and the serializable map draft.
- */
 export class TilePlacementSystem {
   readonly layer = new Container();
 
@@ -176,13 +173,38 @@ export class TilePlacementSystem {
   }
 
   private async createDisplay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Promise<void> {
-    const texture = await this.loadTexture(asset.url);
-    const display = texture
-      ? this.createSprite(placement, asset, texture)
-      : this.createFallbackTile(placement, asset);
+    const display = placement.layer === 'collision'
+      ? this.createCollisionOverlay(placement, asset)
+      : await this.createVisualDisplay(placement, asset);
 
     this.displays.set(placement.id, display);
     this.layer.addChild(display);
+  }
+
+  private async createVisualDisplay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Promise<PlacedDisplay> {
+    const texture = await this.loadTexture(asset.url);
+    return texture
+      ? this.createSprite(placement, asset, texture)
+      : this.createFallbackTile(placement, asset);
+  }
+
+  private createCollisionOverlay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Graphics {
+    const overlay = new Graphics();
+    const scale = normalizePlacementScale(placement.scale);
+    const width = (placement.sourceRect?.width ?? asset.tileWidth ?? this.state.gridSize) * scale;
+    const height = (placement.sourceRect?.height ?? asset.tileHeight ?? this.state.gridSize) * scale;
+
+    overlay.label = `editor-collision:${placement.id}`;
+    overlay.x = placement.x;
+    overlay.y = placement.y;
+    overlay.zIndex = layerZIndex('collision');
+    overlay
+      .rect(0, 0, width, height)
+      .fill({ color: 0xef476f, alpha: 0.36 })
+      .rect(0, 0, width, height)
+      .stroke({ color: 0xff2d55, alpha: 0.9, width: 1 });
+
+    return overlay;
   }
 
   private createSprite(
@@ -202,6 +224,7 @@ export class TilePlacementSystem {
     sprite.x = placement.x;
     sprite.y = placement.y;
     sprite.roundPixels = true;
+    sprite.alpha = 1;
 
     const baseWidth = placement.sourceRect?.width ?? asset.tileWidth ?? sourceTexture.width;
     const baseHeight = placement.sourceRect?.height ?? asset.tileHeight ?? sourceTexture.height;
@@ -228,7 +251,7 @@ export class TilePlacementSystem {
 
     tile
       .rect(0, 0, width, height)
-      .fill({ color: fallbackColor(asset.categoryId), alpha: 0.72 })
+      .fill({ color: fallbackColor(asset.categoryId), alpha: 1 })
       .rect(0, 0, width, height)
       .stroke({ color: 0xffd166, alpha: 0.95, width: 1 });
 
