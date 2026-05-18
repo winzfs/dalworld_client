@@ -6,7 +6,7 @@ import type {
   PublicGameplayConfig,
   WorldInfo,
 } from '../../protocol/messages';
-import { getCollisionPlacements } from '../../worldMap/runtimeMapStore';
+import { getRuntimeWorldMap, getCollisionPlacements } from '../../worldMap/runtimeMapStore';
 
 export type ClientMovementContext = {
   player: PlayerSnapshot | null;
@@ -47,19 +47,20 @@ export class ClientMovementSystem {
       context.monsters,
     );
 
-    const nextX = clamp(player.x + delta.x, radius, context.world.width - radius);
-    const nextY = clamp(player.y + delta.y, radius, context.world.height - radius);
+    const bounds = getMovementBounds(context.world, radius);
+    const nextX = clamp(player.x + delta.x, bounds.minX, bounds.maxX);
+    const nextY = clamp(player.y + delta.y, bounds.minY, bounds.maxY);
 
     if (canPlayerMoveFromTo(player.x, player.y, nextX, nextY, radius, context.monsters)) {
       player.x = nextX;
       player.y = nextY;
     } else {
-      const axisX = clamp(player.x + delta.x, radius, context.world.width - radius);
+      const axisX = clamp(player.x + delta.x, bounds.minX, bounds.maxX);
       if (canPlayerMoveFromTo(player.x, player.y, axisX, player.y, radius, context.monsters)) {
         player.x = axisX;
       }
 
-      const axisY = clamp(player.y + delta.y, radius, context.world.height - radius);
+      const axisY = clamp(player.y + delta.y, bounds.minY, bounds.maxY);
       if (canPlayerMoveFromTo(player.x, player.y, player.x, axisY, radius, context.monsters)) {
         player.y = axisY;
       }
@@ -68,6 +69,25 @@ export class ClientMovementSystem {
     player.facing = context.facing;
     return true;
   }
+}
+
+function getMovementBounds(world: WorldInfo, radius: number): { minX: number; minY: number; maxX: number; maxY: number } {
+  const runtimeMap = getRuntimeWorldMap();
+  if (!runtimeMap) {
+    return {
+      minX: radius,
+      minY: radius,
+      maxX: world.width - radius,
+      maxY: world.height - radius,
+    };
+  }
+
+  return {
+    minX: 0,
+    minY: 0,
+    maxX: runtimeMap.cellSize,
+    maxY: runtimeMap.cellSize,
+  };
 }
 
 function getMoveDirection(keys: MovementKeys): { x: number; y: number } | null {
