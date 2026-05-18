@@ -64,6 +64,25 @@ export class WorldMapGrid {
     this.emit();
   }
 
+  deleteCell(gridX: number, gridY: number): void {
+    const id = cellId(gridX, gridY);
+    const isOrigin = id === cellId(0, 0);
+
+    if (!isOrigin) {
+      this.draft.cells = this.draft.cells.filter((cell) => cellId(cell.gridX, cell.gridY) !== id);
+    }
+
+    if (isOrigin || this.draft.cells.length === 0) {
+      this.draft.cells = [createCell(0, 0)];
+      this.draft.current = { gridX: 0, gridY: 0 };
+    } else if (this.draft.current.gridX === gridX && this.draft.current.gridY === gridY) {
+      this.draft.current = { gridX: 0, gridY: 0 };
+      this.ensureCell(0, 0);
+    }
+
+    this.emit();
+  }
+
   createNeighbor(dx: number, dy: number): EditorMapCell {
     const nextX = this.draft.current.gridX + dx;
     const nextY = this.draft.current.gridY + dy;
