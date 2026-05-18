@@ -25,6 +25,8 @@ export type EditorTilePlacement = {
   x: number;
   y: number;
   layer: EditorLayerId;
+  /** Scale captured when this object was placed. Existing placements do not change when brush scale changes. */
+  scale: number;
 };
 
 export type EditorMapDraft = {
