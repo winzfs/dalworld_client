@@ -1,5 +1,16 @@
 export type WorldMapLayerId = 'ground' | 'object' | 'collision';
 
+export type WorldMapResourceType = 'tree' | 'stone';
+
+export type WorldMapPlacementGameplay =
+  | {
+      kind: 'resource';
+      resourceType: WorldMapResourceType;
+      blocksMovement?: boolean;
+      maxHp?: number;
+      respawnMs?: number;
+    };
+
 export type WorldMapSourceRect = {
   x: number;
   y: number;
@@ -19,6 +30,7 @@ export type WorldMapPlacement = {
   sourceRect?: WorldMapSourceRect;
   solidColor?: number;
   transparentBlack?: boolean;
+  gameplay?: WorldMapPlacementGameplay;
 };
 
 export type WorldMapCell = {
