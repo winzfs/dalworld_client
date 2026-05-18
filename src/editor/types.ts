@@ -86,4 +86,4 @@ export type EditorWorldSave = {
   cells: EditorWorldCellDraft[];
 };
 
-export type EditorToolMode = 'paint' | 'erase';
+export type EditorToolMode = 'paint' | 'erase' | 'picker';
