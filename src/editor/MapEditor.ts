@@ -52,6 +52,11 @@ export class MapEditor {
   private readonly pointerDownHandler = (event: PointerEvent) => {
     if (!this.canPaintFromEvent(event)) return;
 
+    if (this.state.mode === 'picker') {
+      this.pickBrushFromPointerEvent(event);
+      return;
+    }
+
     this.paintingPointerId = event.pointerId;
     this.lastPaintKey = null;
     this.options.app.canvas.setPointerCapture(event.pointerId);
@@ -220,6 +225,40 @@ export class MapEditor {
 
     this.lastPaintKey = paintKey;
     void this.placement.placeAt(worldPoint.x, worldPoint.y);
+  }
+
+  private pickBrushFromPointerEvent(event: PointerEvent): void {
+    const worldPoint = this.screenToWorld(event.clientX, event.clientY);
+    const picked = this.placement.pickAt(worldPoint.x, worldPoint.y);
+    if (!picked) return;
+
+    this.applyPickedPlacement(picked);
+  }
+
+  private applyPickedPlacement(placement: EditorTilePlacement): void {
+    if (placement.layer === 'collision') {
+      this.state.setLayer('collision');
+      this.state.setBrushScale(1);
+      this.state.setTransparentBlack(false);
+      this.state.setMode('paint');
+      return;
+    }
+
+    const asset: EditorTilesetAsset = {
+      id: placement.assetId,
+      name: placement.assetId,
+      categoryId: placement.categoryId,
+      url: placement.assetUrl,
+      solidColor: placement.solidColor,
+    };
+
+    this.state.setLayer(placement.layer);
+    this.state.setBrushScale(placement.scale);
+    this.state.setTransparentBlack(placement.transparentBlack === true);
+    this.state.setBrush({
+      asset,
+      sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
+    });
   }
 
   private async selectWorldCell(
