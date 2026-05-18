@@ -2,7 +2,6 @@ import { Application, Container, Graphics } from 'pixi.js';
 import { GameNetwork, getDefaultWebSocketUrl, type NetworkStatus } from '../net/network';
 import type {
   MonsterSnapshot,
-  MovementKeys,
   PlayerSnapshot,
   PublicGameplayConfig,
   ResourceSnapshot,
@@ -16,16 +15,13 @@ import { ResourceRenderer } from '../render/ResourceRenderer';
 import { MonsterRenderer } from '../render/MonsterRenderer';
 import { MobileControls } from '../render/MobileControls';
 import { ProceduralMeadowRenderer } from '../render/ProceduralMeadowRenderer';
-import { getMonsterConfig } from '../assets/monsters';
 import { GameHud } from '../ui/GameHud';
 import { GameWindows } from '../ui/GameWindows';
+import { ClientMovementSystem } from './systems/ClientMovementSystem';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, playerSpeed: 220, gatherRange: 80 };
-
-type MoveDelta = { x: number; y: number };
-type CollisionCircle = { x: number; y: number; radius: number };
 
 export class GameApp {
   private readonly app = new Application();
@@ -39,6 +35,7 @@ export class GameApp {
   private readonly playerRenderer: PlayerRenderer;
   private readonly resourceRenderer: ResourceRenderer;
   private readonly monsterRenderer: MonsterRenderer;
+  private readonly movementSystem = new ClientMovementSystem();
   private meadowRenderer: ProceduralMeadowRenderer | null = null;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
@@ -116,6 +113,7 @@ export class GameApp {
       player: me,
       latencyMs: this.network.latencyMs,
     });
+
     this.windows.renderInventory(me?.inventory ?? null);
   }
 
@@ -125,100 +123,19 @@ export class GameApp {
 
     this.localPlayer = me;
 
-    const direction = getMoveDirection(this.input.state.keys);
-
-    if (direction) {
-      const radius = this.gameplayConfig.playerRadius;
-      const speed = this.gameplayConfig.playerSpeed;
-      let delta: MoveDelta = {
-        x: direction.x * speed * dt,
-        y: direction.y * speed * dt,
-      };
-
-      delta = this.resolveMonsterSlideDelta(me.x, me.y, delta, radius);
-
-      const nextX = clamp(me.x + delta.x, radius, this.worldInfo.width - radius);
-      const nextY = clamp(me.y + delta.y, radius, this.worldInfo.height - radius);
-
-      if (this.canPlayerMoveFromTo(me.x, me.y, nextX, nextY, radius)) {
-        me.x = nextX;
-        me.y = nextY;
-      } else {
-        const axisX = clamp(me.x + delta.x, radius, this.worldInfo.width - radius);
-        if (this.canPlayerMoveFromTo(me.x, me.y, axisX, me.y, radius)) me.x = axisX;
-
-        const axisY = clamp(me.y + delta.y, radius, this.worldInfo.height - radius);
-        if (this.canPlayerMoveFromTo(me.x, me.y, me.x, axisY, radius)) me.y = axisY;
-      }
-
-      me.facing = this.input.state.facing;
-    }
+    this.movementSystem.update(
+      {
+        player: me,
+        keys: this.input.state.keys,
+        facing: this.input.state.facing,
+        monsters: this.latestMonsters,
+        world: this.worldInfo,
+        gameplay: this.gameplayConfig,
+      },
+      dt,
+    );
 
     this.playerRenderer.sync(this.latestPlayers, this.myPlayerId);
-  }
-
-  private resolveMonsterSlideDelta(
-    currentX: number,
-    currentY: number,
-    delta: MoveDelta,
-    playerRadius: number,
-  ): MoveDelta {
-    let resolved = delta;
-
-    for (const monster of this.latestMonsters) {
-      const circle = getMonsterCollisionCircle(monster);
-      const minDistance = playerRadius + circle.radius;
-      const nextX = currentX + resolved.x;
-      const nextY = currentY + resolved.y;
-      const nextDistanceSq = squaredDistance(nextX, nextY, circle.x, circle.y);
-
-      if (nextDistanceSq >= minDistance * minDistance) continue;
-
-      const normalX = currentX - circle.x;
-      const normalY = currentY - circle.y;
-      const normalLength = Math.hypot(normalX, normalY);
-
-      if (normalLength <= 0.0001) continue;
-
-      const nx = normalX / normalLength;
-      const ny = normalY / normalLength;
-      const intoObstacle = resolved.x * -nx + resolved.y * -ny;
-
-      if (intoObstacle <= 0) continue;
-
-      resolved = {
-        x: resolved.x + nx * intoObstacle,
-        y: resolved.y + ny * intoObstacle,
-      };
-    }
-
-    return resolved;
-  }
-
-  private canPlayerMoveFromTo(
-    currentX: number,
-    currentY: number,
-    nextX: number,
-    nextY: number,
-    playerRadius: number,
-  ): boolean {
-    for (const monster of this.latestMonsters) {
-      const circle = getMonsterCollisionCircle(monster);
-      const minDistance = playerRadius + circle.radius;
-      const minDistanceSq = minDistance * minDistance;
-      const currentDistanceSq = squaredDistance(currentX, currentY, circle.x, circle.y);
-      const nextDistanceSq = squaredDistance(nextX, nextY, circle.x, circle.y);
-
-      if (nextDistanceSq >= minDistanceSq) continue;
-
-      // 이미 충돌체 안에 들어간 상태에서는 완전히 빠져나오기 전이라도
-      // 몬스터와의 거리가 증가하는 이동은 허용해야 조작 불능이 생기지 않는다.
-      if (currentDistanceSq < minDistanceSq && nextDistanceSq > currentDistanceSq) continue;
-
-      return false;
-    }
-
-    return true;
   }
 
   private sendInputIfDue(dt: number): void {
@@ -246,7 +163,6 @@ export class GameApp {
     if (!this.input.consumeGather()) return;
 
     const me = this.findMe();
-
     if (!me) return;
 
     const target = this.resourceRenderer.getClosestAlive(
@@ -319,7 +235,10 @@ export class GameApp {
     if (!this.myPlayerId || !this.localPlayer) {
       const serverMe = this.myPlayerId ? players.find((player) => player.id === this.myPlayerId) : null;
       this.localPlayer = serverMe ? { ...serverMe } : null;
-      return players.map((player) => (player.id === this.myPlayerId && this.localPlayer ? this.localPlayer : player));
+
+      return players.map((player) => (
+        player.id === this.myPlayerId && this.localPlayer ? this.localPlayer : player
+      ));
     }
 
     return players.map((player) => {
@@ -370,38 +289,4 @@ export class GameApp {
         .stroke({ color: 0x2c4a55, width: 1 });
     }
   }
-}
-
-function getMoveDirection(keys: MovementKeys): { x: number; y: number } | null {
-  let x = 0;
-  let y = 0;
-
-  if (keys.left) x -= 1;
-  if (keys.right) x += 1;
-  if (keys.up) y -= 1;
-  if (keys.down) y += 1;
-
-  if (x === 0 && y === 0) return null;
-
-  const length = Math.hypot(x, y) || 1;
-  return { x: x / length, y: y / length };
-}
-
-function getMonsterCollisionCircle(monster: MonsterSnapshot): CollisionCircle {
-  const collision = getMonsterConfig(monster.type).collision;
-  return {
-    x: monster.x + collision.offsetX,
-    y: monster.y + collision.offsetY,
-    radius: collision.radius,
-  };
-}
-
-function squaredDistance(ax: number, ay: number, bx: number, by: number): number {
-  const dx = ax - bx;
-  const dy = ay - by;
-  return dx * dx + dy * dy;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
