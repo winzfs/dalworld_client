@@ -35,6 +35,7 @@ export class GameApp {
   private worldInfo: WorldInfo = DEFAULT_WORLD;
   private gameplayConfig: PublicGameplayConfig = DEFAULT_GAMEPLAY;
   private myPlayerId: string | null = null;
+  private localPlayer: PlayerSnapshot | null = null;
   private status: NetworkStatus = 'idle';
   private latestTick = 0;
   private latestPlayers: PlayerSnapshot[] = [];
@@ -119,18 +120,18 @@ export class GameApp {
     const me = this.findMe();
     if (!me) return;
 
+    this.localPlayer = me;
+
     const direction = getMoveDirection(this.input.state.keys);
-    if (!direction) {
-      this.playerRenderer.sync(this.latestPlayers, this.myPlayerId);
-      return;
+
+    if (direction) {
+      const radius = this.gameplayConfig.playerRadius;
+      const speed = this.gameplayConfig.playerSpeed;
+
+      me.x = clamp(me.x + direction.x * speed * dt, radius, this.worldInfo.width - radius);
+      me.y = clamp(me.y + direction.y * speed * dt, radius, this.worldInfo.height - radius);
+      me.facing = this.input.state.facing;
     }
-
-    const radius = this.gameplayConfig.playerRadius;
-    const speed = this.gameplayConfig.playerSpeed;
-
-    me.x = clamp(me.x + direction.x * speed * dt, radius, this.worldInfo.width - radius);
-    me.y = clamp(me.y + direction.y * speed * dt, radius, this.worldInfo.height - radius);
-    me.facing = this.input.state.facing;
 
     this.playerRenderer.sync(this.latestPlayers, this.myPlayerId);
   }
@@ -187,14 +188,15 @@ export class GameApp {
         this.drawWorldBackground();
         return;
 
-      case 'snapshot':
+      case 'snapshot': {
         this.latestTick = message.tick;
-        this.latestPlayers = message.players;
+        this.latestPlayers = this.mergeServerPlayers(message.players);
         this.latestResources = message.resources;
-        this.playerRenderer.sync(message.players, this.myPlayerId);
+        this.playerRenderer.sync(this.latestPlayers, this.myPlayerId);
         this.resourceRenderer.sync(message.resources);
         this.monsterRenderer.sync(message.monsters);
         return;
+      }
 
       case 'event':
         return;
@@ -202,6 +204,27 @@ export class GameApp {
       case 'pong':
         return;
     }
+  }
+
+  private mergeServerPlayers(players: PlayerSnapshot[]): PlayerSnapshot[] {
+    if (!this.myPlayerId || !this.localPlayer) {
+      const serverMe = this.myPlayerId ? players.find((player) => player.id === this.myPlayerId) : null;
+      this.localPlayer = serverMe ? { ...serverMe } : null;
+      return players.map((player) => (player.id === this.myPlayerId && this.localPlayer ? this.localPlayer : player));
+    }
+
+    return players.map((player) => {
+      if (player.id !== this.myPlayerId) return player;
+
+      this.localPlayer = {
+        ...player,
+        x: this.localPlayer?.x ?? player.x,
+        y: this.localPlayer?.y ?? player.y,
+        facing: this.input.state.facing,
+      };
+
+      return this.localPlayer;
+    });
   }
 
   private findMe(): PlayerSnapshot | null {
