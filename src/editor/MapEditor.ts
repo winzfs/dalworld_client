@@ -28,10 +28,6 @@ export type WorldCellTransition = {
 
 const DIRECT_SELECT_MAX_SIZE = 96;
 
-/**
- * High-level editor orchestration.
- * Keeps editor UI, state and placement wiring out of GameApp.
- */
 export class MapEditor {
   readonly state = new EditorState();
   readonly placement: TilePlacementSystem;
@@ -65,17 +61,21 @@ export class MapEditor {
     this.uiRoot = options.uiRoot ?? document.body;
     this.storage = new MapStorage(mapName);
     this.worldMapGrid = new WorldMapGrid({ cellSize: this.worldWidth });
+
     this.placement = new TilePlacementSystem(this.state, {
       tileSize: options.tileSize ?? 32,
       mapName: this.getCellMapName(0, 0),
     });
-    this.cellDrafts.set(cellKey(0, 0), this.placement.mapDraft);
+
+    this.cellDrafts.set(cellKey(0, 0), this.createCellDraft(0, 0));
+
     this.picker = new TilePickerWindow({
       defaultGridSize: options.tileSize ?? 32,
       onPick: (asset, sourceRect) => {
         this.state.setSourceRect(asset, sourceRect);
       },
     });
+
     this.worldMapPanel = new WorldMapPanel({
       grid: this.worldMapGrid,
       onSelectCell: (gridX, gridY) => {
@@ -85,6 +85,7 @@ export class MapEditor {
         });
       },
     });
+
     this.panel = new TilesetPanel(this.state, {
       onSave: () => this.save(),
       onLoad: () => {
@@ -139,15 +140,16 @@ export class MapEditor {
     if (transition.dx === 0 && transition.dy === 0) return;
 
     this.transitioning = true;
+
     const current = this.worldMapGrid.current;
     const nextX = current.gridX + transition.dx;
     const nextY = current.gridY + transition.dy;
 
-    this.worldMapGrid.selectCell(nextX, nextY);
     await this.selectWorldCell(nextX, nextY, {
       targetX: transition.targetX,
       targetY: transition.targetY,
     });
+
     this.transitioning = false;
   }
 
@@ -156,19 +158,32 @@ export class MapEditor {
     gridY: number,
     cameraTarget: { targetX: number; targetY: number },
   ): Promise<void> {
-    this.persistCurrentCellDraft();
+    const previous = this.worldMapGrid.current;
+
+    this.cellDrafts.set(cellKey(previous.gridX, previous.gridY), {
+      ...this.placement.mapDraft,
+      name: this.getCellMapName(previous.gridX, previous.gridY),
+      worldMap: this.worldMapGrid.snapshot,
+    });
+
+    this.worldMapGrid.selectCell(gridX, gridY);
 
     const key = cellKey(gridX, gridY);
     const draft = this.cellDrafts.get(key) ?? this.createCellDraft(gridX, gridY);
+
     this.cellDrafts.set(key, draft);
 
     await this.placement.replaceDraft(draft);
-    this.options.onMoveCameraTo?.(cameraTarget.targetX, cameraTarget.targetY);
-    console.info(`[MapEditor] Selected world cell ${gridX},${gridY}`);
+
+    this.options.onMoveCameraTo?.(
+      cameraTarget.targetX,
+      cameraTarget.targetY,
+    );
   }
 
   private persistCurrentCellDraft(): void {
     const current = this.worldMapGrid.current;
+
     this.cellDrafts.set(cellKey(current.gridX, current.gridY), {
       ...this.placement.mapDraft,
       name: this.getCellMapName(current.gridX, current.gridY),
@@ -193,6 +208,7 @@ export class MapEditor {
 
   private pickAsset(asset: EditorTilesetAsset): void {
     this.state.selectAsset(asset);
+
     void this.shouldOpenPicker(asset).then((openPicker) => {
       if (openPicker) {
         this.picker.open(asset);
@@ -210,7 +226,7 @@ export class MapEditor {
   }
 
   private async fillAll(): Promise<void> {
-    const ok = window.confirm('현재 선택한 타일로 맵 전체를 채울까요? 같은 레이어의 기존 타일은 겹치는 위치에서 교체됩니다.');
+    const ok = window.confirm('현재 선택한 타일로 맵 전체를 채울까요?');
     if (!ok) return;
 
     await this.placement.fillAll({
@@ -232,29 +248,33 @@ export class MapEditor {
 
   private save(): void {
     this.persistCurrentCellDraft();
+
     this.storage.save({
       ...this.placement.mapDraft,
       worldMap: this.worldMapGrid.snapshot,
     });
-    console.info('[MapEditor] Saved map draft.', this.placement.mapDraft);
   }
 
   private async load(): Promise<void> {
     const draft = this.storage.load();
-    if (!draft) {
-      console.warn('[MapEditor] No saved map draft found.');
-      return;
-    }
+    if (!draft) return;
 
     this.worldMapGrid.load(draft.worldMap);
     this.cellDrafts.clear();
-    this.cellDrafts.set(cellKey(this.worldMapGrid.current.gridX, this.worldMapGrid.current.gridY), draft);
+
+    const current = this.worldMapGrid.current;
+
+    this.cellDrafts.set(
+      cellKey(current.gridX, current.gridY),
+      draft,
+    );
+
     await this.placement.loadDraft(draft);
-    console.info('[MapEditor] Loaded map draft.', draft);
   }
 
   private exportJson(): void {
     this.persistCurrentCellDraft();
+
     this.storage.downloadJson({
       ...this.placement.mapDraft,
       worldMap: this.worldMapGrid.snapshot,
@@ -262,8 +282,9 @@ export class MapEditor {
   }
 
   private clearAll(): void {
-    const ok = window.confirm('현재 배치된 타일을 전부 삭제할까요? 저장 버튼을 누르기 전까지 저장본은 유지됩니다.');
+    const ok = window.confirm('현재 배치된 타일을 전부 삭제할까요?');
     if (!ok) return;
+
     this.placement.clear();
     this.persistCurrentCellDraft();
   }
@@ -292,7 +313,12 @@ function isEditorUiTarget(target: EventTarget | null): boolean {
 function loadImageSize(url: string): Promise<{ width: number; height: number } | null> {
   return new Promise((resolve) => {
     const image = new Image();
-    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+
+    image.onload = () => resolve({
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    });
+
     image.onerror = () => resolve(null);
     image.src = url;
   });
