@@ -3,6 +3,7 @@ import { GameNetwork, getDefaultWebSocketUrl, type NetworkStatus } from '../net/
 import type {
   PlayerSnapshot,
   PublicGameplayConfig,
+  ResourceSnapshot,
   WorldInfo,
 } from '../protocol/messages';
 import { InputController } from './InputController';
@@ -26,6 +27,7 @@ import { RuntimeCellTransitionController } from './systems/RuntimeCellTransition
 import { MapEditor } from '../editor/MapEditor';
 import { EditorCameraSystem } from '../editor/EditorCameraSystem';
 import { EditorMinimap } from '../editor/EditorMinimap';
+import { getActiveCell } from '../worldMap/activeCellStore';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -276,13 +278,21 @@ export class GameApp {
     if (!me) return;
 
     const target = this.resourceRenderer.getClosestAlive(
-      this.snapshotSystem.snapshot.resources,
+      this.getCurrentCellResources(),
       me.x,
       me.y,
       this.gameplayConfig.gatherRange,
     );
 
     this.inputSendSystem.sendGather(target?.id);
+  }
+
+  private getCurrentCellResources(): ResourceSnapshot[] {
+    const active = getActiveCell();
+    return this.snapshotSystem.snapshot.resources.filter((resource) => (
+      resource.cellX === active.gridX &&
+      resource.cellY === active.gridY
+    ));
   }
 
   private async loadWorldMap(): Promise<void> {
