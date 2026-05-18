@@ -5,12 +5,19 @@ import { FEMALE_ADVENTURER, type FemaleAdventurerAnim } from '../assets/femaleAd
 import { loadSpriteStrip } from './spriteStrip';
 
 const REQUIRED_ANIMS: FemaleAdventurerAnim[] = ['idle', 'walk'];
+const PLAYER_SHADOW_SOURCES = [
+  '/assets/tilesets/fantasy/Art/Shadows/Shadow_Round_48x24_Medium_Black.png',
+  '/assets/tilesets/fantasy/Art/Shadow/Shadow_Round_48x24_Medium_Black.png',
+  '/assets/tilesets/fantasy/Art/shadows/Shadow_Round_48x24_Medium_Black.png',
+  '/assets/tilesets/fantasy/Art/Shadows/Shadow_Round_40x40_Flat_Black.png',
+];
 
 type View = {
   c: Container;
   hp: Graphics;
   ring: Graphics;
   fallback: Graphics;
+  shadow: Sprite | Graphics;
   sprite: Sprite | null;
   facing: Facing;
   local: boolean;
@@ -29,6 +36,7 @@ export class PlayerRenderer {
   private readonly layer = new Container();
   private readonly views = new Map<string, View>();
   private frames: Frames | null = null;
+  private shadowTexture: Texture | null = null;
 
   constructor(parent: Container) {
     parent.addChild(this.layer);
@@ -102,6 +110,8 @@ export class PlayerRenderer {
   }
 
   private async load(): Promise<void> {
+    this.shadowTexture = await loadFirstTexture(PLAYER_SHADOW_SOURCES);
+
     const frames: Frames = {};
 
     for (const anim of REQUIRED_ANIMS) {
@@ -124,6 +134,7 @@ export class PlayerRenderer {
     this.frames = frames;
 
     for (const v of this.views.values()) {
+      this.applyShadowTexture(v);
       v.frame = -1;
       v.currentAnim = null;
       this.apply(v);
@@ -137,9 +148,10 @@ export class PlayerRenderer {
       .stroke({ color: 0xffd166, width: 2, alpha: 0.9 });
     const fallback = new Graphics();
     const hp = new Graphics();
+    const shadow = this.makeShadow();
 
     ring.visible = local;
-    c.addChild(fallback, ring, hp);
+    c.addChild(shadow, fallback, ring, hp);
     c.position.set(p.x, p.y);
     this.layer.addChild(c);
 
@@ -148,6 +160,7 @@ export class PlayerRenderer {
       hp,
       ring,
       fallback,
+      shadow,
       sprite: null,
       facing: p.facing,
       local,
@@ -163,6 +176,37 @@ export class PlayerRenderer {
     this.drawFallback(v);
     this.apply(v);
     return v;
+  }
+
+  private makeShadow(): Sprite | Graphics {
+    if (this.shadowTexture) {
+      const shadow = new Sprite(this.shadowTexture);
+      shadow.anchor.set(0.5, 0.5);
+      shadow.position.set(0, 0);
+      shadow.scale.set(1.7, 0.9);
+      shadow.alpha = 0.42;
+      return shadow;
+    }
+
+    return new Graphics()
+      .ellipse(0, 2, 23, 10)
+      .fill({ color: 0x000000, alpha: 0.28 });
+  }
+
+  private applyShadowTexture(v: View): void {
+    if (!this.shadowTexture || v.shadow instanceof Sprite) return;
+
+    const sprite = new Sprite(this.shadowTexture);
+    sprite.anchor.set(0.5, 0.5);
+    sprite.position.set(0, 0);
+    sprite.scale.set(1.7, 0.9);
+    sprite.alpha = 0.42;
+
+    const index = v.c.getChildIndex(v.shadow);
+    v.c.removeChild(v.shadow);
+    v.shadow.destroy();
+    v.shadow = sprite;
+    v.c.addChildAt(sprite, index);
   }
 
   private apply(v: View): void {
@@ -181,7 +225,7 @@ export class PlayerRenderer {
       v.sprite = new Sprite(tex);
       v.sprite.anchor.set(FEMALE_ADVENTURER.anchor.x, FEMALE_ADVENTURER.anchor.y);
       v.sprite.scale.set(FEMALE_ADVENTURER.scale);
-      v.c.addChildAt(v.sprite, 1);
+      v.c.addChildAt(v.sprite, 2);
     } else {
       v.sprite.texture = tex;
       v.sprite.visible = true;
@@ -211,4 +255,29 @@ export class PlayerRenderer {
     g.rect(-width / 2 - 2, -76, width + 4, 7).fill({ color: 0x222831 });
     g.rect(-width / 2, -74, width * ratio, 3).fill({ color: 0xef476f });
   }
+}
+
+async function loadFirstTexture(srcs: string[]): Promise<Texture | null> {
+  for (const src of srcs) {
+    try {
+      const texture = await loadTexture(src);
+      texture.source.scaleMode = 'nearest';
+      return texture;
+    } catch {
+      // Try next compatible path candidate.
+    }
+  }
+
+  console.warn('Failed to load player shadow texture. Using vector fallback shadow.');
+  return null;
+}
+
+function loadTexture(src: string): Promise<Texture> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.decoding = 'async';
+    image.onload = () => resolve(Texture.from(image));
+    image.onerror = () => reject(new Error(`Failed to load texture: ${src}`));
+    image.src = src;
+  });
 }
