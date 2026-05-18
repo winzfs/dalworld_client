@@ -1,4 +1,5 @@
 import type { ServerToClientMessage, WorldInfo, PublicGameplayConfig } from '../../protocol/messages';
+import { PROTOCOL_VERSION } from '../../protocol/version';
 import type { InputState } from '../InputController';
 import type { SnapshotSystem } from './SnapshotSystem';
 import type { CameraSystem } from './CameraSystem';
@@ -49,6 +50,13 @@ export class ServerMessageRouter {
   }
 
   private handleWelcome(message: Extract<ServerToClientMessage, { type: 'welcome' }>): void {
+    if (message.protocolVersion !== undefined && message.protocolVersion !== PROTOCOL_VERSION) {
+      console.warn('[Protocol] Client/server protocol version mismatch.', {
+        client: PROTOCOL_VERSION,
+        server: message.protocolVersion,
+      });
+    }
+
     this.context.setMyPlayerId(message.playerId);
     this.context.setWorldInfo(message.world);
     this.context.setGameplayConfig(message.gameplay);
