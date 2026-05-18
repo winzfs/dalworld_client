@@ -42,6 +42,8 @@ export type ResourceSnapshot = {
   type: ResourceType;
   x: number;
   y: number;
+  cellX: number;
+  cellY: number;
   hp: number;
   maxHp: number;
   /** 0 if alive, otherwise epoch ms when it will respawn */
