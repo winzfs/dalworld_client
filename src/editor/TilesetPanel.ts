@@ -10,6 +10,7 @@ export type TilesetPanelActions = {
   onPickAsset: (asset: EditorTilesetAsset) => void;
   onFillAll: () => void;
   onRandomFill: (chancePercent: number) => void;
+  onToggleWorldMap: () => void;
 };
 
 export class TilesetPanel {
@@ -130,8 +131,9 @@ export class TilesetPanel {
 
     const paintButton = this.createModeButton('배치', 'paint');
     const eraseButton = this.createModeButton('삭제', 'erase');
+    const worldMapButton = this.createActionButton('월드맵', this.actions.onToggleWorldMap);
 
-    this.toolContainer.append(paintButton, eraseButton);
+    this.toolContainer.append(paintButton, eraseButton, worldMapButton);
   }
 
   private renderFillControls(): void {
