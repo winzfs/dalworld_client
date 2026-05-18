@@ -7,7 +7,7 @@ import { TilePickerWindow } from './TilePickerWindow';
 import { WorldMapGrid } from './WorldMapGrid';
 import { WorldMapPanel } from './WorldMapPanel';
 import { EditorGridOverlay } from './EditorGridOverlay';
-import type { EditorMapDraft, EditorTilesetAsset } from './types';
+import type { EditorMapDraft, EditorTilesetAsset, EditorWorldSave } from './types';
 
 export type MapEditorOptions = {
   app: Application;
@@ -259,9 +259,54 @@ export class MapEditor {
     return {
       version: 1,
       name: this.getCellMapName(gridX, gridY),
-      tileSize: this.options.tileSize ?? 32,
+      tileSize: this.state.gridSize,
       worldMap: this.worldMapGrid.snapshot,
       placements: [],
+    };
+  }
+
+  private createWorldSave(): EditorWorldSave {
+    this.persistCurrentCellDraft();
+
+    const worldMap = this.worldMapGrid.snapshot;
+    const seen = new Set<string>();
+    const cells: EditorWorldSave['cells'] = [];
+
+    for (const cell of worldMap.cells) {
+      const key = cellKey(cell.gridX, cell.gridY);
+      const draft = this.cellDrafts.get(key) ?? this.createCellDraft(cell.gridX, cell.gridY);
+      seen.add(key);
+      cells.push({
+        gridX: cell.gridX,
+        gridY: cell.gridY,
+        draft: {
+          ...draft,
+          name: this.getCellMapName(cell.gridX, cell.gridY),
+          worldMap,
+        },
+      });
+    }
+
+    for (const [key, draft] of this.cellDrafts) {
+      if (seen.has(key)) continue;
+      const [gridX, gridY] = parseCellKey(key);
+      cells.push({
+        gridX,
+        gridY,
+        draft: {
+          ...draft,
+          name: this.getCellMapName(gridX, gridY),
+          worldMap,
+        },
+      });
+    }
+
+    return {
+      version: 1,
+      name: this.options.mapName ?? 'dalworld-map',
+      tileSize: this.state.gridSize,
+      worldMap,
+      cells,
     };
   }
 
@@ -311,15 +356,33 @@ export class MapEditor {
   }
 
   private save(): void {
-    this.persistCurrentCellDraft();
-
+    const worldSave = this.createWorldSave();
+    this.storage.saveWorld(worldSave);
     this.storage.save({
       ...this.placement.mapDraft,
-      worldMap: this.worldMapGrid.snapshot,
+      worldMap: worldSave.worldMap,
     });
   }
 
   private async load(): Promise<void> {
+    const worldSave = this.storage.loadWorld();
+
+    if (worldSave) {
+      this.worldMapGrid.load(worldSave.worldMap);
+      this.cellDrafts.clear();
+
+      for (const cell of worldSave.cells) {
+        this.cellDrafts.set(cellKey(cell.gridX, cell.gridY), cell.draft);
+      }
+
+      const current = this.worldMapGrid.current;
+      const currentDraft = this.cellDrafts.get(cellKey(current.gridX, current.gridY))
+        ?? this.createCellDraft(current.gridX, current.gridY);
+
+      await this.placement.loadDraft(currentDraft);
+      return;
+    }
+
     const draft = this.storage.load();
     if (!draft) return;
 
@@ -337,12 +400,7 @@ export class MapEditor {
   }
 
   private exportJson(): void {
-    this.persistCurrentCellDraft();
-
-    this.storage.downloadJson({
-      ...this.placement.mapDraft,
-      worldMap: this.worldMapGrid.snapshot,
-    });
+    this.storage.downloadWorldJson(this.createWorldSave());
   }
 
   private clearAll(): void {
@@ -391,4 +449,9 @@ function loadImageSize(url: string): Promise<{ width: number; height: number } |
 
 function cellKey(gridX: number, gridY: number): string {
   return `${gridX}:${gridY}`;
+}
+
+function parseCellKey(key: string): [number, number] {
+  const [x, y] = key.split(':').map(Number);
+  return [Number.isFinite(x) ? x : 0, Number.isFinite(y) ? y : 0];
 }
