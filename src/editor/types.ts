@@ -43,10 +43,28 @@ export type EditorTilePlacement = {
   sourceRect?: EditorSourceRect;
 };
 
+export type EditorMapCoord = {
+  gridX: number;
+  gridY: number;
+};
+
+export type EditorMapCell = EditorMapCoord & {
+  id: string;
+  name: string;
+};
+
+export type EditorWorldMapDraft = {
+  version: 1;
+  cellSize: number;
+  current: EditorMapCoord;
+  cells: EditorMapCell[];
+};
+
 export type EditorMapDraft = {
   version: 1;
   name: string;
   tileSize: number;
+  worldMap?: EditorWorldMapDraft;
   placements: EditorTilePlacement[];
 };
 
