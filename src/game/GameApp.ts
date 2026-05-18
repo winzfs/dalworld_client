@@ -48,6 +48,7 @@ export class GameApp {
   private readonly mapEditor: MapEditor | null;
 
   private meadowRenderer: ProceduralMeadowRenderer | null = null;
+  private editorTransitioning = false;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
   private gameplayConfig: PublicGameplayConfig = DEFAULT_GAMEPLAY;
@@ -104,6 +105,7 @@ export class GameApp {
           mapName: 'dalworld-map',
           worldWidth: this.worldInfo.width,
           worldHeight: this.worldInfo.height,
+          onMoveCameraTo: (x, y) => this.editorCameraSystem.setPosition(x, y),
         })
       : null;
   }
@@ -144,13 +146,21 @@ export class GameApp {
   }
 
   private updateEditor(dt: number): void {
-    this.editorCameraSystem.update({
+    const transition = this.editorCameraSystem.update({
       input: this.input.state,
       world: this.worldInfo,
       screenWidth: this.app.renderer.width,
       screenHeight: this.app.renderer.height,
       dt,
     });
+
+    if (transition && this.mapEditor && !this.editorTransitioning) {
+      this.editorTransitioning = true;
+      void this.mapEditor.transitionWorldCell(transition).finally(() => {
+        this.editorCameraSystem.setPosition(transition.targetX, transition.targetY);
+        this.editorTransitioning = false;
+      });
+    }
   }
 
   private update(dt: number): void {
