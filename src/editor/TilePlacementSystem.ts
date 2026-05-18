@@ -66,6 +66,7 @@ export class TilePlacementSystem {
       x,
       y,
       layer: this.state.activeLayer,
+      scale: this.state.brushScale,
     };
 
     this.draft.placements.push(placement);
@@ -85,7 +86,10 @@ export class TilePlacementSystem {
   async loadDraft(draft: EditorMapDraft): Promise<void> {
     this.clear();
     this.draft.name = draft.name;
-    this.draft.placements.push(...draft.placements.map((placement) => ({ ...placement })));
+    this.draft.placements.push(...draft.placements.map((placement) => ({
+      ...placement,
+      scale: normalizePlacementScale(placement.scale),
+    })));
 
     for (const placement of this.draft.placements) {
       const asset = findAssetById(placement.assetId) ?? {
@@ -123,13 +127,14 @@ export class TilePlacementSystem {
     texture: Texture,
   ): Sprite {
     const sprite = new Sprite(texture);
+    const scale = normalizePlacementScale(placement.scale);
 
     sprite.label = `editor-tile:${placement.id}`;
     sprite.x = placement.x;
     sprite.y = placement.y;
 
-    sprite.width = asset.tileWidth ?? texture.width;
-    sprite.height = asset.tileHeight ?? texture.height;
+    sprite.width = (asset.tileWidth ?? texture.width) * scale;
+    sprite.height = (asset.tileHeight ?? texture.height) * scale;
 
     sprite.zIndex = layerZIndex(placement.layer);
 
@@ -138,13 +143,14 @@ export class TilePlacementSystem {
 
   private createFallbackTile(placement: EditorTilePlacement, asset: EditorTilesetAsset): Graphics {
     const tile = new Graphics();
+    const scale = normalizePlacementScale(placement.scale);
     tile.label = `editor-fallback-tile:${placement.id}`;
     tile.x = placement.x;
     tile.y = placement.y;
     tile.zIndex = layerZIndex(placement.layer);
 
-    const width = asset.tileWidth || this.draft.tileSize;
-    const height = asset.tileHeight || this.draft.tileSize;
+    const width = (asset.tileWidth || this.draft.tileSize) * scale;
+    const height = (asset.tileHeight || this.draft.tileSize) * scale;
 
     tile
       .rect(0, 0, width, height)
@@ -189,6 +195,11 @@ export class TilePlacementSystem {
 
 function snap(value: number, size: number): number {
   return Math.floor(value / size) * size;
+}
+
+function normalizePlacementScale(scale: number | undefined): number {
+  if (!Number.isFinite(scale)) return 1;
+  return Math.max(0.1, scale ?? 1);
 }
 
 function layerZIndex(layer: EditorTilePlacement['layer']): number {
