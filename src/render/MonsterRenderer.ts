@@ -29,6 +29,10 @@ type LoadedSpriteSheet = {
   frames: DirectionalFrames;
 };
 
+type SpriteMonsterConfig = MonsterRenderConfig & {
+  spriteSheet: MonsterSpriteSheetConfig;
+};
+
 export class MonsterRenderer {
   private readonly layer = new Container();
   private readonly views = new Map<string, MonsterView>();
@@ -94,12 +98,11 @@ export class MonsterRenderer {
   }
 
   private async loadConfiguredSpriteSheets(): Promise<void> {
-    const entries = Object.values(MONSTER_CONFIGS).filter((config) => config.spriteSheet);
+    const entries = Object.values(MONSTER_CONFIGS).filter(hasSpriteSheet);
 
     await Promise.all(
       entries.map(async (config) => {
         const sheetConfig = config.spriteSheet;
-        if (!sheetConfig) return;
 
         try {
           const frames = await loadDirectionalFrames(sheetConfig);
@@ -197,6 +200,10 @@ export class MonsterRenderer {
       .circle(0, 0, config.fallback.radius)
       .fill({ color: view.state === 'chase' ? config.fallback.chaseColor : config.fallback.idleColor });
   }
+}
+
+function hasSpriteSheet(config: MonsterRenderConfig): config is SpriteMonsterConfig {
+  return config.spriteSheet !== undefined;
 }
 
 async function loadDirectionalFrames(config: MonsterSpriteSheetConfig): Promise<DirectionalFrames> {
