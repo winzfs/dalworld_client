@@ -16,7 +16,15 @@ export type EditorCameraView = {
   zoom: number;
 };
 
+export type EditorCameraEdgeTransition = {
+  dx: -1 | 0 | 1;
+  dy: -1 | 0 | 1;
+  targetX: number;
+  targetY: number;
+};
+
 const EDITOR_CAMERA_SPEED = 980;
+const EDGE_TRANSFER_PADDING = 96;
 
 /**
  * Moves the map camera directly in editor mode using the same keyboard/joystick input as player movement.
@@ -52,7 +60,7 @@ export class EditorCameraSystem {
     };
   }
 
-  update(context: EditorCameraSystemContext): void {
+  update(context: EditorCameraSystemContext): EditorCameraEdgeTransition | null {
     this.world = context.world;
     this.screenWidth = context.screenWidth;
     this.screenHeight = context.screenHeight;
@@ -68,27 +76,75 @@ export class EditorCameraSystem {
     if (keys.up) dy -= 1;
     if (keys.down) dy += 1;
 
-    if (dx !== 0 || dy !== 0) {
-      const length = Math.hypot(dx, dy) || 1;
-      this.x += (dx / length) * EDITOR_CAMERA_SPEED * context.dt;
-      this.y += (dy / length) * EDITOR_CAMERA_SPEED * context.dt;
-      this.clampToVisibleBounds();
+    const transition = dx !== 0 || dy !== 0
+      ? this.moveAndDetectEdge(dx, dy, context.dt)
+      : null;
+
+    this.clampToVisibleBounds();
+    this.camera.follow(this.x, this.y, context.screenWidth, context.screenHeight);
+    return transition;
+  }
+
+  private moveAndDetectEdge(dx: number, dy: number, dt: number): EditorCameraEdgeTransition | null {
+    if (!this.world || this.x === null || this.y === null) return null;
+
+    const length = Math.hypot(dx, dy) || 1;
+    const nextX = this.x + (dx / length) * EDITOR_CAMERA_SPEED * dt;
+    const nextY = this.y + (dy / length) * EDITOR_CAMERA_SPEED * dt;
+    const bounds = this.getVisibleBounds();
+
+    let edgeX: -1 | 0 | 1 = 0;
+    let edgeY: -1 | 0 | 1 = 0;
+    let targetX = nextX;
+    let targetY = nextY;
+
+    if (nextX <= bounds.minX && dx < 0) {
+      edgeX = -1;
+      targetX = bounds.maxX - EDGE_TRANSFER_PADDING;
+    } else if (nextX >= bounds.maxX && dx > 0) {
+      edgeX = 1;
+      targetX = bounds.minX + EDGE_TRANSFER_PADDING;
     }
 
-    this.camera.follow(this.x, this.y, context.screenWidth, context.screenHeight);
+    if (nextY <= bounds.minY && dy < 0) {
+      edgeY = -1;
+      targetY = bounds.maxY - EDGE_TRANSFER_PADDING;
+    } else if (nextY >= bounds.maxY && dy > 0) {
+      edgeY = 1;
+      targetY = bounds.minY + EDGE_TRANSFER_PADDING;
+    }
+
+    this.x = nextX;
+    this.y = nextY;
+
+    if (edgeX === 0 && edgeY === 0) return null;
+
+    return {
+      dx: edgeX,
+      dy: edgeY,
+      targetX,
+      targetY,
+    };
   }
 
   private clampToVisibleBounds(): void {
     if (!this.world || this.x === null || this.y === null) return;
 
+    const bounds = this.getVisibleBounds();
+    this.x = Math.max(bounds.minX, Math.min(bounds.maxX, this.x));
+    this.y = Math.max(bounds.minY, Math.min(bounds.maxY, this.y));
+  }
+
+  private getVisibleBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
+    const world = this.world ?? { width: 1, height: 1 };
     const halfW = this.screenWidth / 2 / this.camera.zoom;
     const halfH = this.screenHeight / 2 / this.camera.zoom;
-    const minX = Math.min(halfW, this.world.width / 2);
-    const maxX = Math.max(this.world.width - halfW, this.world.width / 2);
-    const minY = Math.min(halfH, this.world.height / 2);
-    const maxY = Math.max(this.world.height - halfH, this.world.height / 2);
 
-    this.x = Math.max(minX, Math.min(maxX, this.x));
-    this.y = Math.max(minY, Math.min(maxY, this.y));
+    return {
+      minX: Math.min(halfW, world.width / 2),
+      maxX: Math.max(world.width - halfW, world.width / 2),
+      minY: Math.min(halfH, world.height / 2),
+      maxY: Math.max(world.height - halfH, world.height / 2),
+    };
   }
 }
