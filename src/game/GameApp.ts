@@ -21,6 +21,7 @@ import { SnapshotSystem } from './systems/SnapshotSystem';
 import { CameraSystem } from './systems/CameraSystem';
 import { HudSystem } from './systems/HudSystem';
 import { ServerMessageRouter } from './systems/ServerMessageRouter';
+import { CellTransitionSystem } from './systems/CellTransitionSystem';
 import { MapEditor } from '../editor/MapEditor';
 import { EditorCameraSystem } from '../editor/EditorCameraSystem';
 import { EditorMinimap } from '../editor/EditorMinimap';
@@ -50,6 +51,10 @@ export class GameApp {
   private readonly monsterRenderer: MonsterRenderer;
   private readonly worldMapRenderer: GameWorldMapRenderer;
   private readonly movementSystem = new ClientMovementSystem();
+  private readonly cellTransitionSystem = new CellTransitionSystem({
+    triggerPadding: CELL_TRANSFER_TRIGGER_PADDING,
+    spawnPadding: CELL_EDGE_PADDING,
+  });
   private readonly inputSendSystem: InputSendSystem;
   private readonly snapshotSystem = new SnapshotSystem();
   private readonly editorMode: boolean;
@@ -255,48 +260,31 @@ export class GameApp {
     if (!map || !me || this.cellTransitioning) return;
 
     const active = getActiveCell();
-    let nextGridX = active.gridX;
-    let nextGridY = active.gridY;
-    let nextX = me.x;
-    let nextY = me.y;
+    const transition = this.cellTransitionSystem.resolve({
+      map,
+      player: me,
+      activeCell: active,
+      hasCell: (gridX, gridY) => hasCell(map, gridX, gridY),
+    });
 
-    if (me.x >= map.cellSize - CELL_TRANSFER_TRIGGER_PADDING) {
-      nextGridX += 1;
-      nextX = CELL_EDGE_PADDING;
-    } else if (me.x <= CELL_TRANSFER_TRIGGER_PADDING) {
-      nextGridX -= 1;
-      nextX = map.cellSize - CELL_EDGE_PADDING;
-    }
+    if (!transition.changed) return;
 
-    if (me.y >= map.cellSize - CELL_TRANSFER_TRIGGER_PADDING) {
-      nextGridY += 1;
-      nextY = CELL_EDGE_PADDING;
-    } else if (me.y <= CELL_TRANSFER_TRIGGER_PADDING) {
-      nextGridY -= 1;
-      nextY = map.cellSize - CELL_EDGE_PADDING;
-    }
-
-    if (nextGridX === active.gridX && nextGridY === active.gridY) return;
-
-    const exists = hasCell(map, nextGridX, nextGridY);
-    console.info('[GameApp] Runtime cell transition check', {
+    console.info('[GameApp] Runtime cell transition', {
       active,
-      target: { gridX: nextGridX, gridY: nextGridY },
-      exists,
+      target: { gridX: transition.nextGridX, gridY: transition.nextGridY },
       player: { x: me.x, y: me.y },
+      spawn: { x: transition.nextX, y: transition.nextY },
       availableCells: map.cells.map((cell) => `${cell.gridX}:${cell.gridY}`),
     });
 
-    if (!exists) return;
-
     this.cellTransitioning = true;
-    setActiveCell(nextGridX, nextGridY);
+    setActiveCell(transition.nextGridX, transition.nextGridY);
     const transitionedPlayer: PlayerSnapshot = {
       ...me,
-      x: nextX,
-      y: nextY,
-      cellX: nextGridX,
-      cellY: nextGridY,
+      x: transition.nextX,
+      y: transition.nextY,
+      cellX: transition.nextGridX,
+      cellY: transition.nextGridY,
     };
     this.snapshotSystem.setLocalPlayer(transitionedPlayer);
 
