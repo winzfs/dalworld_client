@@ -112,7 +112,12 @@ export class EditorState {
   }
 
   toggleTransparentBlack(): void {
-    this.transparentBlack = !this.transparentBlack;
+    this.setTransparentBlack(!this.transparentBlack);
+  }
+
+  setTransparentBlack(enabled: boolean): void {
+    if (this.transparentBlack === enabled) return;
+    this.transparentBlack = enabled;
     this.emit();
   }
 
