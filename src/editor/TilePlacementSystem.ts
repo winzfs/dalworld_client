@@ -101,8 +101,10 @@ export class TilePlacementSystem {
     sprite.label = `editor-tile:${placement.id}`;
     sprite.x = placement.x;
     sprite.y = placement.y;
-    sprite.width = asset.tileWidth;
-    sprite.height = asset.tileHeight;
+
+    sprite.width = asset.tileWidth ?? texture.width;
+    sprite.height = asset.tileHeight ?? texture.height;
+
     sprite.zIndex = layerZIndex(placement.layer);
 
     return sprite;
