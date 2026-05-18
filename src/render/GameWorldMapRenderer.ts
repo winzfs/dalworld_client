@@ -1,10 +1,12 @@
 import { Assets, Container, Graphics, Rectangle, SCALE_MODES, Sprite, Texture, type Texture as PixiTexture } from 'pixi.js';
 import type { GameWorldMap, WorldMapPlacement, WorldMapSourceRect } from '../worldMap/types';
+import { createTransparentBlackTexture } from '../editor/createTransparentBlackTexture';
 
 export class GameWorldMapRenderer {
   readonly layer = new Container();
 
   private readonly textureCache = new Map<string, Promise<PixiTexture | null>>();
+  private readonly transparentTextureCache = new Map<string, Promise<PixiTexture | null>>();
   private readonly displays: Array<Sprite | Graphics> = [];
   private renderGeneration = 0;
 
@@ -31,6 +33,7 @@ export class GameWorldMapRenderer {
         y: placement.y + cell.gridY * map.cellSize,
       })))
       .filter((placement) => placement.layer !== 'collision')
+      .filter((placement) => placement.id !== 'editor-black-base')
       .sort((a, b) => getLayerZ(a.layer) - getLayerZ(b.layer));
 
     for (const placement of placements) {
@@ -41,7 +44,7 @@ export class GameWorldMapRenderer {
         return;
       }
 
-      display.zIndex = getLayerZ(placement.layer);
+      display.zIndex = getLayerZ(placement.layer) + (placement.transparentBlack ? 0.5 : 0);
       this.displays.push(display);
       this.layer.addChild(display);
     }
@@ -71,10 +74,15 @@ export class GameWorldMapRenderer {
       return this.createSolidTile(placement);
     }
 
-    const texture = await this.loadTexture(placement.assetUrl);
+    const texture = placement.transparentBlack
+      ? await this.loadTransparentTexture(placement.assetUrl, placement.sourceRect)
+      : await this.loadTexture(placement.assetUrl);
+
     if (!texture) return this.createFallbackTile(placement);
 
-    const sourceRect = placement.sourceRect ? shrinkSourceRect(placement.sourceRect, texture) : undefined;
+    const sourceRect = placement.transparentBlack
+      ? undefined
+      : placement.sourceRect ? shrinkSourceRect(placement.sourceRect, texture) : undefined;
     const sliced = sourceRect
       ? new Texture({ source: texture.source, frame: new Rectangle(sourceRect.x, sourceRect.y, sourceRect.width, sourceRect.height) })
       : texture;
@@ -126,6 +134,27 @@ export class GameWorldMapRenderer {
           return null;
         });
       this.textureCache.set(url, promise);
+    }
+    return promise;
+  }
+
+  private loadTransparentTexture(
+    url: string,
+    sourceRect: WorldMapSourceRect | undefined,
+  ): Promise<PixiTexture | null> {
+    const key = `${url}:${sourceRect ? `${sourceRect.x},${sourceRect.y},${sourceRect.width},${sourceRect.height}` : 'full'}:transparent-black`;
+    let promise = this.transparentTextureCache.get(key);
+    if (!promise) {
+      promise = createTransparentBlackTexture(url, sourceRect)
+        .then((texture) => {
+          if (texture) enforceNearestScale(texture);
+          return texture;
+        })
+        .catch((error: unknown) => {
+          console.warn(`[GameWorldMapRenderer] Failed to create transparent black texture: ${url}`, error);
+          return null;
+        });
+      this.transparentTextureCache.set(key, promise);
     }
     return promise;
   }
