@@ -78,5 +78,5 @@ export class EditorState {
 function normalizeBrushScale(value: number): number {
   if (!Number.isFinite(value)) return 1;
   const clamped = Math.min(MAX_BRUSH_SCALE, Math.max(MIN_BRUSH_SCALE, value));
-  return Math.round(clamped * 100) / 100;
+  return Math.round(clamped * 10) / 10;
 }
