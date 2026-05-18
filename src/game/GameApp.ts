@@ -167,6 +167,9 @@ export class GameApp {
     });
 
     const view = this.editorCameraSystem.getView();
+    this.editorMinimap?.setPlacements(
+      this.mapEditor?.placement.mapDraft.placements ?? [],
+    );
     this.editorMinimap?.render({
       ...view,
       screenWidth: this.app.renderer.width,
