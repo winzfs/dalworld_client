@@ -1,4 +1,4 @@
-import { Assets, Container, Sprite, type Texture } from 'pixi.js';
+import { Assets, Container, Graphics, Sprite, type Texture } from 'pixi.js';
 import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset } from './types';
 import { EditorState } from './EditorState';
 
@@ -7,6 +7,8 @@ export type TilePlacementSystemOptions = {
   mapName: string;
 };
 
+type PlacedDisplay = Sprite | Graphics;
+
 /**
  * Owns editor-only placed tile sprites and the serializable map draft.
  */
@@ -14,8 +16,8 @@ export class TilePlacementSystem {
   readonly layer = new Container();
 
   private readonly draft: EditorMapDraft;
-  private readonly sprites = new Map<string, Sprite>();
-  private readonly textureCache = new Map<string, Promise<Texture>>();
+  private readonly displays = new Map<string, PlacedDisplay>();
+  private readonly textureCache = new Map<string, Promise<Texture | null>>();
 
   constructor(
     private readonly state: EditorState,
@@ -66,7 +68,7 @@ export class TilePlacementSystem {
     };
 
     this.draft.placements.push(placement);
-    await this.createSprite(placement, asset);
+    await this.createDisplay(placement, asset);
   }
 
   eraseAt(worldX: number, worldY: number): void {
@@ -79,8 +81,21 @@ export class TilePlacementSystem {
     }
   }
 
-  private async createSprite(placement: EditorTilePlacement, asset: EditorTilesetAsset): Promise<void> {
+  private async createDisplay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Promise<void> {
     const texture = await this.loadTexture(asset.url);
+    const display = texture
+      ? this.createSprite(placement, asset, texture)
+      : this.createFallbackTile(placement, asset);
+
+    this.displays.set(placement.id, display);
+    this.layer.addChild(display);
+  }
+
+  private createSprite(
+    placement: EditorTilePlacement,
+    asset: EditorTilesetAsset,
+    texture: Texture,
+  ): Sprite {
     const sprite = new Sprite(texture);
 
     sprite.label = `editor-tile:${placement.id}`;
@@ -90,14 +105,35 @@ export class TilePlacementSystem {
     sprite.height = asset.tileHeight;
     sprite.zIndex = layerZIndex(placement.layer);
 
-    this.sprites.set(placement.id, sprite);
-    this.layer.addChild(sprite);
+    return sprite;
   }
 
-  private loadTexture(url: string): Promise<Texture> {
+  private createFallbackTile(placement: EditorTilePlacement, asset: EditorTilesetAsset): Graphics {
+    const tile = new Graphics();
+    tile.label = `editor-fallback-tile:${placement.id}`;
+    tile.x = placement.x;
+    tile.y = placement.y;
+    tile.zIndex = layerZIndex(placement.layer);
+
+    const width = asset.tileWidth || this.draft.tileSize;
+    const height = asset.tileHeight || this.draft.tileSize;
+
+    tile
+      .rect(0, 0, width, height)
+      .fill({ color: fallbackColor(asset.categoryId), alpha: 0.72 })
+      .rect(0, 0, width, height)
+      .stroke({ color: 0xffd166, alpha: 0.95, width: 1 });
+
+    return tile;
+  }
+
+  private loadTexture(url: string): Promise<Texture | null> {
     let promise = this.textureCache.get(url);
     if (!promise) {
-      promise = Assets.load<Texture>(url);
+      promise = Assets.load<Texture>(url).catch((error: unknown) => {
+        console.warn(`[MapEditor] Failed to load tile asset: ${url}`, error);
+        return null;
+      });
       this.textureCache.set(url, promise);
     }
     return promise;
@@ -115,10 +151,10 @@ export class TilePlacementSystem {
       this.draft.placements.splice(index, 1);
     }
 
-    const sprite = this.sprites.get(id);
-    if (sprite) {
-      this.sprites.delete(id);
-      sprite.destroy();
+    const display = this.displays.get(id);
+    if (display) {
+      this.displays.delete(id);
+      display.destroy();
     }
   }
 }
@@ -135,5 +171,16 @@ function layerZIndex(layer: EditorTilePlacement['layer']): number {
       return 10;
     case 'collision':
       return 100;
+  }
+}
+
+function fallbackColor(categoryId: string): number {
+  switch (categoryId) {
+    case 'nature':
+      return 0x47b881;
+    case 'buildings':
+      return 0xc69054;
+    default:
+      return 0x55d6be;
   }
 }
