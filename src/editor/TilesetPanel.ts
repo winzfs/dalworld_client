@@ -1,6 +1,6 @@
 import { TILESET_CATEGORIES } from './tilesetManifest';
 import type { EditorLayerId, EditorTilesetAsset } from './types';
-import { EditorState } from './EditorState';
+import { EditorState, BLACK_SOLID_ASSET } from './EditorState';
 
 export type TilesetPanelActions = {
   onSave: () => void;
@@ -190,9 +190,14 @@ export class TilesetPanel {
 
     const paintButton = this.createModeButton('배치', 'paint');
     const eraseButton = this.createModeButton('삭제', 'erase');
+    const blackButton = this.createActionButton('Black', () => this.state.selectBlackBrush());
+    blackButton.classList.add('map-editor-black-brush');
+    if (this.state.selectedAsset?.id === BLACK_SOLID_ASSET.id) {
+      blackButton.classList.add('is-active');
+    }
     const worldMapButton = this.createActionButton('월드맵', this.actions.onToggleWorldMap);
 
-    this.toolContainer.append(paintButton, eraseButton, worldMapButton);
+    this.toolContainer.append(paintButton, eraseButton, blackButton, worldMapButton);
   }
 
   private renderFillControls(): void {
