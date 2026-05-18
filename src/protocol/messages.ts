@@ -97,7 +97,7 @@ export type ServerEvent =
   | { type: 'player_left'; playerId: string }
   | { type: 'resource_hit'; resourceId: string; resourceType: ResourceType; hpRemaining: number }
   | { type: 'resource_destroyed'; resourceId: string; resourceType: ResourceType }
-  | { type: 'item_gained'; playerId: string; item: ItemType; amount };
+  | { type: 'item_gained'; playerId: string; item: ItemType; amount: number };
 
 export type ServerToClientMessage =
   | {
