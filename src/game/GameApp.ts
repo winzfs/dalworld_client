@@ -11,7 +11,6 @@ import { PlayerRenderer } from '../render/PlayerRenderer';
 import { ResourceRenderer } from '../render/ResourceRenderer';
 import { MonsterRenderer } from '../render/MonsterRenderer';
 import { MobileControls } from '../render/MobileControls';
-import { ProceduralMeadowRenderer } from '../render/ProceduralMeadowRenderer';
 import { GameWorldMapRenderer } from '../render/GameWorldMapRenderer';
 import { GameHud } from '../ui/GameHud';
 import { GameWindows } from '../ui/GameWindows';
@@ -22,11 +21,11 @@ import { CameraSystem } from './systems/CameraSystem';
 import { HudSystem } from './systems/HudSystem';
 import { ServerMessageRouter } from './systems/ServerMessageRouter';
 import { CellTransitionSystem } from './systems/CellTransitionSystem';
+import { RuntimeWorldSystem } from './systems/RuntimeWorldSystem';
 import { MapEditor } from '../editor/MapEditor';
 import { EditorCameraSystem } from '../editor/EditorCameraSystem';
 import { EditorMinimap } from '../editor/EditorMinimap';
 import { getRuntimeWorldMap } from '../worldMap/runtimeMapStore';
-import { createActiveCellMapView } from '../worldMap/activeCellMapView';
 import { getActiveCell, hasCell, setActiveCell } from '../worldMap/activeCellStore';
 
 const INPUT_SEND_HZ = 30;
@@ -50,6 +49,7 @@ export class GameApp {
   private readonly resourceRenderer: ResourceRenderer;
   private readonly monsterRenderer: MonsterRenderer;
   private readonly worldMapRenderer: GameWorldMapRenderer;
+  private readonly runtimeWorldSystem: RuntimeWorldSystem;
   private readonly movementSystem = new ClientMovementSystem();
   private readonly cellTransitionSystem = new CellTransitionSystem({
     triggerPadding: CELL_TRANSFER_TRIGGER_PADDING,
@@ -61,7 +61,6 @@ export class GameApp {
   private readonly mapEditor: MapEditor | null;
   private readonly editorMinimap: EditorMinimap | null;
 
-  private meadowRenderer: ProceduralMeadowRenderer | null = null;
   private editorTransitioning = false;
   private cellTransitioning = false;
 
@@ -85,6 +84,13 @@ export class GameApp {
     this.resourceRenderer = new ResourceRenderer(this.world);
     this.monsterRenderer = new MonsterRenderer(this.world);
     this.playerRenderer = new PlayerRenderer(this.world);
+    this.runtimeWorldSystem = new RuntimeWorldSystem({
+      world: this.world,
+      background: this.background,
+      worldInfo: this.worldInfo,
+      cameraSystem: this.cameraSystem,
+      worldMapRenderer: this.worldMapRenderer,
+    });
 
     this.messageRouter = new ServerMessageRouter({
       input: this.input.state,
@@ -107,7 +113,7 @@ export class GameApp {
         this.gameplayConfig = gameplay ?? DEFAULT_GAMEPLAY;
       },
       redrawWorld: () => {
-        this.drawWorldBackground();
+        this.runtimeWorldSystem.drawBackground(this.worldInfo);
       },
       reloadWorldMap: () => {
         void this.loadWorldMap();
@@ -150,7 +156,7 @@ export class GameApp {
     this.input.attach();
     this.mobileControls = new MobileControls(this.input);
     this.app.stage.addChild(this.world);
-    this.drawWorldBackground();
+    this.runtimeWorldSystem.drawBackground(this.worldInfo);
     await this.loadWorldMap();
 
     if (this.editorMode) {
@@ -320,77 +326,12 @@ export class GameApp {
   }
 
   private async loadWorldMap(): Promise<void> {
-    const runtimeMap = getRuntimeWorldMap();
-
-    if (this.meadowRenderer) {
-      this.world.removeChild(this.meadowRenderer.layer);
-      this.meadowRenderer.layer.destroy({ children: true });
-      this.meadowRenderer = null;
-    }
-
-    if (runtimeMap) {
-      this.worldInfo = {
-        ...this.worldInfo,
-        width: runtimeMap.cellSize,
-        height: runtimeMap.cellSize,
-      };
-      this.cameraSystem.setWorldSize(this.worldInfo);
-      this.drawWorldBackground();
-      this.background.visible = true;
-
-      try {
-        await this.worldMapRenderer.render(createActiveCellMapView(runtimeMap));
-      } catch (error) {
-        console.error('[GameApp] Failed to render active world cell.', error);
-      }
-      return;
-    }
-
-    await this.worldMapRenderer.render(null);
-
-    this.meadowRenderer = new ProceduralMeadowRenderer(this.world, {
-      worldWidth: this.worldInfo.width,
-      worldHeight: this.worldInfo.height,
-      seed: 20260518,
-    });
-
-    try {
-      await this.meadowRenderer.load();
-      this.world.setChildIndex(this.meadowRenderer.layer, 1);
-      this.background.visible = false;
-    } catch (error) {
-      console.warn('Failed to load procedural meadow map. Using fallback background.', error);
-      this.background.visible = true;
-    }
+    const result = await this.runtimeWorldSystem.load();
+    this.worldInfo = result.worldInfo;
   }
 
   private findMe(): PlayerSnapshot | null {
     return this.snapshotSystem.findMe(this.myPlayerId);
-  }
-
-  private drawWorldBackground(): void {
-    this.background.removeChildren().forEach((child) => child.destroy());
-    this.background.clear();
-
-    this.background
-      .rect(0, 0, this.worldInfo.width, this.worldInfo.height)
-      .fill({ color: 0x223843 });
-
-    const step = 200;
-
-    for (let x = 0; x <= this.worldInfo.width; x += step) {
-      this.background
-        .moveTo(x, 0)
-        .lineTo(x, this.worldInfo.height)
-        .stroke({ color: 0x2c4a55, width: 1 });
-    }
-
-    for (let y = 0; y <= this.worldInfo.height; y += step) {
-      this.background
-        .moveTo(0, y)
-        .lineTo(this.worldInfo.width, y)
-        .stroke({ color: 0x2c4a55, width: 1 });
-    }
   }
 }
 
