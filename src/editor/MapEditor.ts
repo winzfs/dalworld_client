@@ -6,6 +6,8 @@ import { MapStorage } from './MapStorage';
 import { TilePickerWindow } from './TilePickerWindow';
 import { WorldMapGrid } from './WorldMapGrid';
 import { WorldMapPanel } from './WorldMapPanel';
+import { EditorCameraSystem } from './EditorCameraSystem';
+import { EditorMinimap } from './EditorMinimap';
 import { EditorGridOverlay } from './EditorGridOverlay';
 import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset, EditorWorldSave } from './types';
 
@@ -123,7 +125,9 @@ export class MapEditor {
     });
 
     this.panel = new TilesetPanel(this.state, {
-      onSave: () => this.save(),
+      onSave: () => {
+        void this.save();
+      },
       onLoad: () => {
         void this.load();
       },
@@ -307,7 +311,7 @@ export class MapEditor {
     this.cellDrafts.set(cellKey(next.gridX, next.gridY), nextDraft);
     await this.placement.replaceDraft(nextDraft);
     this.options.onMoveCameraTo?.(this.worldWidth / 2, this.worldHeight / 2);
-    this.save();
+    void this.save();
   }
 
   private persistCurrentCellDraft(): void {
@@ -466,19 +470,24 @@ export class MapEditor {
     });
   }
 
-  private save(): void {
+  private async save(): Promise<void> {
     const worldSave = this.createWorldSave();
-    const worldSaved = this.storage.saveWorld(worldSave);
     const mapSaved = this.storage.save({
       ...this.placement.mapDraft,
       worldMap: worldSave.worldMap,
     });
 
-    console.info('[MapEditor] Save completed.', {
-      worldSaved,
-      mapSaved,
-      cellCount: worldSave.cells.length,
-    });
+    try {
+      const worldSaved = await this.storage.saveWorld(worldSave);
+      console.info('[MapEditor] Save completed.', {
+        worldSaved,
+        mapSaved,
+        cellCount: worldSave.cells.length,
+      });
+    } catch (error) {
+      console.error('[MapEditor] Local save completed, but server upload failed.', error);
+      window.alert('로컬 저장은 완료됐지만 서버 업로드에 실패했습니다. 콘솔 로그와 서버 주소 설정을 확인해주세요.');
+    }
   }
 
   private async load(): Promise<void> {
