@@ -1,6 +1,6 @@
 export const ISO_TILE_WIDTH = 64;
 export const ISO_TILE_HEIGHT = 32;
-export const ISO_LAYER_HEIGHT = 32;
+export const ISO_LAYER_HEIGHT = 56;
 
 export type IsoScreenPoint = {
   x: number;
