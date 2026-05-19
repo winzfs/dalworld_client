@@ -223,10 +223,16 @@ export class ClientBuildingOccupancy {
     ];
 
     const seen = new Set<string>();
-    return ids
-      .filter((entityId): entityId is string => typeof entityId === 'string' && !seen.has(entityId) && seen.add(entityId))
-      .map((entityId) => this.parts.get(entityId))
-      .filter((part): part is PlacedBuildPart => Boolean(part));
+    const ordered: PlacedBuildPart[] = [];
+
+    for (const entityId of ids) {
+      if (typeof entityId !== 'string' || seen.has(entityId)) continue;
+      seen.add(entityId);
+      const part = this.parts.get(entityId);
+      if (part) ordered.push(part);
+    }
+
+    return ordered;
   }
 
   private toKey(x: number, y: number, z: number): string {
