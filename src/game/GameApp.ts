@@ -15,9 +15,12 @@ import { MobileControls } from '../render/MobileControls';
 import { GameWorldMapRenderer } from '../render/GameWorldMapRenderer';
 import { GameHud } from '../ui/GameHud';
 import { GameWindows } from '../ui/GameWindows';
+import { BUILD_PARTS } from '../systems/building/BuildingParts';
 import { BuildingGridOverlay } from '../systems/building/BuildingGridOverlay';
 import { BuildingModeState } from '../systems/building/BuildingModeState';
 import { BuildingPlacementRenderer } from '../systems/building/BuildingPlacementRenderer';
+import { BuildingGhostPreviewRenderer } from '../systems/building/BuildingGhostPreviewRenderer';
+import { ClientBuildingOccupancy } from '../systems/building/ClientBuildingOccupancy';
 import { screenToGridApprox } from '../systems/building/IsoBuildingMath';
 import type { BuildingServerEvent } from '../systems/building/BuildingTypes';
 import { ClientMovementSystem } from './systems/ClientMovementSystem';
@@ -63,6 +66,8 @@ export class GameApp {
     height: 32,
   });
   private readonly buildingPlacementRenderer = new BuildingPlacementRenderer();
+  private readonly buildingGhostPreviewRenderer = new BuildingGhostPreviewRenderer();
+  private readonly buildingOccupancy = new ClientBuildingOccupancy();
   private readonly movementSystem = new ClientMovementSystem();
   private readonly cellTransitionSystem = new CellTransitionSystem({
     triggerPadding: CELL_TRANSFER_TRIGGER_PADDING,
@@ -104,6 +109,7 @@ export class GameApp {
     this.world.addChild(this.background);
     this.world.addChild(this.buildingGridOverlay.container);
     this.world.addChild(this.buildingPlacementRenderer.container);
+    this.world.addChild(this.buildingGhostPreviewRenderer.container);
     this.worldMapRenderer = new GameWorldMapRenderer(this.world);
     this.resourceRenderer = new ResourceRenderer(this.world);
     this.monsterRenderer = new MonsterRenderer(this.world);
@@ -202,6 +208,8 @@ export class GameApp {
       return;
     }
 
+    this.app.canvas.addEventListener('pointermove', (event) => this.handleCanvasPointerMove(event));
+    this.app.canvas.addEventListener('pointerleave', () => this.buildingGhostPreviewRenderer.hide());
     this.app.canvas.addEventListener('pointerdown', (event) => this.handleCanvasPointerDown(event));
     window.addEventListener('keydown', (event) => this.handleBuildingHotkey(event));
 
@@ -299,18 +307,44 @@ export class GameApp {
     this.playerRenderer.sync(this.snapshotSystem.snapshot.players, this.myPlayerId);
   }
 
+  private handleCanvasPointerMove(event: PointerEvent): void {
+    const mode = this.buildingModeState.getSnapshot();
+    if (!mode.enabled || !mode.selectedPartId) {
+      this.buildingGhostPreviewRenderer.hide();
+      return;
+    }
+
+    const grid = this.pointerToBuildingGrid(event, mode.currentZ);
+    const definition = BUILD_PARTS[mode.selectedPartId];
+    const canPlace = definition
+      ? this.buildingOccupancy.canPlace(definition, grid.x, grid.y, grid.z, mode.rotation).ok
+      : false;
+
+    this.buildingGhostPreviewRenderer.show({
+      partId: mode.selectedPartId,
+      x: grid.x,
+      y: grid.y,
+      z: grid.z,
+      rotation: mode.rotation,
+      canPlace,
+    });
+  }
+
   private handleCanvasPointerDown(event: PointerEvent): void {
     if (event.button !== 0) return;
 
     const mode = this.buildingModeState.getSnapshot();
     if (!mode.enabled || !mode.selectedPartId) return;
 
-    const rect = this.app.canvas.getBoundingClientRect();
-    const local = this.world.toLocal({
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    });
-    const grid = screenToGridApprox(local.x, local.y, mode.currentZ);
+    const grid = this.pointerToBuildingGrid(event, mode.currentZ);
+    const definition = BUILD_PARTS[mode.selectedPartId];
+    if (!definition) return;
+
+    const canPlace = this.buildingOccupancy.canPlace(definition, grid.x, grid.y, grid.z, mode.rotation);
+    if (!canPlace.ok) {
+      console.warn('[Building] client placement prediction rejected:', canPlace.reason);
+      return;
+    }
 
     this.network.send({
       type: 'BUILD_PLACE_REQUEST',
@@ -329,6 +363,7 @@ export class GameApp {
 
     if (event.key === 'Escape') {
       this.buildingModeState.exit();
+      this.buildingGhostPreviewRenderer.hide();
       event.preventDefault();
       return;
     }
@@ -354,15 +389,19 @@ export class GameApp {
   private handleBuildingEvent(event: BuildingServerEvent): void {
     switch (event.type) {
       case 'BUILD_SNAPSHOT':
+        this.buildingOccupancy.applySnapshot(event.snapshot);
         this.buildingPlacementRenderer.applySnapshot(event.snapshot);
         return;
       case 'BUILD_PLACED':
+        this.buildingOccupancy.addOrUpdate(event.part);
         this.buildingPlacementRenderer.addOrUpdate(event.part);
         return;
       case 'BUILD_REMOVED':
+        this.buildingOccupancy.remove(event.entityId);
         this.buildingPlacementRenderer.remove(event.entityId);
         return;
       case 'BUILD_DOOR_UPDATED':
+        this.buildingOccupancy.updateDoor(event.entityId, event.open);
         this.buildingPlacementRenderer.updateDoor(event.entityId, event.open);
         return;
       case 'BUILD_REJECTED':
@@ -371,6 +410,16 @@ export class GameApp {
       case 'INVENTORY_SNAPSHOT':
         return;
     }
+  }
+
+  private pointerToBuildingGrid(event: PointerEvent, z: number): { x: number; y: number; z: number } {
+    const rect = this.app.canvas.getBoundingClientRect();
+    const local = this.world.toLocal({
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    });
+
+    return screenToGridApprox(local.x, local.y, z);
   }
 
   private handleGatherInput(): void {
