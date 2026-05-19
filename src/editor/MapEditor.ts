@@ -489,13 +489,18 @@ export class MapEditor {
     });
 
     try {
-      const worldSaved = await this.storage.saveWorld(worldSave);
+      const report = await this.storage.saveWorld(worldSave);
+      const ok = report !== null && mapSaved;
+      const resources = report?.resources;
       this.showToast(
-        `저장 완료 · 서버 반영됨 · 셀 ${worldSave.cells.length}개`,
-        worldSaved && mapSaved ? 'success' : 'error',
+        ok
+          ? `저장 완료 · 셀 ${report.cells}개 · 자원 ${resources?.total ?? 0}개(나무 ${resources?.tree ?? 0}, 돌 ${resources?.stone ?? 0})`
+          : '로컬 저장 실패 · 서버 반영을 확인할 수 없습니다.',
+        ok ? 'success' : 'error',
+        4_500,
       );
       console.info('[MapEditor] Save completed.', {
-        worldSaved,
+        report,
         mapSaved,
         cellCount: worldSave.cells.length,
       });
