@@ -1,11 +1,9 @@
 import type { EditorPlacementGameplay, EditorTilesetAsset } from './types';
 
 const FANTASY_ART_ROOT = '/assets/tilesets/fantasy/art/';
-const ROCKS_SEGMENT = '/rocks/';
-const TREE_BUSHES_SEGMENTS = [
-  '/tree and bushes/',
-  '/trees and bushes/',
-];
+const ROCK_KEYWORDS = ['rock', 'rocks', 'stone', 'boulder'];
+const TREE_KEYWORDS = ['tree', 'trees', 'wood'];
+const NON_TREE_FILENAME_KEYWORDS = ['bush', 'grass', 'flower', 'plant', 'shrub'];
 
 export function inferSpriteGameplay(asset: EditorTilesetAsset): EditorPlacementGameplay | undefined {
   if (asset.gameplayDefaults) {
@@ -14,8 +12,10 @@ export function inferSpriteGameplay(asset: EditorTilesetAsset): EditorPlacementG
 
   const url = normalizePath(asset.url);
   const filename = getFilename(url);
+  const name = normalizeText(asset.name);
+  const searchable = `${url} ${name}`;
 
-  if (isFantasyRock(url)) {
+  if (isFantasyRock(searchable)) {
     return {
       kind: 'resource',
       resourceType: 'stone',
@@ -25,7 +25,7 @@ export function inferSpriteGameplay(asset: EditorTilesetAsset): EditorPlacementG
     };
   }
 
-  if (isFantasyTree(url, filename)) {
+  if (isFantasyTree(searchable, filename)) {
     return {
       kind: 'resource',
       resourceType: 'tree',
@@ -38,20 +38,28 @@ export function inferSpriteGameplay(asset: EditorTilesetAsset): EditorPlacementG
   return undefined;
 }
 
-function isFantasyRock(url: string): boolean {
-  return url.includes(FANTASY_ART_ROOT) && url.includes(ROCKS_SEGMENT);
+function isFantasyRock(searchable: string): boolean {
+  return searchable.includes(FANTASY_ART_ROOT) && hasKeyword(searchable, ROCK_KEYWORDS);
 }
 
-function isFantasyTree(url: string, filename: string): boolean {
-  return (
-    url.includes(FANTASY_ART_ROOT) &&
-    TREE_BUSHES_SEGMENTS.some((segment) => url.includes(segment)) &&
-    filename.includes('tree')
-  );
+function isFantasyTree(searchable: string, filename: string): boolean {
+  if (!searchable.includes(FANTASY_ART_ROOT)) return false;
+  if (!hasKeyword(searchable, TREE_KEYWORDS)) return false;
+
+  // Prevent obvious non-tree props in tree/bush collections from becoming harvestable trees.
+  return !hasKeyword(filename, NON_TREE_FILENAME_KEYWORDS);
+}
+
+function hasKeyword(value: string, keywords: string[]): boolean {
+  return keywords.some((keyword) => value.includes(keyword));
 }
 
 function normalizePath(value: string): string {
-  return value.toLowerCase().replace(/\\/g, '/');
+  return normalizeText(value).replace(/\\/g, '/');
+}
+
+function normalizeText(value: string): string {
+  return value.toLowerCase().replace(/[_-]+/g, ' ');
 }
 
 function getFilename(url: string): string {
