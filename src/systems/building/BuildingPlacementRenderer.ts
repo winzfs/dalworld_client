@@ -1,6 +1,6 @@
 import { Container, Graphics } from 'pixi.js';
 import { BUILD_PARTS } from './BuildingParts';
-import { getIsoZIndex, gridToScreen, ISO_LAYER_HEIGHT, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, screenToGridApprox } from './IsoBuildingMath';
+import { getIsoZIndex, gridToScreen, ISO_LAYER_HEIGHT, ISO_TILE_HEIGHT, ISO_TILE_WIDTH } from './IsoBuildingMath';
 import type { BuildPartId, BuildRotation, BuildingSnapshot, PlacedBuildPart } from './BuildingTypes';
 
 type RenderPalette = {
@@ -16,14 +16,17 @@ export type BuildingOcclusionFocus = {
 };
 
 const BUILDING_NORMAL_ALPHA = 1;
-const BUILDING_OCCLUDING_ALPHA = 0.38;
-const BUILDING_OCCLUSION_RADIUS = 2;
+const BUILDING_OCCLUDING_ALPHA = 0.42;
 const FLOOR_THICKNESS_WOOD = 8;
 const FLOOR_THICKNESS_STONE = 10;
 const WALL_RENDER_HEIGHT = ISO_LAYER_HEIGHT;
 const DOOR_RENDER_HEIGHT = ISO_LAYER_HEIGHT - 8;
 const PILLAR_RENDER_HEIGHT = ISO_LAYER_HEIGHT;
 const WALL_POST_WIDTH = 5;
+const WALL_OCCLUSION_PADDING = 14;
+const PILLAR_OCCLUSION_RADIUS = 18;
+const ROOF_OCCLUSION_PADDING = 8;
+const OCCLUSION_LAYER_PENALTY = 8;
 
 export class BuildingPlacementRenderer {
   readonly container = new Container();
@@ -100,8 +103,6 @@ export class BuildingPlacementRenderer {
       return;
     }
 
-    const focusGrid = screenToGridApprox(focus.worldX, focus.worldY, focus.z ?? 0);
-
     for (const [entityId, node] of this.nodes) {
       const part = this.parts.get(entityId);
       const definition = part ? BUILD_PARTS[part.partId] : null;
@@ -111,13 +112,7 @@ export class BuildingPlacementRenderer {
         continue;
       }
 
-      const dx = Math.abs(part.x - focusGrid.x);
-      const dy = Math.abs(part.y - focusGrid.y);
-      const sameOrAboveLayer = part.z >= focusGrid.z;
-      const closeEnough = dx <= BUILDING_OCCLUSION_RADIUS && dy <= BUILDING_OCCLUSION_RADIUS;
-      const visuallyInFront = part.x + part.y >= focusGrid.x + focusGrid.y - 1;
-
-      node.alpha = sameOrAboveLayer && closeEnough && visuallyInFront
+      node.alpha = isPartOccludingFocus(part, focus)
         ? BUILDING_OCCLUDING_ALPHA
         : BUILDING_NORMAL_ALPHA;
     }
@@ -429,6 +424,79 @@ function getPartLayerOffset(part: PlacedBuildPart): number {
   }
 }
 
+function isPartOccludingFocus(part: PlacedBuildPart, focus: BuildingOcclusionFocus): boolean {
+  const definition = BUILD_PARTS[part.partId];
+  if (!definition) return false;
+
+  const origin = gridToScreen(part.x, part.y, part.z);
+  const layerOffset = (part.z - (focus.z ?? 0)) * OCCLUSION_LAYER_PENALTY;
+  const focusY = focus.worldY + layerOffset;
+
+  switch (definition.category) {
+    case 'wall':
+    case 'door':
+    case 'window':
+      return isEdgeStructureOccludingFocus(origin, part.rotation, focus.worldX, focusY, WALL_RENDER_HEIGHT);
+    case 'support':
+      return isPillarOccludingFocus(origin, part.rotation, focus.worldX, focusY, PILLAR_RENDER_HEIGHT);
+    case 'roof':
+      return isRoofOccludingFocus(origin, focus.worldX, focusY);
+    default:
+      return false;
+  }
+}
+
+function isEdgeStructureOccludingFocus(origin: Point, rotation: BuildRotation, focusX: number, focusY: number, height: number): boolean {
+  const segment = getEdgeSegment(rotation);
+  const a = { x: origin.x + segment.a.x, y: origin.y + segment.a.y };
+  const b = { x: origin.x + segment.b.x, y: origin.y + segment.b.y };
+  const baseMinY = Math.min(a.y, b.y);
+  const baseMaxY = Math.max(a.y, b.y);
+
+  if (focusY < baseMinY - height || focusY > baseMaxY + WALL_OCCLUSION_PADDING) return false;
+
+  const bodyDistance = distancePointToVerticalSegmentBand(focusX, focusY, a, b, height);
+  if (bodyDistance > WALL_OCCLUSION_PADDING) return false;
+
+  // If the player's foot is visually below the wall base, the player is in front.
+  // Fade only while the foot is inside/behind the wall's vertical body.
+  return focusY <= baseMaxY + 2;
+}
+
+function isPillarOccludingFocus(origin: Point, rotation: BuildRotation, focusX: number, focusY: number, height: number): boolean {
+  const local = getCornerPoint(rotation);
+  const point = { x: origin.x + local.x, y: origin.y + local.y };
+  if (focusY < point.y - height || focusY > point.y + PILLAR_OCCLUSION_RADIUS) return false;
+  return distancePointToSegment(focusX, focusY, point, { x: point.x, y: point.y - height }) <= PILLAR_OCCLUSION_RADIUS;
+}
+
+function isRoofOccludingFocus(origin: Point, focusX: number, focusY: number): boolean {
+  const halfW = ISO_TILE_WIDTH / 2 + ROOF_OCCLUSION_PADDING;
+  const halfH = ISO_TILE_HEIGHT / 2 + ROOF_OCCLUSION_PADDING;
+  const verticalOffset = 8;
+
+  // Roofs should fade when the player is behind/under the footprint, but not when standing in front of it.
+  if (focusY > origin.y + halfH) return false;
+  return Math.abs(focusX - origin.x) / halfW + Math.abs(focusY - (origin.y - verticalOffset)) / halfH <= 1.2;
+}
+
+function distancePointToVerticalSegmentBand(px: number, py: number, a: Point, b: Point, height: number): number {
+  const bottom = distancePointToSegment(px, py, a, b);
+  const top = distancePointToSegment(px, py, { x: a.x, y: a.y - height }, { x: b.x, y: b.y - height });
+  const left = distancePointToSegment(px, py, a, { x: a.x, y: a.y - height });
+  const right = distancePointToSegment(px, py, b, { x: b.x, y: b.y - height });
+  const withinY = py <= Math.max(a.y, b.y) + WALL_OCCLUSION_PADDING && py >= Math.min(a.y, b.y) - height;
+  const nearProjectedSegment = distancePointToSegment(px, py, a, b) <= height + WALL_OCCLUSION_PADDING;
+
+  if (withinY && nearProjectedSegment) {
+    const topProjectionDistance = distancePointToSegment(px, py, { x: a.x, y: a.y - height }, { x: b.x, y: b.y - height });
+    const bottomProjectionDistance = distancePointToSegment(px, py, a, b);
+    if (Math.min(topProjectionDistance, bottomProjectionDistance) <= height + WALL_OCCLUSION_PADDING) return 0;
+  }
+
+  return Math.min(bottom, top, left, right);
+}
+
 function getPalette(partId: BuildPartId): RenderPalette {
   switch (partId) {
     case 'stone_floor_1x1':
@@ -525,6 +593,21 @@ function rotateAround(point: Point, pivot: Point, radians: number): Point {
     x: pivot.x + dx * cos - dy * sin,
     y: pivot.y + dx * sin + dy * cos,
   };
+}
+
+function distancePointToSegment(px: number, py: number, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return distance(px, py, a.x, a.y);
+  const t = Math.max(0, Math.min(1, ((px - a.x) * dx + (py - a.y) * dy) / lengthSquared));
+  return distance(px, py, a.x + t * dx, a.y + t * dy);
+}
+
+function distance(ax: number, ay: number, bx: number, by: number): number {
+  const dx = ax - bx;
+  const dy = ay - by;
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 type Point = {
