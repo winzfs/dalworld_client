@@ -1,6 +1,13 @@
 import { Container, Graphics } from 'pixi.js';
+import { BUILD_PARTS } from './BuildingParts';
 import { getIsoZIndex, gridToScreen, ISO_LAYER_HEIGHT, ISO_TILE_HEIGHT, ISO_TILE_WIDTH } from './IsoBuildingMath';
-import type { BuildRotation, BuildingSnapshot, PlacedBuildPart } from './BuildingTypes';
+import type { BuildPartId, BuildRotation, BuildingSnapshot, PlacedBuildPart } from './BuildingTypes';
+
+type RenderPalette = {
+  primary: number;
+  secondary: number;
+  accent: number;
+};
 
 export class BuildingPlacementRenderer {
   readonly container = new Container();
@@ -40,36 +47,46 @@ export class BuildingPlacementRenderer {
     node.removeChildren();
 
     const screen = gridToScreen(part.x, part.y, part.z);
+    const definition = BUILD_PARTS[part.partId];
     node.x = screen.x;
     node.y = screen.y;
     node.zIndex = getIsoZIndex(part.x, part.y, part.z, getPartLayerOffset(part));
 
-    switch (part.partId) {
-      case 'floor_1x1':
-        node.addChild(renderFloor());
-        break;
-      case 'thin_wall':
-        node.addChild(renderThinWall(part.rotation));
-        break;
-      case 'roof_1x1':
-        node.addChild(renderRoof());
-        break;
-      case 'pillar':
-        node.addChild(renderPillar(part.rotation));
-        break;
+    if (!definition) {
+      return;
+    }
+
+    switch (definition.category) {
+      case 'floor':
+        node.addChild(renderFloor(part.partId));
+        return;
+      case 'wall':
+        node.addChild(renderWallVariant(part.partId, part.rotation));
+        return;
+      case 'roof':
+        node.addChild(renderRoof(part.partId));
+        return;
+      case 'support':
+        node.addChild(renderPillar(part.partId, part.rotation));
+        return;
       case 'door':
-        node.addChild(renderDoor(part.rotation, Boolean(part.state?.open)));
-        break;
+        node.addChild(renderDoor(part.partId, part.rotation, Boolean(part.state?.open)));
+        return;
       case 'window':
-        node.addChild(renderWindow(part.rotation));
-        break;
+        node.addChild(renderWindow(part.partId, part.rotation));
+        return;
     }
   }
 
   updateDoor(entityId: string, open: boolean): void {
     const part = this.parts.get(entityId);
 
-    if (!part || part.partId !== 'door') {
+    if (!part) {
+      return;
+    }
+
+    const definition = BUILD_PARTS[part.partId];
+    if (definition?.category !== 'door') {
       return;
     }
 
@@ -104,13 +121,14 @@ export class BuildingPlacementRenderer {
   }
 }
 
-function renderFloor(): Container {
+function renderFloor(partId: BuildPartId): Container {
   const node = new Container();
   const top = new Graphics();
   const side = new Graphics();
   const halfW = ISO_TILE_WIDTH / 2;
   const halfH = ISO_TILE_HEIGHT / 2;
-  const thickness = 8;
+  const thickness = partId === 'stone_floor_1x1' ? 10 : 8;
+  const palette = getPalette(partId);
 
   side
     .moveTo(-halfW, 0)
@@ -120,7 +138,7 @@ function renderFloor(): Container {
     .lineTo(0, halfH + thickness)
     .lineTo(-halfW, thickness)
     .lineTo(-halfW, 0)
-    .fill({ color: 0x5d7d5a, alpha: 1 });
+    .fill({ color: palette.secondary, alpha: 1 });
 
   top
     .moveTo(0, -halfH)
@@ -128,20 +146,33 @@ function renderFloor(): Container {
     .lineTo(0, halfH)
     .lineTo(-halfW, 0)
     .lineTo(0, -halfH)
-    .fill({ color: 0x7fb073, alpha: 1 })
-    .stroke({ width: 1, color: 0xdaf2c9, alpha: 0.55 });
+    .fill({ color: palette.primary, alpha: 1 })
+    .stroke({ width: 1, color: palette.accent, alpha: 0.55 });
+
+  if (partId === 'deck_floor_1x1') {
+    const lines = new Graphics();
+    for (let i = -2; i <= 2; i += 1) {
+      lines
+        .moveTo(-halfW + 10, i * 5)
+        .lineTo(halfW - 10, i * 5)
+        .stroke({ width: 1, color: 0x5b3d25, alpha: 0.32 });
+    }
+    node.addChild(side, top, lines);
+    return node;
+  }
 
   node.addChild(side, top);
   return node;
 }
 
-function renderRoof(): Container {
+function renderRoof(partId: BuildPartId): Container {
   const node = new Container();
   const roof = new Graphics();
   const ridge = new Graphics();
   const halfW = ISO_TILE_WIDTH / 2 + 6;
   const halfH = ISO_TILE_HEIGHT / 2 + 3;
-  const lift = 12;
+  const lift = partId === 'flat_roof_1x1' ? 4 : 12;
+  const palette = getPalette(partId);
 
   roof
     .moveTo(0, -halfH - lift)
@@ -149,25 +180,36 @@ function renderRoof(): Container {
     .lineTo(0, halfH - lift)
     .lineTo(-halfW, -lift)
     .lineTo(0, -halfH - lift)
-    .fill({ color: 0xb84e43, alpha: 1 })
-    .stroke({ width: 1, color: 0xffc1a8, alpha: 0.52 });
+    .fill({ color: palette.primary, alpha: 1 })
+    .stroke({ width: 1, color: palette.accent, alpha: 0.52 });
 
-  ridge
-    .moveTo(0, -halfH - lift)
-    .lineTo(0, halfH - lift)
-    .stroke({ width: 2, color: 0x7f2d2a, alpha: 0.7 });
+  if (partId !== 'flat_roof_1x1') {
+    ridge
+      .moveTo(0, -halfH - lift)
+      .lineTo(0, halfH - lift)
+      .stroke({ width: 2, color: palette.secondary, alpha: 0.7 });
+  }
 
   node.addChild(roof, ridge);
   return node;
 }
 
-function renderThinWall(rotation: BuildRotation): Container {
+function renderWallVariant(partId: BuildPartId, rotation: BuildRotation): Container {
+  if (partId === 'railing' || partId === 'fence') {
+    return renderFenceLike(partId, rotation);
+  }
+
+  const height = partId === 'half_wall' ? ISO_LAYER_HEIGHT * 0.62 : ISO_LAYER_HEIGHT + 18;
+  return renderWallSlab(partId, rotation, height);
+}
+
+function renderWallSlab(partId: BuildPartId, rotation: BuildRotation, height: number): Container {
   const node = new Container();
   const wall = new Graphics();
   const points = getEdgeSegment(rotation);
-  const height = ISO_LAYER_HEIGHT + 18;
   const normal = getWallNormal(rotation);
-  const depth = 4;
+  const depth = partId === 'stone_wall' ? 6 : 4;
+  const palette = getPalette(partId);
   const ax = points.a.x + normal.x * depth;
   const ay = points.a.y + normal.y * depth;
   const bx = points.b.x + normal.x * depth;
@@ -179,8 +221,8 @@ function renderThinWall(rotation: BuildRotation): Container {
     .lineTo(bx, by - height)
     .lineTo(ax, ay - height)
     .lineTo(points.a.x, points.a.y)
-    .fill({ color: 0x8b6b4f, alpha: 1 })
-    .stroke({ width: 1, color: 0xe1c19f, alpha: 0.45 });
+    .fill({ color: palette.primary, alpha: 1 })
+    .stroke({ width: 1, color: palette.accent, alpha: 0.45 });
 
   const cap = new Graphics();
   cap
@@ -189,16 +231,48 @@ function renderThinWall(rotation: BuildRotation): Container {
     .lineTo(points.b.x, points.b.y - height - 3)
     .lineTo(points.a.x, points.a.y - height - 3)
     .lineTo(ax, ay - height)
-    .fill({ color: 0xa78260, alpha: 1 });
+    .fill({ color: palette.secondary, alpha: 1 });
 
   node.addChild(wall, cap);
   return node;
 }
 
-function renderDoor(rotation: BuildRotation, open: boolean): Container {
+function renderFenceLike(partId: BuildPartId, rotation: BuildRotation): Container {
   const node = new Container();
-  const frame = renderThinWall(rotation);
-  frame.alpha = 0.92;
+  const segment = getEdgeSegment(rotation);
+  const palette = getPalette(partId);
+  const rail = new Graphics();
+  const postA = new Graphics();
+  const postB = new Graphics();
+  const height = partId === 'fence' ? 26 : 20;
+  const a = interpolate(segment.a, segment.b, 0.12);
+  const b = interpolate(segment.a, segment.b, 0.88);
+
+  rail
+    .moveTo(a.x, a.y - height * 0.72)
+    .lineTo(b.x, b.y - height * 0.72)
+    .stroke({ width: 4, color: palette.primary, alpha: 1 })
+    .moveTo(a.x, a.y - height * 0.34)
+    .lineTo(b.x, b.y - height * 0.34)
+    .stroke({ width: 3, color: palette.secondary, alpha: 1 });
+
+  for (const [index, point] of [a, b, interpolate(a, b, 0.5)].entries()) {
+    const post = index === 0 ? postA : index === 1 ? postB : new Graphics();
+    post
+      .rect(point.x - 3, point.y - height, 6, height)
+      .fill({ color: palette.primary, alpha: 1 })
+      .stroke({ width: 1, color: palette.accent, alpha: 0.45 });
+    node.addChild(post);
+  }
+
+  node.addChild(rail);
+  return node;
+}
+
+function renderDoor(partId: BuildPartId, rotation: BuildRotation, open: boolean): Container {
+  const node = new Container();
+  const frame = renderWallSlab(partId === 'stone_door' ? 'stone_wall' : 'thin_wall', rotation, ISO_LAYER_HEIGHT + 18);
+  frame.alpha = 0.82;
 
   const segment = getEdgeSegment(rotation);
   const door = new Graphics();
@@ -206,6 +280,7 @@ function renderDoor(rotation: BuildRotation, open: boolean): Container {
   const inset = 8;
   const a = interpolate(segment.a, segment.b, 0.25);
   const b = interpolate(segment.a, segment.b, 0.75);
+  const palette = getPalette(partId);
 
   if (open) {
     const hinge = a;
@@ -216,8 +291,8 @@ function renderDoor(rotation: BuildRotation, open: boolean): Container {
       .lineTo(swing.x, swing.y - height)
       .lineTo(hinge.x, hinge.y - height)
       .lineTo(hinge.x, hinge.y)
-      .fill({ color: 0x7a4a2a, alpha: 0.82 })
-      .stroke({ width: 1, color: 0xf0d0a0, alpha: 0.62 });
+      .fill({ color: palette.primary, alpha: 0.82 })
+      .stroke({ width: 1, color: palette.accent, alpha: 0.62 });
   } else {
     door
       .moveTo(a.x, a.y - inset)
@@ -225,8 +300,8 @@ function renderDoor(rotation: BuildRotation, open: boolean): Container {
       .lineTo(b.x, b.y - height)
       .lineTo(a.x, a.y - height)
       .lineTo(a.x, a.y - inset)
-      .fill({ color: 0x6e3f24, alpha: 1 })
-      .stroke({ width: 1, color: 0xf0d0a0, alpha: 0.58 });
+      .fill({ color: palette.primary, alpha: 1 })
+      .stroke({ width: 1, color: palette.accent, alpha: 0.58 });
   }
 
   const knob = new Graphics();
@@ -237,13 +312,13 @@ function renderDoor(rotation: BuildRotation, open: boolean): Container {
   return node;
 }
 
-function renderWindow(rotation: BuildRotation): Container {
-  const node = renderThinWall(rotation);
+function renderWindow(partId: BuildPartId, rotation: BuildRotation): Container {
+  const node = renderWallSlab(partId === 'wide_window' ? 'stone_wall' : 'thin_wall', rotation, ISO_LAYER_HEIGHT + 18);
   const segment = getEdgeSegment(rotation);
   const pane = new Graphics();
   const height = ISO_LAYER_HEIGHT + 18;
-  const a = interpolate(segment.a, segment.b, 0.3);
-  const b = interpolate(segment.a, segment.b, 0.7);
+  const a = interpolate(segment.a, segment.b, partId === 'wide_window' ? 0.2 : 0.3);
+  const b = interpolate(segment.a, segment.b, partId === 'wide_window' ? 0.8 : 0.7);
   const topY = -height * 0.72;
   const bottomY = -height * 0.34;
 
@@ -260,41 +335,73 @@ function renderWindow(rotation: BuildRotation): Container {
   return node;
 }
 
-function renderPillar(rotation: BuildRotation): Container {
+function renderPillar(partId: BuildPartId, rotation: BuildRotation): Container {
   const node = new Container();
   const pillar = new Graphics();
   const pos = getCornerPoint(rotation);
-  const width = 8;
-  const height = ISO_LAYER_HEIGHT + 22;
+  const width = partId === 'short_post' ? 7 : partId === 'stone_pillar' ? 10 : 8;
+  const height = partId === 'short_post' ? 22 : ISO_LAYER_HEIGHT + 22;
+  const palette = getPalette(partId);
 
   pillar
     .rect(pos.x - width / 2, pos.y - height, width, height)
-    .fill({ color: 0x7a6149, alpha: 1 })
-    .stroke({ width: 1, color: 0xd2b28c, alpha: 0.58 });
+    .fill({ color: palette.primary, alpha: 1 })
+    .stroke({ width: 1, color: palette.accent, alpha: 0.58 });
 
   const cap = new Graphics();
   cap
     .ellipse(pos.x, pos.y - height, width * 0.8, 3)
-    .fill({ color: 0x9a7855, alpha: 1 });
+    .fill({ color: palette.secondary, alpha: 1 });
 
   node.addChild(pillar, cap);
   return node;
 }
 
 function getPartLayerOffset(part: PlacedBuildPart): number {
-  switch (part.partId) {
-    case 'floor_1x1':
+  const definition = BUILD_PARTS[part.partId];
+  switch (definition?.category) {
+    case 'floor':
       return 10;
-    case 'pillar':
+    case 'support':
       return 180 + part.rotation;
-    case 'thin_wall':
+    case 'wall':
     case 'door':
     case 'window':
       return 220 + part.rotation;
-    case 'roof_1x1':
+    case 'roof':
       return 320;
     default:
       return 100;
+  }
+}
+
+function getPalette(partId: BuildPartId): RenderPalette {
+  switch (partId) {
+    case 'stone_floor_1x1':
+    case 'stone_wall':
+    case 'stone_pillar':
+    case 'stone_door':
+      return { primary: 0x7c8185, secondary: 0x5f666b, accent: 0xd7dde2 };
+    case 'deck_floor_1x1':
+      return { primary: 0xb07a43, secondary: 0x7b4f2d, accent: 0xf0c48f };
+    case 'half_wall':
+    case 'railing':
+    case 'fence':
+    case 'short_post':
+      return { primary: 0x9b6a3d, secondary: 0x684326, accent: 0xe7bc85 };
+    case 'roof_1x1':
+      return { primary: 0xb84e43, secondary: 0x7f2d2a, accent: 0xffc1a8 };
+    case 'flat_roof_1x1':
+      return { primary: 0x6f7d5d, secondary: 0x4c5a42, accent: 0xbfcda3 };
+    case 'thatch_roof_1x1':
+      return { primary: 0xcaa85b, secondary: 0x8d6d32, accent: 0xffe4a3 };
+    case 'door':
+      return { primary: 0x6e3f24, secondary: 0x3e2417, accent: 0xf0d0a0 };
+    case 'window':
+    case 'wide_window':
+      return { primary: 0x8b6b4f, secondary: 0xa78260, accent: 0xe1c19f };
+    default:
+      return { primary: 0x8b6b4f, secondary: 0xa78260, accent: 0xe1c19f };
   }
 }
 
