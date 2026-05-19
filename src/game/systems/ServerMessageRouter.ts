@@ -27,10 +27,7 @@ export type ServerMessageRouterContext = {
   onBuildingEvent?: (event: BuildingServerEvent) => void;
 };
 
-/**
- * Routes server messages to client systems.
- * Keeps GameApp from growing one switch-case per gameplay feature.
- */
+/** Routes server messages to client systems. */
 export class ServerMessageRouter {
   constructor(private readonly context: ServerMessageRouterContext) {}
 
@@ -39,16 +36,14 @@ export class ServerMessageRouter {
       case 'welcome':
         this.handleWelcome(message);
         return;
-
       case 'snapshot':
         this.handleSnapshot(message);
         return;
-
       case 'event':
         this.handleEvent(message);
         return;
-
       case 'BUILD_PLACED':
+      case 'BUILD_UPDATED':
       case 'BUILD_REMOVED':
       case 'BUILD_REJECTED':
       case 'BUILD_SNAPSHOT':
@@ -56,7 +51,6 @@ export class ServerMessageRouter {
       case 'INVENTORY_SNAPSHOT':
         this.context.onBuildingEvent?.(message);
         return;
-
       case 'pong':
         return;
     }
@@ -110,8 +104,7 @@ export class ServerMessageRouter {
   }
 
   private handleEvent(_message: Extract<ServerToClientMessage, { type: 'event' }>): void {
-    // Gameplay events will be dispatched here as systems are added:
-    // combat text, effects, loot notifications, chat, quest updates, etc.
+    // Gameplay events will be dispatched here as systems are added.
   }
 }
 
