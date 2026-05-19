@@ -118,6 +118,16 @@ export class BuildingPlacementRenderer {
     }
   }
 
+  isOccludingFocus(focus: BuildingOcclusionFocus): boolean {
+    for (const part of this.parts.values()) {
+      const definition = BUILD_PARTS[part.partId];
+      if (!definition || definition.category === 'floor') continue;
+      if (isPartOccludingFocus(part, focus)) return true;
+    }
+
+    return false;
+  }
+
   resetAlpha(): void {
     for (const node of this.nodes.values()) {
       node.alpha = BUILDING_NORMAL_ALPHA;
