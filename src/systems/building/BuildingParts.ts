@@ -4,11 +4,10 @@ const FLOOR_SUPPORTS: BuildPartId[] = [
   "floor_1x1",
   "stone_floor_1x1",
   "deck_floor_1x1",
-  "wood_stairs",
-  "stone_stairs",
   "wood_round_floor",
   "stone_round_floor",
 ];
+const STAIR_SUPPORTS: BuildPartId[] = [...FLOOR_SUPPORTS, "wood_stairs", "stone_stairs"];
 const WALL_SUPPORTS: BuildPartId[] = [
   "thin_wall",
   "stone_wall",
@@ -57,8 +56,8 @@ export const BUILD_PARTS: Record<BuildPartId, BuildPartDefinition> = {
   floor_1x1: common("floor_1x1", "나무 바닥", "floor", "tile", "▱", false, false, "ground", [{ itemId: "wood", quantity: 1 }]),
   stone_floor_1x1: common("stone_floor_1x1", "돌 바닥", "floor", "tile", "▰", false, false, "ground", [{ itemId: "stone", quantity: 2 }]),
   deck_floor_1x1: common("deck_floor_1x1", "데크 바닥", "floor", "tile", "▤", false, false, "ground", [{ itemId: "wood", quantity: 2 }]),
-  wood_stairs: common("wood_stairs", "나무 계단", "floor", "tile", "▟", false, true, FLOOR_SUPPORTS, [{ itemId: "wood", quantity: 3 }]),
-  stone_stairs: common("stone_stairs", "돌 계단", "floor", "tile", "◢", false, true, FLOOR_SUPPORTS, [{ itemId: "stone", quantity: 4 }]),
+  wood_stairs: common("wood_stairs", "나무 계단", "floor", "edge", "▟", false, true, STAIR_SUPPORTS, [{ itemId: "wood", quantity: 3 }]),
+  stone_stairs: common("stone_stairs", "돌 계단", "floor", "edge", "◢", false, true, STAIR_SUPPORTS, [{ itemId: "stone", quantity: 4 }]),
   wood_round_floor: common("wood_round_floor", "나무 원형바닥", "floor", "tile", "◜", false, false, "ground", [{ itemId: "wood", quantity: 2 }]),
   stone_round_floor: common("stone_round_floor", "돌 원형바닥", "floor", "tile", "◝", false, false, "ground", [{ itemId: "stone", quantity: 3 }]),
 
