@@ -46,15 +46,9 @@ export class TilePlacementSystem {
   }
 
   pickAt(worldX: number, worldY: number): EditorTilePlacement | null {
-    const candidates = this.draft.placements
-      .filter((placement) => containsPoint(placement, worldX, worldY, this.state.gridSize))
-      .sort((a, b) => {
-        const zDiff = placementZIndex(b) - placementZIndex(a);
-        if (zDiff !== 0) return zDiff;
-        return this.draft.placements.indexOf(b) - this.draft.placements.indexOf(a);
-      });
-
-    const picked = candidates.find((placement) => placement.assetId !== 'editor-black-base') ?? candidates[0];
+    const picked = this.findTopPlacementAt(worldX, worldY, {
+      excludeEditorBase: true,
+    });
     return picked ? clonePlacement(picked) : null;
   }
 
@@ -89,9 +83,12 @@ export class TilePlacementSystem {
   }
 
   eraseAt(worldX: number, worldY: number): void {
-    const x = snap(worldX, this.state.gridSize);
-    const y = snap(worldY, this.state.gridSize);
-    const placement = this.findPlacementAt(x, y, this.state.activeLayer);
+    const placement = this.findTopPlacementAt(worldX, worldY, {
+      layer: this.state.activeLayer,
+      excludeEditorBase: true,
+    }) ?? this.findTopPlacementAt(worldX, worldY, {
+      excludeEditorBase: true,
+    });
 
     if (placement) {
       this.removePlacement(placement.id);
@@ -364,6 +361,26 @@ export class TilePlacementSystem {
     return this.draft.placements.find(
       (placement) => placement.x === x && placement.y === y && placement.layer === layer,
     ) ?? null;
+  }
+
+  private findTopPlacementAt(
+    worldX: number,
+    worldY: number,
+    options: { layer?: EditorTilePlacement['layer']; excludeEditorBase?: boolean } = {},
+  ): EditorTilePlacement | null {
+    const candidates = this.draft.placements
+      .filter((placement) => {
+        if (options.layer && placement.layer !== options.layer) return false;
+        if (options.excludeEditorBase && placement.id === 'editor-black-base') return false;
+        return containsPoint(placement, worldX, worldY, this.state.gridSize);
+      })
+      .sort((a, b) => {
+        const zDiff = placementZIndex(b) - placementZIndex(a);
+        if (zDiff !== 0) return zDiff;
+        return this.draft.placements.indexOf(b) - this.draft.placements.indexOf(a);
+      });
+
+    return candidates[0] ?? null;
   }
 
   private findMatchingTransparentOverlay(placement: EditorTilePlacement): EditorTilePlacement | null {
