@@ -7,6 +7,9 @@ import {
   type MonsterRenderConfig,
   type MonsterSpriteSheetConfig,
 } from '../assets/monsters';
+import { getWorldEntityZIndex } from '../systems/building/IsoBuildingMath';
+
+const MONSTER_DEPTH_OFFSET = 130;
 
 type MonsterView = {
   container: Container;
@@ -40,6 +43,7 @@ export class MonsterRenderer {
   private readonly failedSpriteSheets = new Set<MonsterType>();
 
   constructor(parent: Container) {
+    this.layer.sortableChildren = true;
     parent.addChild(this.layer);
     void this.loadConfiguredSpriteSheets();
   }
@@ -82,6 +86,7 @@ export class MonsterRenderer {
     for (const view of this.views.values()) {
       const pos = view.interp.update(dt);
       view.container.position.set(Math.round(pos.x), Math.round(pos.y));
+      view.container.zIndex = getWorldEntityZIndex(pos.y, MONSTER_DEPTH_OFFSET);
 
       const dx = pos.x - view.previousX;
       const dy = pos.y - view.previousY;
@@ -123,6 +128,7 @@ export class MonsterRenderer {
     const container = new Container();
     const body = new Graphics();
     container.position.set(monster.x, monster.y);
+    container.zIndex = getWorldEntityZIndex(monster.y, MONSTER_DEPTH_OFFSET);
 
     const view: MonsterView = {
       container,
