@@ -24,7 +24,7 @@ export type ClientPlacementCheck =
 
 const STACKABLE_EDGE_CATEGORIES: BuildCategory[] = ['wall', 'door', 'window'];
 const UPPER_TILE_SUPPORT_CATEGORIES: BuildCategory[] = ['floor', 'wall', 'door', 'window', 'support'];
-const DEMOLITION_PICK_RADIUS = 34;
+const DEMOLITION_PICK_RADIUS = 42;
 
 export class ClientBuildingOccupancy {
   private readonly cells = new Map<string, CellSlots>();
@@ -267,15 +267,16 @@ function getPickScore(part: PlacedBuildPart, worldX: number, worldY: number, cur
 
   if (definition.slotKind === 'edge') {
     const segment = getEdgeSegment(origin, part.rotation);
-    return distancePointToSegment(worldX, worldY, segment.a, segment.b) + layerPenalty + rotationBonus + priorityBonus;
+    const verticalBodyScore = distancePointToVerticalSegmentBand(worldX, worldY, segment.a, segment.b, ISO_LAYER_HEIGHT);
+    return verticalBodyScore + layerPenalty + rotationBonus + priorityBonus;
   }
 
   if (definition.slotKind === 'corner') {
     const point = getCornerPoint(origin, part.rotation);
-    return distance(worldX, worldY, point.x, point.y) + layerPenalty + rotationBonus + priorityBonus;
+    return distancePointToSegment(worldX, worldY, point, { x: point.x, y: point.y - ISO_LAYER_HEIGHT }) + layerPenalty + rotationBonus + priorityBonus;
   }
 
-  return distance(worldX, worldY, origin.x, origin.y) * 0.7 + layerPenalty + priorityBonus;
+  return distanceToIsoDiamond(worldX, worldY, origin) + layerPenalty + priorityBonus;
 }
 
 function getInteractionPriority(part: PlacedBuildPart): number {
@@ -334,6 +335,44 @@ function getCornerPoint(origin: Point, rotation: BuildRotation): Point {
     case 3:
       return { x: origin.x, y: origin.y + halfH };
   }
+}
+
+function distancePointToVerticalSegmentBand(px: number, py: number, a: Point, b: Point, height: number): number {
+  const bottom = distancePointToSegment(px, py, a, b);
+  const top = distancePointToSegment(px, py, { x: a.x, y: a.y - height }, { x: b.x, y: b.y - height });
+  const left = distancePointToSegment(px, py, a, { x: a.x, y: a.y - height });
+  const right = distancePointToSegment(px, py, b, { x: b.x, y: b.y - height });
+  const withinVertical = py <= Math.max(a.y, b.y) && py >= Math.min(a.y, b.y) - height;
+  const withinHorizontalProjection = isPointNearSegmentProjection(px, py, a, b, 8);
+
+  if (withinVertical && withinHorizontalProjection) return 0;
+  return Math.min(bottom, top, left, right);
+}
+
+function isPointNearSegmentProjection(px: number, py: number, a: Point, b: Point, tolerance: number): boolean {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return distance(px, py, a.x, a.y) <= tolerance;
+  const t = ((px - a.x) * dx + (py - a.y) * dy) / lengthSquared;
+  if (t < 0 || t > 1) return false;
+  return distancePointToSegment(px, py, a, b) <= tolerance + ISO_LAYER_HEIGHT;
+}
+
+function distanceToIsoDiamond(px: number, py: number, origin: Point): number {
+  const halfW = ISO_TILE_WIDTH / 2;
+  const halfH = ISO_TILE_HEIGHT / 2;
+  const north = { x: origin.x, y: origin.y - halfH };
+  const east = { x: origin.x + halfW, y: origin.y };
+  const south = { x: origin.x, y: origin.y + halfH };
+  const west = { x: origin.x - halfW, y: origin.y };
+  return Math.min(
+    distancePointToSegment(px, py, north, east),
+    distancePointToSegment(px, py, east, south),
+    distancePointToSegment(px, py, south, west),
+    distancePointToSegment(px, py, west, north),
+    distance(px, py, origin.x, origin.y) * 0.5,
+  );
 }
 
 function distancePointToSegment(px: number, py: number, a: Point, b: Point): number {
