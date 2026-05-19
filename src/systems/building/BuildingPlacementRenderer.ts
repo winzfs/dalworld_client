@@ -27,6 +27,7 @@ const WALL_OCCLUSION_PADDING = 14;
 const PILLAR_OCCLUSION_RADIUS = 18;
 const ROOF_OCCLUSION_PADDING = 8;
 const OCCLUSION_LAYER_PENALTY = 8;
+const ROUND_SEGMENT_STEPS = 12;
 
 export class BuildingPlacementRenderer {
   readonly container = new Container();
@@ -77,7 +78,7 @@ export class BuildingPlacementRenderer {
 
     switch (definition.category) {
       case 'floor':
-        node.addChild(renderFloor(part.partId));
+        node.addChild(renderFloor(part.partId, part.rotation));
         return;
       case 'wall':
         node.addChild(renderWallVariant(part.partId, part.rotation));
@@ -177,7 +178,10 @@ export class BuildingPlacementRenderer {
   }
 }
 
-function renderFloor(partId: BuildPartId): Container {
+function renderFloor(partId: BuildPartId, rotation: BuildRotation): Container {
+  if (partId === 'wood_stairs' || partId === 'stone_stairs') return renderStairs(partId, rotation);
+  if (partId === 'wood_round_floor' || partId === 'stone_round_floor') return renderRoundFloor(partId, rotation);
+
   const node = new Container();
   const top = new Graphics();
   const side = new Graphics();
@@ -221,6 +225,72 @@ function renderFloor(partId: BuildPartId): Container {
   return node;
 }
 
+function renderStairs(partId: BuildPartId, rotation: BuildRotation): Container {
+  const node = new Container();
+  const body = new Graphics();
+  const lines = new Graphics();
+  const palette = getPalette(partId);
+  const steps = 5;
+  const base = getStairBasePolygon(rotation);
+  const rise = ISO_LAYER_HEIGHT * 0.72;
+
+  body
+    .moveTo(base.lowA.x, base.lowA.y)
+    .lineTo(base.lowB.x, base.lowB.y)
+    .lineTo(base.highB.x, base.highB.y - rise)
+    .lineTo(base.highA.x, base.highA.y - rise)
+    .lineTo(base.lowA.x, base.lowA.y)
+    .fill({ color: palette.primary, alpha: 1 })
+    .stroke({ width: 1, color: palette.accent, alpha: 0.55 });
+
+  body
+    .moveTo(base.lowB.x, base.lowB.y)
+    .lineTo(base.highB.x, base.highB.y - rise)
+    .lineTo(base.highB.x, base.highB.y)
+    .lineTo(base.lowB.x, base.lowB.y)
+    .fill({ color: palette.secondary, alpha: 0.88 });
+
+  for (let i = 1; i <= steps; i += 1) {
+    const t = i / steps;
+    const left = interpolate3d(base.lowA, base.highA, t, rise * t);
+    const right = interpolate3d(base.lowB, base.highB, t, rise * t);
+    lines
+      .moveTo(left.x, left.y)
+      .lineTo(right.x, right.y)
+      .stroke({ width: 2, color: palette.accent, alpha: 0.42 });
+  }
+
+  node.addChild(body, lines);
+  return node;
+}
+
+function renderRoundFloor(partId: BuildPartId, rotation: BuildRotation): Container {
+  const node = new Container();
+  const top = new Graphics();
+  const side = new Graphics();
+  const palette = getPalette(partId);
+  const outer = getQuarterArcPoints(rotation, ISO_TILE_WIDTH * 0.56, ISO_TILE_HEIGHT * 0.56, ROUND_SEGMENT_STEPS);
+  const inner = getQuarterArcPoints(rotation, ISO_TILE_WIDTH * 0.18, ISO_TILE_HEIGHT * 0.18, ROUND_SEGMENT_STEPS).reverse();
+  const polygon = [...outer, ...inner];
+  const thickness = partId === 'stone_round_floor' ? FLOOR_THICKNESS_STONE : FLOOR_THICKNESS_WOOD;
+
+  drawPolygon(side, polygon.map((p) => ({ x: p.x, y: p.y + thickness })), palette.secondary, 0.86);
+  drawPolygon(top, polygon, palette.primary, 1);
+  top.stroke({ width: 1, color: palette.accent, alpha: 0.62 });
+
+  const ribs = new Graphics();
+  for (let i = 0; i <= 3; i += 1) {
+    const t = i / 3;
+    const a = outer[Math.floor(t * (outer.length - 1))];
+    const b = inner[inner.length - 1 - Math.floor(t * (inner.length - 1))];
+    if (!a || !b) continue;
+    ribs.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 1, color: palette.accent, alpha: 0.32 });
+  }
+
+  node.addChild(side, top, ribs);
+  return node;
+}
+
 function renderRoof(partId: BuildPartId): Container {
   const node = new Container();
   const roof = new Graphics();
@@ -251,12 +321,46 @@ function renderRoof(partId: BuildPartId): Container {
 }
 
 function renderWallVariant(partId: BuildPartId, rotation: BuildRotation): Container {
+  if (partId === 'wood_round_wall' || partId === 'stone_round_wall') return renderRoundWall(partId, rotation);
   if (partId === 'railing' || partId === 'fence') {
     return renderFenceLike(partId, rotation);
   }
 
   const height = partId === 'half_wall' ? WALL_RENDER_HEIGHT * 0.62 : WALL_RENDER_HEIGHT;
   return renderWallSlab(partId, rotation, height);
+}
+
+function renderRoundWall(partId: BuildPartId, rotation: BuildRotation): Container {
+  const node = new Container();
+  const wall = new Graphics();
+  const cap = new Graphics();
+  const palette = getPalette(partId);
+  const height = WALL_RENDER_HEIGHT;
+  const base = getQuarterArcPoints(rotation, ISO_TILE_WIDTH * 0.56, ISO_TILE_HEIGHT * 0.56, ROUND_SEGMENT_STEPS);
+  const top = base.map((p) => ({ x: p.x, y: p.y - height }));
+
+  for (let i = 0; i < base.length - 1; i += 1) {
+    const a = base[i];
+    const b = base[i + 1];
+    const ta = top[i];
+    const tb = top[i + 1];
+    wall
+      .moveTo(a.x, a.y)
+      .lineTo(b.x, b.y)
+      .lineTo(tb.x, tb.y)
+      .lineTo(ta.x, ta.y)
+      .lineTo(a.x, a.y)
+      .fill({ color: i % 2 === 0 ? palette.primary : palette.secondary, alpha: 0.96 })
+      .stroke({ width: 1, color: palette.accent, alpha: 0.22 });
+  }
+
+  for (let i = 0; i < top.length - 1; i += 1) {
+    cap.moveTo(top[i].x, top[i].y).lineTo(top[i + 1].x, top[i + 1].y);
+  }
+  cap.stroke({ width: 4, color: palette.secondary, alpha: 0.96 });
+
+  node.addChild(wall, cap);
+  return node;
 }
 
 function renderWallSlab(partId: BuildPartId, rotation: BuildRotation, height: number): Container {
@@ -420,7 +524,7 @@ function getPartLayerOffset(part: PlacedBuildPart): number {
   const definition = BUILD_PARTS[part.partId];
   switch (definition?.category) {
     case 'floor':
-      return 10;
+      return part.partId === 'wood_stairs' || part.partId === 'stone_stairs' ? 95 + part.rotation : 10;
     case 'support':
       return 180 + part.rotation;
     case 'wall':
@@ -468,8 +572,6 @@ function isEdgeStructureOccludingFocus(origin: Point, rotation: BuildRotation, f
   const bodyDistance = distancePointToVerticalSegmentBand(focusX, focusY, a, b, height);
   if (bodyDistance > WALL_OCCLUSION_PADDING) return false;
 
-  // If the player's foot is visually below the wall base, the player is in front.
-  // Fade only while the foot is inside/behind the wall's vertical body.
   return focusY <= baseMaxY + 2;
 }
 
@@ -485,7 +587,6 @@ function isRoofOccludingFocus(origin: Point, focusX: number, focusY: number): bo
   const halfH = ISO_TILE_HEIGHT / 2 + ROOF_OCCLUSION_PADDING;
   const verticalOffset = 8;
 
-  // Roofs should fade when the player is behind/under the footprint, but not when standing in front of it.
   if (focusY > origin.y + halfH) return false;
   return Math.abs(focusX - origin.x) / halfW + Math.abs(focusY - (origin.y - verticalOffset)) / halfH <= 1.2;
 }
@@ -513,6 +614,9 @@ function getPalette(partId: BuildPartId): RenderPalette {
     case 'stone_wall':
     case 'stone_pillar':
     case 'stone_door':
+    case 'stone_stairs':
+    case 'stone_round_floor':
+    case 'stone_round_wall':
       return { primary: 0x7c8185, secondary: 0x5f666b, accent: 0xd7dde2 };
     case 'deck_floor_1x1':
       return { primary: 0xb07a43, secondary: 0x7b4f2d, accent: 0xf0c48f };
@@ -520,6 +624,9 @@ function getPalette(partId: BuildPartId): RenderPalette {
     case 'railing':
     case 'fence':
     case 'short_post':
+    case 'wood_stairs':
+    case 'wood_round_floor':
+    case 'wood_round_wall':
       return { primary: 0x9b6a3d, secondary: 0x684326, accent: 0xe7bc85 };
     case 'roof_1x1':
       return { primary: 0xb84e43, secondary: 0x7f2d2a, accent: 0xffc1a8 };
@@ -573,6 +680,47 @@ function getCornerPoint(rotation: BuildRotation): Point {
   }
 }
 
+function getQuarterArcPoints(rotation: BuildRotation, radiusX: number, radiusY: number, steps: number): Point[] {
+  const start = rotation * Math.PI / 2 + Math.PI;
+  const end = start + Math.PI / 2;
+  const points: Point[] = [];
+
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps;
+    const angle = start + (end - start) * t;
+    points.push({ x: Math.cos(angle) * radiusX, y: Math.sin(angle) * radiusY });
+  }
+
+  return points;
+}
+
+function getStairBasePolygon(rotation: BuildRotation): { lowA: Point; lowB: Point; highA: Point; highB: Point } {
+  const halfW = ISO_TILE_WIDTH / 2;
+  const halfH = ISO_TILE_HEIGHT / 2;
+  const north = { x: 0, y: -halfH };
+  const east = { x: halfW, y: 0 };
+  const south = { x: 0, y: halfH };
+  const west = { x: -halfW, y: 0 };
+
+  switch (rotation) {
+    case 0:
+      return { lowA: south, lowB: east, highA: west, highB: north };
+    case 1:
+      return { lowA: west, lowB: south, highA: north, highB: east };
+    case 2:
+      return { lowA: north, lowB: west, highA: east, highB: south };
+    case 3:
+      return { lowA: east, lowB: north, highA: south, highB: west };
+  }
+}
+
+function drawPolygon(graphics: Graphics, points: Point[], color: number, alpha: number): void {
+  if (points.length === 0) return;
+  graphics.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) graphics.lineTo(point.x, point.y);
+  graphics.lineTo(points[0].x, points[0].y).fill({ color, alpha });
+}
+
 function drawVerticalPost(g: Graphics, point: Point, height: number, color: number): void {
   g
     .roundRect(point.x - WALL_POST_WIDTH / 2, point.y - height, WALL_POST_WIDTH, height, 1.5)
@@ -590,6 +738,13 @@ function interpolate(a: Point, b: Point, t: number): Point {
   return {
     x: a.x + (b.x - a.x) * t,
     y: a.y + (b.y - a.y) * t,
+  };
+}
+
+function interpolate3d(a: Point, b: Point, t: number, zLift: number): Point {
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t - zLift,
   };
 }
 
