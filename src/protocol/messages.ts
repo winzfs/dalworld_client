@@ -3,7 +3,7 @@
 
 import type { BuildingClientMessage, BuildingServerEvent } from '../systems/building/BuildingTypes';
 import type { CraftingRecipeId } from '../systems/crafting/CraftingTypes';
-import type { InventorySnapshot } from '../systems/inventory/InventoryTypes';
+import type { InventoryItemStack, InventorySnapshot } from '../systems/inventory/InventoryTypes';
 import type { GameWorldMap, WorldMapSourceRect } from '../worldMap/types';
 
 export type MovementKeys = {
@@ -38,6 +38,7 @@ export type PlayerSnapshot = {
   facing: Facing;
   lastInputSeq: number;
   inventory: Inventory;
+  inventoryItems?: InventoryItemStack[];
 };
 
 export type ResourceSnapshot = {
