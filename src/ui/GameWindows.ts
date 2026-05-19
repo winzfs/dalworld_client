@@ -1,7 +1,10 @@
 import type { Inventory, ItemType } from '../protocol/messages';
 import { BUILD_PART_LIST } from '../systems/building/BuildingParts';
+import { BUILD_PART_ITEM_ENTRIES, getBuildPartItemDefinition } from '../systems/building/BuildPartInventoryCatalog';
 import type { BuildingModeSnapshot } from '../systems/building/BuildingModeState';
 import type { BuildPartId } from '../systems/building/BuildingTypes';
+import { BASE_ITEM_DEFINITIONS, type ItemDefinition } from '../systems/inventory/ItemDefinitions';
+import { CRAFTING_RECIPES } from '../systems/crafting/CraftingRecipes';
 
 type WindowId = 'inventory' | 'crafting' | 'building';
 
@@ -18,8 +21,7 @@ type FloatingButtonConfig = {
 
 type InventoryItemView = {
   item: ItemType;
-  label: string;
-  description: string;
+  definition: ItemDefinition;
   amount: number;
 };
 
@@ -35,48 +37,10 @@ const WINDOW_ROOT_ID = 'dalworld-windows';
 const INVENTORY_CATEGORIES = ['일반', '사용', '장비', '제작', '건설', '펫'] as const;
 const INVENTORY_SLOT_COUNT = 36;
 
-const ITEM_LABELS: Record<ItemType, { label: string; description: string }> = {
-  wood: {
-    label: '나무',
-    description: '채집으로 얻는 기본 재료입니다. 제작과 건설에 사용됩니다.',
-  },
-  stone: {
-    label: '돌',
-    description: '채집으로 얻는 단단한 재료입니다. 제작과 건설에 사용됩니다.',
-  },
-};
-
 const BUTTONS: FloatingButtonConfig[] = [
-  {
-    id: 'inventory',
-    label: '가방',
-    icon: '🎒',
-    title: '가방',
-    defaultButtonX: 18,
-    defaultButtonY: 180,
-    defaultWindowX: 96,
-    defaultWindowY: 120,
-  },
-  {
-    id: 'crafting',
-    label: '제작',
-    icon: '⚒️',
-    title: '제작',
-    defaultButtonX: 18,
-    defaultButtonY: 252,
-    defaultWindowX: 160,
-    defaultWindowY: 150,
-  },
-  {
-    id: 'building',
-    label: '건설',
-    icon: '🏠',
-    title: '건설',
-    defaultButtonX: 18,
-    defaultButtonY: 324,
-    defaultWindowX: 220,
-    defaultWindowY: 180,
-  },
+  { id: 'inventory', label: '가방', icon: '🎒', title: '가방', defaultButtonX: 18, defaultButtonY: 180, defaultWindowX: 96, defaultWindowY: 120 },
+  { id: 'crafting', label: '제작', icon: '⚒️', title: '제작', defaultButtonX: 18, defaultButtonY: 252, defaultWindowX: 160, defaultWindowY: 150 },
+  { id: 'building', label: '건설', icon: '🏠', title: '건설', defaultButtonX: 18, defaultButtonY: 324, defaultWindowX: 220, defaultWindowY: 180 },
 ];
 
 export class GameWindows {
@@ -111,11 +75,11 @@ export class GameWindows {
 
     const slots = [...this.root.querySelectorAll<HTMLButtonElement>('[data-inventory-slot]')];
     const resourceItems = this.activeInventoryCategory === '일반' ? getGeneralInventoryItems(inventory) : [];
-    const buildParts = this.activeInventoryCategory === '건설' ? BUILD_PART_LIST : [];
+    const buildParts = this.activeInventoryCategory === '건설' ? BUILD_PART_ITEM_ENTRIES : [];
 
     for (const [index, slot] of slots.entries()) {
       const resourceItem = resourceItems[index];
-      const buildPart = buildParts[index];
+      const buildPartEntry = buildParts[index];
       slot.innerHTML = '';
       slot.classList.remove('has-item', 'is-build-part', 'is-selected');
       slot.dataset.item = '';
@@ -125,34 +89,32 @@ export class GameWindows {
       if (resourceItem) {
         slot.classList.add('has-item');
         slot.dataset.item = resourceItem.item;
-        slot.title = `${resourceItem.label} x${resourceItem.amount}`;
+        slot.title = `${resourceItem.definition.label} x${resourceItem.amount}`;
         slot.innerHTML = `
-          <span class="inventory-item-icon">${getItemIcon(resourceItem.item)}</span>
+          <span class="inventory-item-icon">${resourceItem.definition.icon}</span>
           <span class="inventory-item-count">${resourceItem.amount}</span>
         `;
         continue;
       }
 
-      if (buildPart) {
+      if (buildPartEntry) {
         const selected = this.buildingMode.enabled &&
           this.buildingMode.toolMode === 'place' &&
-          this.buildingMode.selectedPartId === buildPart.id;
+          this.buildingMode.selectedPartId === buildPartEntry.buildPartId;
         slot.classList.add('has-item', 'is-build-part');
         slot.classList.toggle('is-selected', selected);
-        slot.dataset.buildInventoryPart = buildPart.id;
-        slot.title = `${buildPart.label} 선택`;
+        slot.dataset.buildInventoryPart = buildPartEntry.buildPartId;
+        slot.title = `${buildPartEntry.definition.label} 선택`;
         slot.innerHTML = `
-          <span class="inventory-item-icon">${buildPart.icon}</span>
-          <span class="inventory-build-label">${buildPart.label}</span>
+          <span class="inventory-item-icon">${buildPartEntry.definition.icon}</span>
+          <span class="inventory-build-label">${buildPartEntry.definition.label}</span>
         `;
       }
     }
 
     if (this.selectedItem && this.activeInventoryCategory === '일반') {
       const selected = resourceItems.find((item) => item.item === this.selectedItem);
-      if (selected) {
-        this.renderItemDetail(selected);
-      }
+      if (selected) this.renderItemDetail(selected);
     }
 
     if (this.selectedBuildPart && this.activeInventoryCategory === '건설') {
@@ -189,9 +151,7 @@ export class GameWindows {
       button.classList.toggle('is-selected', selected);
       button.classList.toggle('is-disabled-by-cost', !canAfford);
       button.disabled = false;
-      button.title = canAfford
-        ? `${part.label} 배치`
-        : `${part.label} 선택 가능 · 배치는 서버에서 재료 검증`;
+      button.title = canAfford ? `${part.label} 배치` : `${part.label} 선택 가능 · 배치는 서버에서 재료 검증`;
     }
 
     for (const slot of inventoryBuildSlots) {
@@ -262,12 +222,7 @@ export class GameWindows {
           this.selectedBuildPart = buildPartId;
           this.renderBuildPartDetail(buildPartId);
           this.options.onSelectBuildPart?.(buildPartId);
-          this.renderBuildingMode({
-            ...this.buildingMode,
-            enabled: true,
-            toolMode: 'place',
-            selectedPartId: buildPartId,
-          });
+          this.renderBuildingMode({ ...this.buildingMode, enabled: true, toolMode: 'place', selectedPartId: buildPartId });
           return;
         }
 
@@ -277,22 +232,16 @@ export class GameWindows {
           this.selectedBuildPart = null;
           const index = Number(slot.dataset.inventorySlot ?? '0') + 1;
           detailTitle.textContent = `빈 슬롯 ${index}`;
-          detailBody.textContent = this.activeInventoryCategory === '건설'
-            ? '이 슬롯에는 아직 건설 부품이 없습니다.'
-            : '아직 아이템이 없는 빈 슬롯입니다.';
+          detailBody.textContent = this.activeInventoryCategory === '건설' ? '이 슬롯에는 아직 건설 부품이 없습니다.' : '아직 아이템이 없는 빈 슬롯입니다.';
           return;
         }
 
         this.selectedBuildPart = null;
         this.selectedItem = itemType;
-        const meta = ITEM_LABELS[itemType];
+        const definition = BASE_ITEM_DEFINITIONS[itemType];
         const countText = slot.querySelector('.inventory-item-count')?.textContent ?? '0';
-        this.renderItemDetail({
-          item: itemType,
-          label: meta.label,
-          description: meta.description,
-          amount: Number(countText),
-        });
+        if (!definition) return;
+        this.renderItemDetail({ item: itemType, definition, amount: Number(countText) });
       });
     }
   }
@@ -312,54 +261,31 @@ export class GameWindows {
         this.selectedBuildPart = partId;
         this.renderBuildPartDetail(partId);
         this.options.onSelectBuildPart?.(partId);
-        this.renderBuildingMode({
-          ...this.buildingMode,
-          enabled: true,
-          toolMode: 'place',
-          selectedPartId: partId,
-        });
+        this.renderBuildingMode({ ...this.buildingMode, enabled: true, toolMode: 'place', selectedPartId: partId });
       });
     }
 
     removeButton.addEventListener('click', () => {
       this.options.onEnterRemoveMode?.();
-      this.renderBuildingMode({
-        ...this.buildingMode,
-        enabled: true,
-        toolMode: 'remove',
-        selectedPartId: null,
-      });
+      this.renderBuildingMode({ ...this.buildingMode, enabled: true, toolMode: 'remove', selectedPartId: null });
     });
 
     exitButton.addEventListener('click', () => {
       this.options.onExitBuildingMode?.();
-      this.renderBuildingMode({
-        ...this.buildingMode,
-        enabled: false,
-        toolMode: 'place',
-        selectedPartId: null,
-      });
+      this.renderBuildingMode({ ...this.buildingMode, enabled: false, toolMode: 'place', selectedPartId: null });
     });
 
-    rotateButton.addEventListener('click', () => {
-      this.options.onRotateBuildingPart?.();
-    });
-
-    layerDownButton.addEventListener('click', () => {
-      this.options.onSetBuildingLayer?.(Math.max(0, this.buildingMode.currentZ - 1));
-    });
-
-    layerUpButton.addEventListener('click', () => {
-      this.options.onSetBuildingLayer?.(this.buildingMode.currentZ + 1);
-    });
+    rotateButton.addEventListener('click', () => this.options.onRotateBuildingPart?.());
+    layerDownButton.addEventListener('click', () => this.options.onSetBuildingLayer?.(Math.max(0, this.buildingMode.currentZ - 1)));
+    layerUpButton.addEventListener('click', () => this.options.onSetBuildingLayer?.(this.buildingMode.currentZ + 1));
   }
 
   private renderItemDetail(item: InventoryItemView): void {
     const inventory = query<HTMLDivElement>(this.root, '[data-window="inventory"]');
     const detailTitle = query<HTMLHeadingElement>(inventory, '[data-inventory-detail-title]');
     const detailBody = query<HTMLParagraphElement>(inventory, '[data-inventory-detail-body]');
-    detailTitle.textContent = `${item.label} x${item.amount}`;
-    detailBody.textContent = item.description;
+    detailTitle.textContent = `${item.definition.label} x${item.amount}`;
+    detailBody.textContent = item.definition.description;
   }
 
   private renderBuildPartDetail(partId: BuildPartId): void {
@@ -368,9 +294,9 @@ export class GameWindows {
     const detailBody = query<HTMLParagraphElement>(inventory, '[data-inventory-detail-body]');
     const part = BUILD_PART_LIST.find((candidate) => candidate.id === partId);
     if (!part) return;
-
-    detailTitle.textContent = `${part.icon} ${part.label}`;
-    detailBody.textContent = `슬롯: ${getSlotKindLabel(part.slotKind)} · 비용: ${part.placementCost.map((cost) => `${getBuildCostLabel(cost.itemId)} ${cost.quantity}`).join(', ')} · 클릭하면 건설모드로 진입합니다.`;
+    const item = getBuildPartItemDefinition(partId);
+    detailTitle.textContent = `${item.icon} ${item.label}`;
+    detailBody.textContent = `${item.description} · 클릭하면 건설모드로 진입합니다.`;
   }
 
   private toggleWindow(id: WindowId): void {
@@ -391,23 +317,9 @@ export class GameWindows {
 
 function getGeneralInventoryItems(inventory: Inventory | null): InventoryItemView[] {
   if (!inventory) return [];
-  return (Object.keys(ITEM_LABELS) as ItemType[])
-    .map((item) => ({
-      item,
-      label: ITEM_LABELS[item].label,
-      description: ITEM_LABELS[item].description,
-      amount: inventory[item] ?? 0,
-    }))
-    .filter((item) => item.amount > 0);
-}
-
-function getItemIcon(item: ItemType): string {
-  switch (item) {
-    case 'wood':
-      return '🪵';
-    case 'stone':
-      return '🪨';
-  }
+  return (['wood', 'stone'] as ItemType[])
+    .map((item) => ({ item, definition: BASE_ITEM_DEFINITIONS[item], amount: inventory[item] ?? 0 }))
+    .filter((item): item is InventoryItemView => Boolean(item.definition && item.amount > 0));
 }
 
 function createOrGetRoot(): HTMLDivElement {
@@ -426,7 +338,7 @@ function getWindowsMarkup(): string {
       ${BUTTONS.map(getFloatingButtonMarkup).join('')}
     </div>
     ${getInventoryWindowMarkup()}
-    ${getSimpleWindowMarkup('crafting', '제작', '제작 시스템', '제작 레시피 목록, 필요 재료, 제작 버튼이 들어갈 공간입니다. 지금은 UI 골격만 구성되어 있습니다.')}
+    ${getCraftingWindowMarkup()}
     ${getBuildingWindowMarkup()}
   `;
 }
@@ -473,6 +385,21 @@ function getInventoryWindowMarkup(): string {
   `;
 }
 
+function getCraftingWindowMarkup(): string {
+  return `
+    <section class="game-window simple-system-window crafting-window" data-window="crafting" hidden>
+      ${getWindowHeaderMarkup('제작')}
+      <div class="system-window-body">
+        <h3>제작 시스템</h3>
+        <p>제작 레시피 정의가 분리되었습니다. 서버 제작 검증 연결 전까지는 목록 미리보기만 표시합니다.</p>
+        <div class="placeholder-grid">
+          ${CRAFTING_RECIPES.slice(0, 8).map((recipe) => `<button class="placeholder-card" type="button" title="${recipe.label}">${recipe.outputs[0]?.quantity ?? 1}</button>`).join('')}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function getBuildingWindowMarkup(): string {
   return `
     <section class="game-window simple-system-window building-window" data-window="building" hidden>
@@ -504,21 +431,6 @@ function getBuildingWindowMarkup(): string {
   `;
 }
 
-function getSimpleWindowMarkup(id: WindowId, title: string, heading: string, body: string): string {
-  return `
-    <section class="game-window simple-system-window ${id}-window" data-window="${id}" hidden>
-      ${getWindowHeaderMarkup(title)}
-      <div class="system-window-body">
-        <h3>${heading}</h3>
-        <p>${body}</p>
-        <div class="placeholder-grid">
-          ${Array.from({ length: 8 }, (_, index) => `<button class="placeholder-card" type="button">${index + 1}</button>`).join('')}
-        </div>
-      </div>
-    </section>
-  `;
-}
-
 function query<T extends Element>(root: ParentNode, selector: string): T {
   const el = root.querySelector<T>(selector);
   if (!el) throw new Error(`Missing UI element: ${selector}`);
@@ -535,28 +447,17 @@ function makeDraggable(target: HTMLElement, handle: HTMLElement, onStart: () => 
 
   handle.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
-
     onStart();
     handle.setPointerCapture(event.pointerId);
-
-    drag = {
-      startX: event.clientX,
-      startY: event.clientY,
-      originX: target.offsetLeft,
-      originY: target.offsetTop,
-      moved: false,
-    };
-
+    drag = { startX: event.clientX, startY: event.clientY, originX: target.offsetLeft, originY: target.offsetTop, moved: false };
     target.dataset.dragging = 'true';
   });
 
   handle.addEventListener('pointermove', (event) => {
     if (!drag) return;
-
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
     if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
-
     const maxX = Math.max(0, window.innerWidth - target.offsetWidth);
     const maxY = Math.max(0, window.innerHeight - target.offsetHeight);
     target.style.left = `${clamp(drag.originX + dx, 0, maxX)}px`;
@@ -569,9 +470,7 @@ function makeDraggable(target: HTMLElement, handle: HTMLElement, onStart: () => 
     target.dataset.dragging = 'false';
     drag = null;
     handle.releasePointerCapture(event.pointerId);
-    window.setTimeout(() => {
-      target.dataset.suppressClick = 'false';
-    }, 0);
+    window.setTimeout(() => { target.dataset.suppressClick = 'false'; }, 0);
   });
 
   handle.addEventListener('pointercancel', () => {
@@ -589,12 +488,8 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function canAffordBuildPart(
-  inventory: Inventory | null,
-  costs: { itemId: string; quantity: number }[],
-): boolean {
+function canAffordBuildPart(inventory: Inventory | null, costs: { itemId: string; quantity: number }[]): boolean {
   if (!inventory) return false;
-
   return costs.every((cost) => {
     if (cost.itemId !== 'wood' && cost.itemId !== 'stone') return false;
     return (inventory[cost.itemId] ?? 0) >= cost.quantity;
@@ -602,17 +497,9 @@ function canAffordBuildPart(
 }
 
 function getBuildingStatusText(mode: BuildingModeSnapshot): string {
-  if (!mode.enabled) {
-    return '부품을 선택하면 건설모드로 진입합니다.';
-  }
-
-  if (mode.toolMode === 'remove') {
-    return '철거모드: 제거할 건설물을 클릭하세요.';
-  }
-
-  return mode.selectedPartId
-    ? `건설모드: ${getBuildPartLabel(mode.selectedPartId)} 선택됨`
-    : '부품을 선택하면 건설모드로 진입합니다.';
+  if (!mode.enabled) return '부품을 선택하면 건설모드로 진입합니다.';
+  if (mode.toolMode === 'remove') return '철거모드: 제거할 건설물을 클릭하세요.';
+  return mode.selectedPartId ? `건설모드: ${getBuildPartLabel(mode.selectedPartId)} 선택됨` : '부품을 선택하면 건설모드로 진입합니다.';
 }
 
 function getBuildPartLabel(partId: BuildPartId): string {
@@ -620,27 +507,7 @@ function getBuildPartLabel(partId: BuildPartId): string {
 }
 
 function getBuildCostLabel(itemId: string): string {
-  switch (itemId) {
-    case 'wood':
-      return '나무';
-    case 'stone':
-      return '돌';
-    case 'fiber':
-      return '섬유';
-    default:
-      return itemId;
-  }
-}
-
-function getSlotKindLabel(slotKind: string): string {
-  switch (slotKind) {
-    case 'tile':
-      return '타일';
-    case 'edge':
-      return '엣지';
-    case 'corner':
-      return '코너';
-    default:
-      return slotKind;
-  }
+  const definition = BASE_ITEM_DEFINITIONS[itemId];
+  if (definition) return definition.label;
+  return itemId;
 }
