@@ -164,7 +164,10 @@ export class GameWindows {
       const canAfford = canAffordBuildPart(this.lastInventory, part.placementCost);
       button.classList.toggle('is-selected', selected);
       button.classList.toggle('is-disabled-by-cost', !canAfford);
-      button.disabled = !canAfford;
+      button.disabled = false;
+      button.title = canAfford
+        ? `${part.label} 배치`
+        : `${part.label} 선택 가능 · 배치는 서버에서 재료 검증`;
     }
   }
 
