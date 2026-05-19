@@ -25,6 +25,7 @@ type InventoryItemView = {
 
 export type GameWindowsOptions = {
   onSelectBuildPart?: (partId: BuildPartId) => void;
+  onEnterRemoveMode?: () => void;
   onExitBuildingMode?: () => void;
   onRotateBuildingPart?: () => void;
   onSetBuildingLayer?: (z: number) => void;
@@ -87,6 +88,7 @@ export class GameWindows {
   private lastInventory: Inventory | null = null;
   private buildingMode: BuildingModeSnapshot = {
     enabled: false,
+    toolMode: 'place',
     selectedPartId: null,
     rotation: 0,
     currentZ: 0,
@@ -143,21 +145,22 @@ export class GameWindows {
     const status = query<HTMLDivElement>(this.root, '[data-building-status]');
     const layer = query<HTMLSpanElement>(this.root, '[data-building-layer]');
     const rotation = query<HTMLSpanElement>(this.root, '[data-building-rotation]');
+    const removeButton = query<HTMLButtonElement>(this.root, '[data-building-remove-mode]');
     const buttons = [...this.root.querySelectorAll<HTMLButtonElement>('[data-build-part]')];
 
-    status.textContent = mode.enabled && mode.selectedPartId
-      ? `건설모드: ${getBuildPartLabel(mode.selectedPartId)} 선택됨`
-      : '부품을 선택하면 건설모드로 진입합니다.';
+    status.textContent = getBuildingStatusText(mode);
     status.classList.toggle('is-active', mode.enabled);
+    status.classList.toggle('is-remove-mode', mode.enabled && mode.toolMode === 'remove');
     layer.textContent = String(mode.currentZ);
     rotation.textContent = String(mode.rotation);
+    removeButton.classList.toggle('is-selected', mode.enabled && mode.toolMode === 'remove');
 
     for (const button of buttons) {
       const partId = button.dataset.buildPart as BuildPartId;
       const part = BUILD_PART_LIST.find((candidate) => candidate.id === partId);
       if (!part) continue;
 
-      const selected = mode.enabled && mode.selectedPartId === partId;
+      const selected = mode.enabled && mode.toolMode === 'place' && mode.selectedPartId === partId;
       const canAfford = canAffordBuildPart(this.lastInventory, part.placementCost);
       button.classList.toggle('is-selected', selected);
       button.classList.toggle('is-disabled-by-cost', !canAfford);
@@ -242,6 +245,7 @@ export class GameWindows {
     const partButtons = [...building.querySelectorAll<HTMLButtonElement>('[data-build-part]')];
     const exitButton = query<HTMLButtonElement>(building, '[data-building-exit]');
     const rotateButton = query<HTMLButtonElement>(building, '[data-building-rotate]');
+    const removeButton = query<HTMLButtonElement>(building, '[data-building-remove-mode]');
     const layerDownButton = query<HTMLButtonElement>(building, '[data-building-layer-down]');
     const layerUpButton = query<HTMLButtonElement>(building, '[data-building-layer-up]');
 
@@ -251,6 +255,10 @@ export class GameWindows {
         this.options.onSelectBuildPart?.(partId);
       });
     }
+
+    removeButton.addEventListener('click', () => {
+      this.options.onEnterRemoveMode?.();
+    });
 
     exitButton.addEventListener('click', () => {
       this.options.onExitBuildingMode?.();
@@ -389,6 +397,7 @@ function getBuildingWindowMarkup(): string {
           <button type="button" class="building-control" data-building-layer-up>층 +</button>
           <button type="button" class="building-control" data-building-rotate>회전</button>
           <span class="building-control-readout">R <b data-building-rotation>0</b></span>
+          <button type="button" class="building-control is-danger" data-building-remove-mode>철거</button>
           <button type="button" class="building-control is-danger" data-building-exit>해제</button>
         </div>
         <div class="building-part-grid" aria-label="건설 부품 목록">
@@ -502,6 +511,20 @@ function canAffordBuildPart(
     if (cost.itemId !== 'wood' && cost.itemId !== 'stone') return false;
     return (inventory[cost.itemId] ?? 0) >= cost.quantity;
   });
+}
+
+function getBuildingStatusText(mode: BuildingModeSnapshot): string {
+  if (!mode.enabled) {
+    return '부품을 선택하면 건설모드로 진입합니다.';
+  }
+
+  if (mode.toolMode === 'remove') {
+    return '철거모드: 제거할 건설물을 클릭하세요.';
+  }
+
+  return mode.selectedPartId
+    ? `건설모드: ${getBuildPartLabel(mode.selectedPartId)} 선택됨`
+    : '부품을 선택하면 건설모드로 진입합니다.';
 }
 
 function getBuildPartLabel(partId: BuildPartId): string {
