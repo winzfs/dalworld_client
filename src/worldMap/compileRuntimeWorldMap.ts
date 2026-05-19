@@ -37,6 +37,11 @@ function compilePlacement(placement: EditorTilePlacement): WorldMapPlacement {
     scale: Math.max(MIN_SCALE, normalizePositiveNumber(placement.scale, 1)),
   };
 
+  const displayWidth = normalizeOptionalPositiveNumber(placement.displayWidth ?? placement.sourceRect?.width);
+  const displayHeight = normalizeOptionalPositiveNumber(placement.displayHeight ?? placement.sourceRect?.height);
+  if (displayWidth) compiled.displayWidth = displayWidth;
+  if (displayHeight) compiled.displayHeight = displayHeight;
+
   const sourceRect = compileSourceRect(placement.sourceRect);
   if (sourceRect) compiled.sourceRect = sourceRect;
 
