@@ -1,4 +1,7 @@
 import type { Inventory, ItemType } from '../protocol/messages';
+import { BUILD_PART_LIST } from '../systems/building/BuildingParts';
+import type { BuildingModeSnapshot } from '../systems/building/BuildingModeState';
+import type { BuildPartId } from '../systems/building/BuildingTypes';
 
 type WindowId = 'inventory' | 'crafting' | 'building';
 
@@ -18,6 +21,13 @@ type InventoryItemView = {
   label: string;
   description: string;
   amount: number;
+};
+
+export type GameWindowsOptions = {
+  onSelectBuildPart?: (partId: BuildPartId) => void;
+  onExitBuildingMode?: () => void;
+  onRotateBuildingPart?: () => void;
+  onSetBuildingLayer?: (z: number) => void;
 };
 
 const WINDOW_ROOT_ID = 'dalworld-windows';
@@ -70,19 +80,32 @@ const BUTTONS: FloatingButtonConfig[] = [
 
 export class GameWindows {
   private readonly root: HTMLDivElement;
+  private readonly options: GameWindowsOptions;
   private zIndex = 30;
   private selectedItem: ItemType | null = null;
   private activeInventoryCategory = '일반';
+  private lastInventory: Inventory | null = null;
+  private buildingMode: BuildingModeSnapshot = {
+    enabled: false,
+    selectedPartId: null,
+    rotation: 0,
+    currentZ: 0,
+  };
 
-  constructor() {
+  constructor(options: GameWindowsOptions = {}) {
+    this.options = options;
     this.root = createOrGetRoot();
     this.root.innerHTML = getWindowsMarkup();
     this.installFloatingButtons();
     this.installWindows();
     this.installInventoryInteractions();
+    this.installBuildingInteractions();
+    this.renderBuildingMode(this.buildingMode);
   }
 
   renderInventory(inventory: Inventory | null): void {
+    this.lastInventory = inventory;
+
     const slots = [...this.root.querySelectorAll<HTMLButtonElement>('[data-inventory-slot]')];
     const items = this.activeInventoryCategory === '일반' ? getGeneralInventoryItems(inventory) : [];
 
@@ -109,6 +132,36 @@ export class GameWindows {
       if (selected) {
         this.renderItemDetail(selected);
       }
+    }
+
+    this.renderBuildingMode(this.buildingMode);
+  }
+
+  renderBuildingMode(mode: BuildingModeSnapshot): void {
+    this.buildingMode = mode;
+
+    const status = query<HTMLDivElement>(this.root, '[data-building-status]');
+    const layer = query<HTMLSpanElement>(this.root, '[data-building-layer]');
+    const rotation = query<HTMLSpanElement>(this.root, '[data-building-rotation]');
+    const buttons = [...this.root.querySelectorAll<HTMLButtonElement>('[data-build-part]')];
+
+    status.textContent = mode.enabled && mode.selectedPartId
+      ? `건설모드: ${getBuildPartLabel(mode.selectedPartId)} 선택됨`
+      : '부품을 선택하면 건설모드로 진입합니다.';
+    status.classList.toggle('is-active', mode.enabled);
+    layer.textContent = String(mode.currentZ);
+    rotation.textContent = String(mode.rotation);
+
+    for (const button of buttons) {
+      const partId = button.dataset.buildPart as BuildPartId;
+      const part = BUILD_PART_LIST.find((candidate) => candidate.id === partId);
+      if (!part) continue;
+
+      const selected = mode.enabled && mode.selectedPartId === partId;
+      const canAfford = canAffordBuildPart(this.lastInventory, part.placementCost);
+      button.classList.toggle('is-selected', selected);
+      button.classList.toggle('is-disabled-by-cost', !canAfford);
+      button.disabled = !canAfford;
     }
   }
 
@@ -155,7 +208,7 @@ export class GameWindows {
         detailBody.textContent = this.activeInventoryCategory === '일반'
           ? '채집한 자원이 이곳에 표시됩니다.'
           : '아직 서버 데이터가 연결되지 않은 카테고리입니다.';
-        this.renderInventory(null);
+        this.renderInventory(this.lastInventory);
       });
     }
 
@@ -182,6 +235,38 @@ export class GameWindows {
         });
       });
     }
+  }
+
+  private installBuildingInteractions(): void {
+    const building = query<HTMLDivElement>(this.root, '[data-window="building"]');
+    const partButtons = [...building.querySelectorAll<HTMLButtonElement>('[data-build-part]')];
+    const exitButton = query<HTMLButtonElement>(building, '[data-building-exit]');
+    const rotateButton = query<HTMLButtonElement>(building, '[data-building-rotate]');
+    const layerDownButton = query<HTMLButtonElement>(building, '[data-building-layer-down]');
+    const layerUpButton = query<HTMLButtonElement>(building, '[data-building-layer-up]');
+
+    for (const button of partButtons) {
+      button.addEventListener('click', () => {
+        const partId = button.dataset.buildPart as BuildPartId;
+        this.options.onSelectBuildPart?.(partId);
+      });
+    }
+
+    exitButton.addEventListener('click', () => {
+      this.options.onExitBuildingMode?.();
+    });
+
+    rotateButton.addEventListener('click', () => {
+      this.options.onRotateBuildingPart?.();
+    });
+
+    layerDownButton.addEventListener('click', () => {
+      this.options.onSetBuildingLayer?.(Math.max(0, this.buildingMode.currentZ - 1));
+    });
+
+    layerUpButton.addEventListener('click', () => {
+      this.options.onSetBuildingLayer?.(this.buildingMode.currentZ + 1);
+    });
   }
 
   private renderItemDetail(item: InventoryItemView): void {
@@ -246,7 +331,7 @@ function getWindowsMarkup(): string {
     </div>
     ${getInventoryWindowMarkup()}
     ${getSimpleWindowMarkup('crafting', '제작', '제작 시스템', '제작 레시피 목록, 필요 재료, 제작 버튼이 들어갈 공간입니다. 지금은 UI 골격만 구성되어 있습니다.')}
-    ${getSimpleWindowMarkup('building', '건설', '건설 시스템', '건설 카테고리, 배치 프리뷰, 필요 재료, 회전/취소 버튼이 들어갈 공간입니다. 지금은 UI 골격만 구성되어 있습니다.')}
+    ${getBuildingWindowMarkup()}
   `;
 }
 
@@ -287,6 +372,36 @@ function getInventoryWindowMarkup(): string {
           <h3 data-inventory-detail-title>일반 가방</h3>
           <p data-inventory-detail-body>채집한 자원이 이곳에 표시됩니다.</p>
         </aside>
+      </div>
+    </section>
+  `;
+}
+
+function getBuildingWindowMarkup(): string {
+  return `
+    <section class="game-window simple-system-window building-window" data-window="building" hidden>
+      ${getWindowHeaderMarkup('건설')}
+      <div class="system-window-body building-system-body">
+        <div class="building-mode-status" data-building-status>부품을 선택하면 건설모드로 진입합니다.</div>
+        <div class="building-controls">
+          <button type="button" class="building-control" data-building-layer-down>층 -</button>
+          <span class="building-control-readout">Z <b data-building-layer>0</b></span>
+          <button type="button" class="building-control" data-building-layer-up>층 +</button>
+          <button type="button" class="building-control" data-building-rotate>회전</button>
+          <span class="building-control-readout">R <b data-building-rotation>0</b></span>
+          <button type="button" class="building-control is-danger" data-building-exit>해제</button>
+        </div>
+        <div class="building-part-grid" aria-label="건설 부품 목록">
+          ${BUILD_PART_LIST.map((part) => `
+            <button class="building-part-card" type="button" data-build-part="${part.id}">
+              <span class="building-part-icon">${part.icon}</span>
+              <span class="building-part-main">
+                <strong>${part.label}</strong>
+                <small>${part.placementCost.map((cost) => `${getBuildCostLabel(cost.itemId)} ${cost.quantity}`).join(' · ')}</small>
+              </span>
+            </button>
+          `).join('')}
+        </div>
       </div>
     </section>
   `;
@@ -375,4 +490,33 @@ function wasDragClickSuppressed(event: Event): boolean {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function canAffordBuildPart(
+  inventory: Inventory | null,
+  costs: { itemId: string; quantity: number }[],
+): boolean {
+  if (!inventory) return false;
+
+  return costs.every((cost) => {
+    if (cost.itemId !== 'wood' && cost.itemId !== 'stone') return false;
+    return (inventory[cost.itemId] ?? 0) >= cost.quantity;
+  });
+}
+
+function getBuildPartLabel(partId: BuildPartId): string {
+  return BUILD_PART_LIST.find((part) => part.id === partId)?.label ?? partId;
+}
+
+function getBuildCostLabel(itemId: string): string {
+  switch (itemId) {
+    case 'wood':
+      return '나무';
+    case 'stone':
+      return '돌';
+    case 'fiber':
+      return '섬유';
+    default:
+      return itemId;
+  }
 }
