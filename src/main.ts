@@ -1,5 +1,6 @@
 import './style.css';
 import { GameApp } from './game/GameApp';
+import { installTimeOfDayClientFeature } from './systems/timeOfDay/TimeOfDayClientFeature';
 import { BootOverlay, installGlobalErrorOverlay } from './utils/bootOverlay';
 
 const bootOverlay = new BootOverlay();
@@ -11,6 +12,8 @@ async function boot(): Promise<void> {
   if (!mount) {
     throw new Error('Missing #app mount element');
   }
+
+  installTimeOfDayClientFeature(document.body);
 
   bootOverlay.setMessage('Starting Pixi.js application...');
   const game = new GameApp();
