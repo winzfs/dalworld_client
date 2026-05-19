@@ -18,6 +18,11 @@ export type BuildingOcclusionFocus = {
 const BUILDING_NORMAL_ALPHA = 1;
 const BUILDING_OCCLUDING_ALPHA = 0.38;
 const BUILDING_OCCLUSION_RADIUS = 2;
+const FLOOR_THICKNESS_WOOD = 8;
+const FLOOR_THICKNESS_STONE = 10;
+const WALL_RENDER_HEIGHT = ISO_LAYER_HEIGHT - FLOOR_THICKNESS_WOOD;
+const DOOR_RENDER_HEIGHT = WALL_RENDER_HEIGHT - 5;
+const PILLAR_RENDER_HEIGHT = ISO_LAYER_HEIGHT - 4;
 
 export class BuildingPlacementRenderer {
   readonly container = new Container();
@@ -172,7 +177,7 @@ function renderFloor(partId: BuildPartId): Container {
   const side = new Graphics();
   const halfW = ISO_TILE_WIDTH / 2;
   const halfH = ISO_TILE_HEIGHT / 2;
-  const thickness = partId === 'stone_floor_1x1' ? 10 : 8;
+  const thickness = partId === 'stone_floor_1x1' ? FLOOR_THICKNESS_STONE : FLOOR_THICKNESS_WOOD;
   const palette = getPalette(partId);
 
   side
@@ -244,7 +249,7 @@ function renderWallVariant(partId: BuildPartId, rotation: BuildRotation): Contai
     return renderFenceLike(partId, rotation);
   }
 
-  const height = partId === 'half_wall' ? ISO_LAYER_HEIGHT * 0.62 : ISO_LAYER_HEIGHT + 18;
+  const height = partId === 'half_wall' ? WALL_RENDER_HEIGHT * 0.62 : WALL_RENDER_HEIGHT;
   return renderWallSlab(partId, rotation, height);
 }
 
@@ -316,12 +321,12 @@ function renderFenceLike(partId: BuildPartId, rotation: BuildRotation): Containe
 
 function renderDoor(partId: BuildPartId, rotation: BuildRotation, open: boolean): Container {
   const node = new Container();
-  const frame = renderWallSlab(partId === 'stone_door' ? 'stone_wall' : 'thin_wall', rotation, ISO_LAYER_HEIGHT + 18);
+  const frame = renderWallSlab(partId === 'stone_door' ? 'stone_wall' : 'thin_wall', rotation, WALL_RENDER_HEIGHT);
   frame.alpha = 0.82;
 
   const segment = getEdgeSegment(rotation);
   const door = new Graphics();
-  const height = ISO_LAYER_HEIGHT + 10;
+  const height = DOOR_RENDER_HEIGHT;
   const inset = 8;
   const a = interpolate(segment.a, segment.b, 0.25);
   const b = interpolate(segment.a, segment.b, 0.75);
@@ -358,10 +363,10 @@ function renderDoor(partId: BuildPartId, rotation: BuildRotation, open: boolean)
 }
 
 function renderWindow(partId: BuildPartId, rotation: BuildRotation): Container {
-  const node = renderWallSlab(partId === 'wide_window' ? 'stone_wall' : 'thin_wall', rotation, ISO_LAYER_HEIGHT + 18);
+  const node = renderWallSlab(partId === 'wide_window' ? 'stone_wall' : 'thin_wall', rotation, WALL_RENDER_HEIGHT);
   const segment = getEdgeSegment(rotation);
   const pane = new Graphics();
-  const height = ISO_LAYER_HEIGHT + 18;
+  const height = WALL_RENDER_HEIGHT;
   const a = interpolate(segment.a, segment.b, partId === 'wide_window' ? 0.2 : 0.3);
   const b = interpolate(segment.a, segment.b, partId === 'wide_window' ? 0.8 : 0.7);
   const topY = -height * 0.72;
@@ -385,7 +390,7 @@ function renderPillar(partId: BuildPartId, rotation: BuildRotation): Container {
   const pillar = new Graphics();
   const pos = getCornerPoint(rotation);
   const width = partId === 'short_post' ? 7 : partId === 'stone_pillar' ? 10 : 8;
-  const height = partId === 'short_post' ? 22 : ISO_LAYER_HEIGHT + 22;
+  const height = partId === 'short_post' ? 22 : PILLAR_RENDER_HEIGHT;
   const palette = getPalette(partId);
 
   pillar
