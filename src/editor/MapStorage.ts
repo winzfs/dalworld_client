@@ -25,12 +25,18 @@ export class MapStorage {
     }
   }
 
-  async saveWorld(world: EditorWorldSave): Promise<UploadedWorldMapReport | null> {
-    const saved = this.writeJson(this.worldKey, world);
-    if (!saved) return null;
+  async saveWorld(world: EditorWorldSave): Promise<UploadedWorldMapReport> {
+    const localSaved = this.writeJson(this.worldKey, world);
+
+    if (!localSaved) {
+      console.warn('[MapStorage] Local editor world backup failed. Continuing with server upload.');
+    }
 
     const report = await uploadWorldMap(world);
-    console.info('[MapStorage] Uploaded editor world map to server.', report);
+    console.info('[MapStorage] Uploaded editor world map to server.', {
+      ...report,
+      localBackupSaved: localSaved,
+    });
     return report;
   }
 
@@ -84,7 +90,11 @@ export class MapStorage {
       window.localStorage.setItem(key, JSON.stringify(value));
       return true;
     } catch (error) {
-      console.error('[MapStorage] Failed to save editor map data.', error);
+      console.error('[MapStorage] Failed to save editor map data.', {
+        key,
+        approxBytes: estimateJsonBytes(value),
+        error,
+      });
       return false;
     }
   }
@@ -107,6 +117,14 @@ export class MapStorage {
 
   private get worldKey(): string {
     return `${WORLD_STORAGE_PREFIX}${this.mapName}`;
+  }
+}
+
+function estimateJsonBytes(value: unknown): number {
+  try {
+    return new Blob([JSON.stringify(value)]).size;
+  } catch {
+    return -1;
   }
 }
 
