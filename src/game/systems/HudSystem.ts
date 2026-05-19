@@ -1,5 +1,6 @@
 import type { NetworkStatus } from '../../net/network';
 import type { PlayerSnapshot } from '../../protocol/messages';
+import type { BuildingModeSnapshot } from '../../systems/building/BuildingModeState';
 import type { GameHud } from '../../ui/GameHud';
 import type { GameWindows } from '../../ui/GameWindows';
 
@@ -8,6 +9,7 @@ export type HudSystemContext = {
   tick: number;
   player: PlayerSnapshot | null;
   latencyMs: number;
+  buildingMode?: BuildingModeSnapshot;
 };
 
 /**
@@ -29,5 +31,9 @@ export class HudSystem {
     });
 
     this.windows.renderInventory(context.player?.inventory ?? null);
+
+    if (context.buildingMode) {
+      this.windows.renderBuildingMode(context.buildingMode);
+    }
   }
 }
