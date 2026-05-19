@@ -1,6 +1,6 @@
 import { Container, Graphics } from 'pixi.js';
 import { BUILD_PARTS } from './BuildingParts';
-import { getIsoZIndex, gridToScreen, ISO_LAYER_HEIGHT, ISO_TILE_HEIGHT, ISO_TILE_WIDTH } from './IsoBuildingMath';
+import { getIsoZIndex, gridToScreen, ISO_LAYER_HEIGHT, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, screenToGridApprox } from './IsoBuildingMath';
 import type { BuildPartId, BuildRotation, BuildingSnapshot, PlacedBuildPart } from './BuildingTypes';
 
 type RenderPalette = {
@@ -8,6 +8,16 @@ type RenderPalette = {
   secondary: number;
   accent: number;
 };
+
+export type BuildingOcclusionFocus = {
+  worldX: number;
+  worldY: number;
+  z?: number;
+};
+
+const BUILDING_NORMAL_ALPHA = 1;
+const BUILDING_OCCLUDING_ALPHA = 0.38;
+const BUILDING_OCCLUSION_RADIUS = 2;
 
 export class BuildingPlacementRenderer {
   readonly container = new Container();
@@ -75,6 +85,41 @@ export class BuildingPlacementRenderer {
       case 'window':
         node.addChild(renderWindow(part.partId, part.rotation));
         return;
+    }
+  }
+
+  applyOcclusionFocus(focus: BuildingOcclusionFocus | null): void {
+    if (!focus) {
+      this.resetAlpha();
+      return;
+    }
+
+    const focusGrid = screenToGridApprox(focus.worldX, focus.worldY, focus.z ?? 0);
+
+    for (const [entityId, node] of this.nodes) {
+      const part = this.parts.get(entityId);
+      const definition = part ? BUILD_PARTS[part.partId] : null;
+
+      if (!part || !definition || definition.category === 'floor') {
+        node.alpha = BUILDING_NORMAL_ALPHA;
+        continue;
+      }
+
+      const dx = Math.abs(part.x - focusGrid.x);
+      const dy = Math.abs(part.y - focusGrid.y);
+      const sameOrAboveLayer = part.z >= focusGrid.z;
+      const closeEnough = dx <= BUILDING_OCCLUSION_RADIUS && dy <= BUILDING_OCCLUSION_RADIUS;
+      const visuallyInFront = part.x + part.y >= focusGrid.x + focusGrid.y - 1;
+
+      node.alpha = sameOrAboveLayer && closeEnough && visuallyInFront
+        ? BUILDING_OCCLUDING_ALPHA
+        : BUILDING_NORMAL_ALPHA;
+    }
+  }
+
+  resetAlpha(): void {
+    for (const node of this.nodes.values()) {
+      node.alpha = BUILDING_NORMAL_ALPHA;
     }
   }
 
