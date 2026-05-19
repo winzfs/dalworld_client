@@ -126,6 +126,13 @@ export class GameApp {
             this.updateBuildingDraft({ ...this.buildingEditDraft, z: Math.max(0, Math.floor(z)) });
           }
         },
+        onCraftRecipe: (recipeId) => {
+          this.network.send({
+            type: 'CRAFT_REQUEST',
+            requestId: crypto.randomUUID(),
+            recipeId,
+          });
+        },
       }),
     );
 
