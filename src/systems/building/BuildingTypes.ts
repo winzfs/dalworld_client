@@ -89,6 +89,16 @@ export type BuildPlaceRequest = {
   rotation: BuildRotation;
 };
 
+export type BuildUpdateRequest = {
+  type: "BUILD_UPDATE_REQUEST";
+  requestId: string;
+  entityId: string;
+  x: number;
+  y: number;
+  z: number;
+  rotation: BuildRotation;
+};
+
 export type BuildRemoveRequest = {
   type: "BUILD_REMOVE_REQUEST";
   requestId: string;
@@ -101,10 +111,15 @@ export type BuildDoorToggleRequest = {
   entityId: string;
 };
 
-export type BuildingClientMessage = BuildPlaceRequest | BuildRemoveRequest | BuildDoorToggleRequest;
+export type BuildingClientMessage = BuildPlaceRequest | BuildUpdateRequest | BuildRemoveRequest | BuildDoorToggleRequest;
 
 export type BuildPlacedEvent = {
   type: "BUILD_PLACED";
+  part: PlacedBuildPart;
+};
+
+export type BuildUpdatedEvent = {
+  type: "BUILD_UPDATED";
   part: PlacedBuildPart;
 };
 
@@ -139,6 +154,7 @@ export type InventorySnapshotEvent = {
 
 export type BuildingServerEvent =
   | BuildPlacedEvent
+  | BuildUpdatedEvent
   | BuildRemovedEvent
   | BuildRejectedEvent
   | BuildSnapshotEvent
