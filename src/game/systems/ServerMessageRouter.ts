@@ -52,6 +52,7 @@ export class ServerMessageRouter {
       case 'BUILD_REMOVED':
       case 'BUILD_REJECTED':
       case 'BUILD_SNAPSHOT':
+      case 'BUILD_DOOR_UPDATED':
       case 'INVENTORY_SNAPSHOT':
         this.context.onBuildingEvent?.(message);
         return;
