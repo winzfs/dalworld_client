@@ -36,7 +36,7 @@ export class GameWorldMapRenderer {
       .filter((placement) => placement.layer !== 'collision')
       .filter((placement) => placement.id !== 'editor-black-base')
       .filter((placement) => placement.gameplay?.kind !== 'resource')
-      .sort((a, b) => getLayerZ(a.layer) - getLayerZ(b.layer));
+      .sort((a, b) => placementZIndex(a) - placementZIndex(b));
 
     for (const placement of placements) {
       const display = await this.createDisplay(placement);
@@ -46,7 +46,7 @@ export class GameWorldMapRenderer {
         return;
       }
 
-      display.zIndex = getLayerZ(placement.layer) + (placement.transparentBlack ? 0.5 : 0);
+      display.zIndex = placementZIndex(placement);
       this.displays.push(display);
       this.layer.addChild(display);
     }
@@ -115,8 +115,8 @@ export class GameWorldMapRenderer {
   private createSolidTile(placement: WorldMapPlacement): Graphics {
     const tile = new Graphics();
     const scale = normalizeScale(placement.scale);
-    const width = (placement.sourceRect?.width ?? 32) * scale;
-    const height = (placement.sourceRect?.height ?? 32) * scale;
+    const width = (placement.sourceRect?.width ?? placement.displayWidth ?? 32) * scale;
+    const height = (placement.sourceRect?.height ?? placement.displayHeight ?? 32) * scale;
     tile.x = placement.x;
     tile.y = placement.y;
     tile.rect(0, 0, width, height).fill({ color: placement.solidColor ?? 0x000000, alpha: 1 });
@@ -126,8 +126,8 @@ export class GameWorldMapRenderer {
   private createFallbackTile(placement: WorldMapPlacement): Graphics {
     const tile = new Graphics();
     const scale = normalizeScale(placement.scale);
-    const width = (placement.sourceRect?.width ?? 32) * scale;
-    const height = (placement.sourceRect?.height ?? 32) * scale;
+    const width = (placement.sourceRect?.width ?? placement.displayWidth ?? 32) * scale;
+    const height = (placement.sourceRect?.height ?? placement.displayHeight ?? 32) * scale;
     tile.x = placement.x;
     tile.y = placement.y;
     tile.rect(0, 0, width, height).fill({ color: 0x47b881, alpha: 1 });
@@ -182,6 +182,21 @@ function destroyDisplayOnly(display: Sprite | Graphics): void {
   }
 
   display.destroy({ children: false });
+}
+
+function placementZIndex(placement: WorldMapPlacement): number {
+  const base = getLayerZ(placement.layer);
+  const overlayOffset = placement.transparentBlack ? 0.5 : 0;
+
+  if (placement.layer !== 'object') return base + overlayOffset;
+
+  return base + getPlacementFootY(placement) / 1000 + overlayOffset;
+}
+
+function getPlacementFootY(placement: WorldMapPlacement): number {
+  const scale = normalizeScale(placement.scale);
+  const height = (placement.displayHeight ?? placement.sourceRect?.height ?? 32) * scale;
+  return placement.y + height;
 }
 
 function getLayerZ(layer: WorldMapPlacement['layer']): number {
