@@ -6,8 +6,6 @@ import { MapStorage } from './MapStorage';
 import { TilePickerWindow } from './TilePickerWindow';
 import { WorldMapGrid } from './WorldMapGrid';
 import { WorldMapPanel } from './WorldMapPanel';
-import { EditorCameraSystem } from './EditorCameraSystem';
-import { EditorMinimap } from './EditorMinimap';
 import { EditorGridOverlay } from './EditorGridOverlay';
 import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset, EditorWorldSave } from './types';
 
@@ -32,6 +30,8 @@ export type WorldCellTransition = {
 const DIRECT_SELECT_MAX_SIZE = 96;
 const BLACK_BASE_PLACEMENT_ID = 'editor-black-base';
 
+type ToastKind = 'info' | 'success' | 'error';
+
 export class MapEditor {
   readonly state = new EditorState();
   readonly placement: TilePlacementSystem;
@@ -43,6 +43,7 @@ export class MapEditor {
   private readonly gridOverlay: EditorGridOverlay;
   private readonly storage: MapStorage;
   private readonly uiRoot: HTMLElement;
+  private readonly toast: HTMLDivElement;
   private readonly cellDrafts = new Map<string, EditorMapDraft>();
   private enabled = false;
   private worldWidth: number;
@@ -50,6 +51,7 @@ export class MapEditor {
   private transitioning = false;
   private paintingPointerId: number | null = null;
   private lastPaintKey: string | null = null;
+  private toastHideTimeout: ReturnType<typeof window.setTimeout> | null = null;
 
   private readonly pointerDownHandler = (event: PointerEvent) => {
     if (!this.canPaintFromEvent(event)) return;
@@ -90,6 +92,7 @@ export class MapEditor {
     this.worldWidth = options.worldWidth ?? 3000;
     this.worldHeight = options.worldHeight ?? 3000;
     this.uiRoot = options.uiRoot ?? document.body;
+    this.toast = createEditorToast();
     this.storage = new MapStorage(mapName);
     this.worldMapGrid = new WorldMapGrid({ cellSize: this.worldWidth });
     this.gridOverlay = new EditorGridOverlay(this.state, {
@@ -154,6 +157,7 @@ export class MapEditor {
     this.panel.mount(this.uiRoot);
     this.picker.mount(this.uiRoot);
     this.worldMapPanel.mount(this.uiRoot);
+    this.uiRoot.appendChild(this.toast);
     this.options.app.canvas.addEventListener('pointerdown', this.pointerDownHandler);
     this.options.app.canvas.addEventListener('pointermove', this.pointerMoveHandler);
     this.options.app.canvas.addEventListener('pointerup', this.pointerUpHandler);
@@ -168,6 +172,10 @@ export class MapEditor {
     this.enabled = false;
     this.paintingPointerId = null;
     this.lastPaintKey = null;
+    if (this.toastHideTimeout !== null) {
+      window.clearTimeout(this.toastHideTimeout);
+      this.toastHideTimeout = null;
+    }
     this.options.app.canvas.removeEventListener('pointerdown', this.pointerDownHandler);
     this.options.app.canvas.removeEventListener('pointermove', this.pointerMoveHandler);
     this.options.app.canvas.removeEventListener('pointerup', this.pointerUpHandler);
@@ -175,6 +183,7 @@ export class MapEditor {
     this.panel.element.remove();
     this.picker.element.remove();
     this.worldMapPanel.element.remove();
+    this.toast.remove();
 
     if (this.gridOverlay.layer.parent) {
       this.gridOverlay.layer.parent.removeChild(this.gridOverlay.layer);
@@ -471,6 +480,8 @@ export class MapEditor {
   }
 
   private async save(): Promise<void> {
+    this.showToast('저장 중... 서버에 월드맵을 반영하고 있습니다.', 'info', 0);
+
     const worldSave = this.createWorldSave();
     const mapSaved = this.storage.save({
       ...this.placement.mapDraft,
@@ -479,6 +490,10 @@ export class MapEditor {
 
     try {
       const worldSaved = await this.storage.saveWorld(worldSave);
+      this.showToast(
+        `저장 완료 · 서버 반영됨 · 셀 ${worldSave.cells.length}개`,
+        worldSaved && mapSaved ? 'success' : 'error',
+      );
       console.info('[MapEditor] Save completed.', {
         worldSaved,
         mapSaved,
@@ -486,7 +501,7 @@ export class MapEditor {
       });
     } catch (error) {
       console.error('[MapEditor] Local save completed, but server upload failed.', error);
-      window.alert('로컬 저장은 완료됐지만 서버 업로드에 실패했습니다. 콘솔 로그와 서버 주소 설정을 확인해주세요.');
+      this.showToast('서버 업로드 실패 · 게임에는 아직 반영되지 않았습니다.', 'error', 5_000);
     }
   }
 
@@ -557,6 +572,64 @@ export class MapEditor {
       y: (screenY - transform.ty) / transform.d,
     };
   }
+
+  private showToast(message: string, kind: ToastKind, durationMs = 2_500): void {
+    if (this.toastHideTimeout !== null) {
+      window.clearTimeout(this.toastHideTimeout);
+      this.toastHideTimeout = null;
+    }
+
+    this.toast.textContent = message;
+    this.toast.dataset.kind = kind;
+    this.toast.style.opacity = '1';
+    this.toast.style.transform = 'translateY(0)';
+
+    if (durationMs > 0) {
+      this.toastHideTimeout = window.setTimeout(() => {
+        this.toast.style.opacity = '0';
+        this.toast.style.transform = 'translateY(-8px)';
+        this.toastHideTimeout = null;
+      }, durationMs);
+    }
+  }
+}
+
+function createEditorToast(): HTMLDivElement {
+  const toast = document.createElement('div');
+  toast.className = 'map-editor-toast';
+  toast.style.position = 'fixed';
+  toast.style.top = '18px';
+  toast.style.left = '50%';
+  toast.style.transform = 'translate(-50%, -8px)';
+  toast.style.zIndex = '10000';
+  toast.style.padding = '10px 14px';
+  toast.style.borderRadius = '12px';
+  toast.style.background = 'rgba(17, 24, 39, 0.94)';
+  toast.style.color = '#ffffff';
+  toast.style.fontSize = '14px';
+  toast.style.fontWeight = '700';
+  toast.style.letterSpacing = '-0.01em';
+  toast.style.boxShadow = '0 10px 28px rgba(0, 0, 0, 0.35)';
+  toast.style.pointerEvents = 'none';
+  toast.style.opacity = '0';
+  toast.style.transition = 'opacity 160ms ease, transform 160ms ease, background 160ms ease';
+
+  const observer = new MutationObserver(() => {
+    switch (toast.dataset.kind) {
+      case 'success':
+        toast.style.background = 'rgba(22, 101, 52, 0.96)';
+        break;
+      case 'error':
+        toast.style.background = 'rgba(185, 28, 28, 0.96)';
+        break;
+      default:
+        toast.style.background = 'rgba(17, 24, 39, 0.94)';
+        break;
+    }
+  });
+  observer.observe(toast, { attributes: true, attributeFilter: ['data-kind'] });
+
+  return toast;
 }
 
 function isEditorUiTarget(target: EventTarget | null): boolean {
