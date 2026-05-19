@@ -20,9 +20,9 @@ const BUILDING_OCCLUDING_ALPHA = 0.38;
 const BUILDING_OCCLUSION_RADIUS = 2;
 const FLOOR_THICKNESS_WOOD = 8;
 const FLOOR_THICKNESS_STONE = 10;
-const WALL_RENDER_HEIGHT = ISO_LAYER_HEIGHT - FLOOR_THICKNESS_WOOD;
-const DOOR_RENDER_HEIGHT = WALL_RENDER_HEIGHT - 5;
-const PILLAR_RENDER_HEIGHT = ISO_LAYER_HEIGHT - 4;
+const WALL_RENDER_HEIGHT = ISO_LAYER_HEIGHT;
+const DOOR_RENDER_HEIGHT = ISO_LAYER_HEIGHT - 8;
+const PILLAR_RENDER_HEIGHT = ISO_LAYER_HEIGHT;
 
 export class BuildingPlacementRenderer {
   readonly container = new Container();
@@ -256,34 +256,27 @@ function renderWallVariant(partId: BuildPartId, rotation: BuildRotation): Contai
 function renderWallSlab(partId: BuildPartId, rotation: BuildRotation, height: number): Container {
   const node = new Container();
   const wall = new Graphics();
+  const top = new Graphics();
   const points = getEdgeSegment(rotation);
-  const normal = getWallNormal(rotation);
-  const depth = partId === 'stone_wall' ? 6 : 4;
   const palette = getPalette(partId);
-  const ax = points.a.x + normal.x * depth;
-  const ay = points.a.y + normal.y * depth;
-  const bx = points.b.x + normal.x * depth;
-  const by = points.b.y + normal.y * depth;
+  const topA = { x: points.a.x, y: points.a.y - height };
+  const topB = { x: points.b.x, y: points.b.y - height };
 
   wall
     .moveTo(points.a.x, points.a.y)
     .lineTo(points.b.x, points.b.y)
-    .lineTo(bx, by - height)
-    .lineTo(ax, ay - height)
+    .lineTo(topB.x, topB.y)
+    .lineTo(topA.x, topA.y)
     .lineTo(points.a.x, points.a.y)
     .fill({ color: palette.primary, alpha: 1 })
     .stroke({ width: 1, color: palette.accent, alpha: 0.45 });
 
-  const cap = new Graphics();
-  cap
-    .moveTo(ax, ay - height)
-    .lineTo(bx, by - height)
-    .lineTo(points.b.x, points.b.y - height - 3)
-    .lineTo(points.a.x, points.a.y - height - 3)
-    .lineTo(ax, ay - height)
-    .fill({ color: palette.secondary, alpha: 1 });
+  top
+    .moveTo(topA.x, topA.y)
+    .lineTo(topB.x, topB.y)
+    .stroke({ width: 3, color: palette.secondary, alpha: 0.9 });
 
-  node.addChild(wall, cap);
+  node.addChild(wall, top);
   return node;
 }
 
@@ -488,19 +481,6 @@ function getCornerPoint(rotation: BuildRotation): Point {
       return { x: halfW, y: 0 };
     case 3:
       return { x: 0, y: halfH };
-  }
-}
-
-function getWallNormal(rotation: BuildRotation): Point {
-  switch (rotation) {
-    case 0:
-      return { x: -0.35, y: -0.35 };
-    case 1:
-      return { x: 0.35, y: -0.35 };
-    case 2:
-      return { x: 0.35, y: 0.35 };
-    case 3:
-      return { x: -0.35, y: 0.35 };
   }
 }
 
