@@ -3,7 +3,17 @@ import { getServerHttpPath } from '../net/serverHttp';
 import { compileRuntimeWorldMap } from './compileRuntimeWorldMap';
 import type { GameWorldMap } from './types';
 
-export async function uploadWorldMap(world: EditorWorldSave): Promise<void> {
+export type UploadedWorldMapReport = {
+  cells: number;
+  placements: number;
+  resources: {
+    tree: number;
+    stone: number;
+    total: number;
+  };
+};
+
+export async function uploadWorldMap(world: EditorWorldSave): Promise<UploadedWorldMapReport> {
   const payload = compileRuntimeWorldMap(world);
   const url = getServerHttpPath('/maps/default');
 
@@ -31,7 +41,9 @@ export async function uploadWorldMap(world: EditorWorldSave): Promise<void> {
     );
   }
 
-  console.info('[WorldMap] Uploaded and verified world cells:', payload.cells.map((cell) => `${cell.gridX}:${cell.gridY}`));
+  const report = createUploadReport(payload);
+  console.info('[WorldMap] Uploaded and verified world cells:', payload.cells.map((cell) => `${cell.gridX}:${cell.gridY}`), report);
+  return report;
 }
 
 async function fetchWorldMap(url: string): Promise<GameWorldMap | null> {
@@ -59,6 +71,31 @@ function createMapSignature(map: GameWorldMap | null | undefined): string {
     .join('|');
 
   return `${map.version}:${map.name}:${map.tileSize}:${map.cellSize}:${cells}`;
+}
+
+function createUploadReport(map: GameWorldMap): UploadedWorldMapReport {
+  let placements = 0;
+  let tree = 0;
+  let stone = 0;
+
+  for (const cell of map.cells) {
+    placements += cell.placements.length;
+    for (const placement of cell.placements) {
+      if (placement.gameplay?.kind !== 'resource') continue;
+      if (placement.gameplay.resourceType === 'tree') tree += 1;
+      if (placement.gameplay.resourceType === 'stone') stone += 1;
+    }
+  }
+
+  return {
+    cells: map.cells.length,
+    placements,
+    resources: {
+      tree,
+      stone,
+      total: tree + stone,
+    },
+  };
 }
 
 function withCacheBuster(url: string): string {
