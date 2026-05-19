@@ -23,6 +23,7 @@ const TREE_COLOR = 0x4caf50;
 const TREE_TRUNK = 0x6d4c41;
 const STONE_COLOR = 0x90a4ae;
 const HP_BAR_WIDTH = 36;
+const HP_BAR_OFFSET = 10;
 
 type ResourceView = {
   container: Container;
@@ -33,6 +34,8 @@ type ResourceView = {
   type: ResourceSnapshot['type'];
   assetUrl?: string;
   assetScale?: number;
+  displayWidth?: number;
+  displayHeight?: number;
   sourceRect?: WorldMapSourceRect;
 };
 
@@ -77,15 +80,16 @@ export class ResourceRenderer {
       view.container.visible = true;
       view.container.alpha = 1;
 
+      const bounds = getDisplayBounds(resource, view.sprite?.texture);
       const hpRatio = resource.hp / resource.maxHp;
       view.hpBar.visible = hpRatio < 1;
       if (view.hpBar.visible) {
         view.hpBar.clear();
         view.hpBar
-          .rect(-HP_BAR_WIDTH / 2, -64, HP_BAR_WIDTH, 5)
+          .rect(-HP_BAR_WIDTH / 2, -bounds.height / 2 - HP_BAR_OFFSET, HP_BAR_WIDTH, 5)
           .fill({ color: 0x1a1a2e });
         view.hpBar
-          .rect(-HP_BAR_WIDTH / 2, -64, HP_BAR_WIDTH * Math.max(0, hpRatio), 5)
+          .rect(-HP_BAR_WIDTH / 2, -bounds.height / 2 - HP_BAR_OFFSET, HP_BAR_WIDTH * Math.max(0, hpRatio), 5)
           .fill({ color: resource.type === 'tree' ? 0x66bb6a : 0xb0bec5 });
       }
     }
@@ -135,6 +139,8 @@ export class ResourceRenderer {
         type: view.type,
         assetUrl: view.assetUrl,
         assetScale: view.assetScale,
+        displayWidth: view.displayWidth,
+        displayHeight: view.displayHeight,
         sourceRect: view.sourceRect,
       });
     }
@@ -162,6 +168,8 @@ export class ResourceRenderer {
       type: resource.type,
       assetUrl: resource.assetUrl,
       assetScale: resource.assetScale,
+      displayWidth: resource.displayWidth,
+      displayHeight: resource.displayHeight,
       sourceRect: cloneSourceRect(resource.sourceRect),
     };
 
@@ -171,11 +179,13 @@ export class ResourceRenderer {
 
   private applySprite(
     view: ResourceView,
-    resource: Pick<ResourceSnapshot, 'id' | 'type' | 'assetUrl' | 'assetScale' | 'sourceRect'>,
+    resource: Pick<ResourceSnapshot, 'id' | 'type' | 'assetUrl' | 'assetScale' | 'displayWidth' | 'displayHeight' | 'sourceRect'>,
   ): void {
     view.type = resource.type;
     view.assetUrl = resource.assetUrl;
     view.assetScale = resource.assetScale;
+    view.displayWidth = resource.displayWidth;
+    view.displayHeight = resource.displayHeight;
     view.sourceRect = cloneSourceRect(resource.sourceRect);
 
     if (resource.assetUrl) {
@@ -187,6 +197,8 @@ export class ResourceRenderer {
         this.setSpriteTexture(view, displayTexture, resource.type, {
           useDefaultResourceScale: false,
           scale: normalizeScale(resource.assetScale),
+          displayWidth: resource.displayWidth,
+          displayHeight: resource.displayHeight,
         });
       });
       return;
@@ -206,7 +218,7 @@ export class ResourceRenderer {
     view: ResourceView,
     texture: Texture,
     type: ResourceSnapshot['type'],
-    options: { useDefaultResourceScale: boolean; scale: number },
+    options: { useDefaultResourceScale: boolean; scale: number; displayWidth?: number; displayHeight?: number },
   ): void {
     if (!view.sprite) {
       view.sprite = new Sprite(texture);
@@ -215,8 +227,16 @@ export class ResourceRenderer {
       view.sprite.texture = texture;
     }
 
-    view.sprite.anchor.set(options.useDefaultResourceScale ? 0.5 : 0, options.useDefaultResourceScale ? 1 : 0);
-    view.sprite.scale.set(options.scale);
+    view.sprite.anchor.set(0.5, 0.5);
+
+    if (options.useDefaultResourceScale) {
+      view.sprite.scale.set(options.scale);
+    } else {
+      const widthScale = normalizeScale(options.displayWidth) / texture.width;
+      const heightScale = normalizeScale(options.displayHeight) / texture.height;
+      view.sprite.scale.set(widthScale * options.scale, heightScale * options.scale);
+    }
+
     view.fallback.visible = false;
   }
 
@@ -308,8 +328,17 @@ function shouldReapplySprite(view: ResourceView, resource: ResourceSnapshot): bo
     view.assetUrl !== resource.assetUrl ||
     view.type !== resource.type ||
     view.assetScale !== resource.assetScale ||
+    view.displayWidth !== resource.displayWidth ||
+    view.displayHeight !== resource.displayHeight ||
     !sameSourceRect(view.sourceRect, resource.sourceRect)
   );
+}
+
+function getDisplayBounds(resource: ResourceSnapshot, texture: Texture | undefined): { width: number; height: number } {
+  const scale = normalizeScale(resource.assetScale);
+  const width = normalizeScale(resource.displayWidth ?? resource.sourceRect?.width ?? texture?.width ?? 32) * scale;
+  const height = normalizeScale(resource.displayHeight ?? resource.sourceRect?.height ?? texture?.height ?? 32) * scale;
+  return { width, height };
 }
 
 function normalizeScale(scale: number | undefined): number {
