@@ -27,7 +27,7 @@ const WALL_OCCLUSION_PADDING = 14;
 const PILLAR_OCCLUSION_RADIUS = 18;
 const ROOF_OCCLUSION_PADDING = 8;
 const OCCLUSION_LAYER_PENALTY = 8;
-const ROUND_SEGMENT_STEPS = 12;
+const ROUND_SEGMENT_STEPS = 14;
 
 export class BuildingPlacementRenderer {
   readonly container = new Container();
@@ -44,14 +44,10 @@ export class BuildingPlacementRenderer {
     const aliveIds = new Set(snapshot.parts.map((part) => part.entityId));
 
     for (const entityId of this.nodes.keys()) {
-      if (!aliveIds.has(entityId)) {
-        this.remove(entityId);
-      }
+      if (!aliveIds.has(entityId)) this.remove(entityId);
     }
 
-    for (const part of snapshot.parts) {
-      this.addOrUpdate(part);
-    }
+    for (const part of snapshot.parts) this.addOrUpdate(part);
   }
 
   addOrUpdate(part: PlacedBuildPart): void {
@@ -72,9 +68,7 @@ export class BuildingPlacementRenderer {
     node.y = screen.y;
     node.zIndex = getIsoZIndex(part.x, part.y, part.z, getPartLayerOffset(part));
 
-    if (!definition) {
-      return;
-    }
+    if (!definition) return;
 
     switch (definition.category) {
       case 'floor':
@@ -130,38 +124,22 @@ export class BuildingPlacementRenderer {
   }
 
   resetAlpha(): void {
-    for (const node of this.nodes.values()) {
-      node.alpha = BUILDING_NORMAL_ALPHA;
-    }
+    for (const node of this.nodes.values()) node.alpha = BUILDING_NORMAL_ALPHA;
   }
 
   updateDoor(entityId: string, open: boolean): void {
     const part = this.parts.get(entityId);
-
-    if (!part) {
-      return;
-    }
+    if (!part) return;
 
     const definition = BUILD_PARTS[part.partId];
-    if (definition?.category !== 'door') {
-      return;
-    }
+    if (definition?.category !== 'door') return;
 
-    this.addOrUpdate({
-      ...part,
-      state: {
-        ...part.state,
-        open,
-      },
-    });
+    this.addOrUpdate({ ...part, state: { ...part.state, open } });
   }
 
   remove(entityId: string): void {
     const node = this.nodes.get(entityId);
-
-    if (!node) {
-      return;
-    }
+    if (!node) return;
 
     node.destroy({ children: true });
     this.nodes.delete(entityId);
@@ -169,10 +147,7 @@ export class BuildingPlacementRenderer {
   }
 
   clear(): void {
-    for (const node of this.nodes.values()) {
-      node.destroy({ children: true });
-    }
-
+    for (const node of this.nodes.values()) node.destroy({ children: true });
     this.nodes.clear();
     this.parts.clear();
   }
@@ -212,10 +187,7 @@ function renderFloor(partId: BuildPartId, rotation: BuildRotation): Container {
   if (partId === 'deck_floor_1x1') {
     const lines = new Graphics();
     for (let i = -2; i <= 2; i += 1) {
-      lines
-        .moveTo(-halfW + 10, i * 5)
-        .lineTo(halfW - 10, i * 5)
-        .stroke({ width: 1, color: 0x5b3d25, alpha: 0.32 });
+      lines.moveTo(-halfW + 10, i * 5).lineTo(halfW - 10, i * 5).stroke({ width: 1, color: 0x5b3d25, alpha: 0.32 });
     }
     node.addChild(side, top, lines);
     return node;
@@ -254,10 +226,7 @@ function renderStairs(partId: BuildPartId, rotation: BuildRotation): Container {
     const t = i / steps;
     const left = interpolate3d(base.lowA, base.highA, t, rise * t);
     const right = interpolate3d(base.lowB, base.highB, t, rise * t);
-    lines
-      .moveTo(left.x, left.y)
-      .lineTo(right.x, right.y)
-      .stroke({ width: 2, color: palette.accent, alpha: 0.42 });
+    lines.moveTo(left.x, left.y).lineTo(right.x, right.y).stroke({ width: 2, color: palette.accent, alpha: 0.42 });
   }
 
   node.addChild(body, lines);
@@ -266,28 +235,28 @@ function renderStairs(partId: BuildPartId, rotation: BuildRotation): Container {
 
 function renderRoundFloor(partId: BuildPartId, rotation: BuildRotation): Container {
   const node = new Container();
-  const top = new Graphics();
   const side = new Graphics();
+  const top = new Graphics();
+  const seam = new Graphics();
   const palette = getPalette(partId);
-  const outer = getQuarterArcPoints(rotation, ISO_TILE_WIDTH * 0.56, ISO_TILE_HEIGHT * 0.56, ROUND_SEGMENT_STEPS);
-  const inner = getQuarterArcPoints(rotation, ISO_TILE_WIDTH * 0.18, ISO_TILE_HEIGHT * 0.18, ROUND_SEGMENT_STEPS).reverse();
-  const polygon = [...outer, ...inner];
   const thickness = partId === 'stone_round_floor' ? FLOOR_THICKNESS_STONE : FLOOR_THICKNESS_WOOD;
+  const polygon = getQuarterDiskPoints(rotation);
 
-  drawPolygon(side, polygon.map((p) => ({ x: p.x, y: p.y + thickness })), palette.secondary, 0.86);
+  drawPolygon(side, polygon.map((p) => ({ x: p.x, y: p.y + thickness })), palette.secondary, 0.9);
   drawPolygon(top, polygon, palette.primary, 1);
-  top.stroke({ width: 1, color: palette.accent, alpha: 0.62 });
+  top.stroke({ width: 1, color: palette.accent, alpha: 0.65 });
 
-  const ribs = new Graphics();
-  for (let i = 0; i <= 3; i += 1) {
-    const t = i / 3;
-    const a = outer[Math.floor(t * (outer.length - 1))];
-    const b = inner[inner.length - 1 - Math.floor(t * (inner.length - 1))];
-    if (!a || !b) continue;
-    ribs.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 1, color: palette.accent, alpha: 0.32 });
-  }
+  const center = getRoundPieceCenterCorner(rotation);
+  const arc = getQuarterDiskArcPoints(rotation);
+  seam
+    .moveTo(center.x, center.y)
+    .lineTo(arc[0].x, arc[0].y)
+    .stroke({ width: 1, color: palette.accent, alpha: 0.28 })
+    .moveTo(center.x, center.y)
+    .lineTo(arc[arc.length - 1].x, arc[arc.length - 1].y)
+    .stroke({ width: 1, color: palette.accent, alpha: 0.28 });
 
-  node.addChild(side, top, ribs);
+  node.addChild(side, top, seam);
   return node;
 }
 
@@ -309,12 +278,7 @@ function renderRoof(partId: BuildPartId): Container {
     .fill({ color: palette.primary, alpha: 1 })
     .stroke({ width: 1, color: palette.accent, alpha: 0.52 });
 
-  if (partId !== 'flat_roof_1x1') {
-    ridge
-      .moveTo(0, -halfH - lift)
-      .lineTo(0, halfH - lift)
-      .stroke({ width: 2, color: palette.secondary, alpha: 0.7 });
-  }
+  if (partId !== 'flat_roof_1x1') ridge.moveTo(0, -halfH - lift).lineTo(0, halfH - lift).stroke({ width: 2, color: palette.secondary, alpha: 0.7 });
 
   node.addChild(roof, ridge);
   return node;
@@ -322,9 +286,7 @@ function renderRoof(partId: BuildPartId): Container {
 
 function renderWallVariant(partId: BuildPartId, rotation: BuildRotation): Container {
   if (partId === 'wood_round_wall' || partId === 'stone_round_wall') return renderRoundWall(partId, rotation);
-  if (partId === 'railing' || partId === 'fence') {
-    return renderFenceLike(partId, rotation);
-  }
+  if (partId === 'railing' || partId === 'fence') return renderFenceLike(partId, rotation);
 
   const height = partId === 'half_wall' ? WALL_RENDER_HEIGHT * 0.62 : WALL_RENDER_HEIGHT;
   return renderWallSlab(partId, rotation, height);
@@ -334,9 +296,10 @@ function renderRoundWall(partId: BuildPartId, rotation: BuildRotation): Containe
   const node = new Container();
   const wall = new Graphics();
   const cap = new Graphics();
+  const posts = new Graphics();
   const palette = getPalette(partId);
   const height = WALL_RENDER_HEIGHT;
-  const base = getQuarterArcPoints(rotation, ISO_TILE_WIDTH * 0.56, ISO_TILE_HEIGHT * 0.56, ROUND_SEGMENT_STEPS);
+  const base = getQuarterDiskArcPoints(rotation);
   const top = base.map((p) => ({ x: p.x, y: p.y - height }));
 
   for (let i = 0; i < base.length - 1; i += 1) {
@@ -354,12 +317,13 @@ function renderRoundWall(partId: BuildPartId, rotation: BuildRotation): Containe
       .stroke({ width: 1, color: palette.accent, alpha: 0.22 });
   }
 
-  for (let i = 0; i < top.length - 1; i += 1) {
-    cap.moveTo(top[i].x, top[i].y).lineTo(top[i + 1].x, top[i + 1].y);
-  }
+  for (let i = 0; i < top.length - 1; i += 1) cap.moveTo(top[i].x, top[i].y).lineTo(top[i + 1].x, top[i + 1].y);
   cap.stroke({ width: 4, color: palette.secondary, alpha: 0.96 });
 
-  node.addChild(wall, cap);
+  drawVerticalPost(posts, base[0], height, palette.secondary);
+  drawVerticalPost(posts, base[base.length - 1], height, palette.secondary);
+
+  node.addChild(wall, posts, cap);
   return node;
 }
 
@@ -421,10 +385,7 @@ function renderFenceLike(partId: BuildPartId, rotation: BuildRotation): Containe
 
   for (const [index, point] of [a, b, interpolate(a, b, 0.5)].entries()) {
     const post = index === 0 ? postA : index === 1 ? postB : new Graphics();
-    post
-      .rect(point.x - 3, point.y - height, 6, height)
-      .fill({ color: palette.primary, alpha: 1 })
-      .stroke({ width: 1, color: palette.accent, alpha: 0.45 });
+    post.rect(point.x - 3, point.y - height, 6, height).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.45 });
     node.addChild(post);
   }
 
@@ -448,23 +409,9 @@ function renderDoor(partId: BuildPartId, rotation: BuildRotation, open: boolean)
   if (open) {
     const hinge = a;
     const swing = rotateAround(b, hinge, rotation % 2 === 0 ? -0.75 : 0.75);
-    door
-      .moveTo(hinge.x, hinge.y)
-      .lineTo(swing.x, swing.y)
-      .lineTo(swing.x, swing.y - height)
-      .lineTo(hinge.x, hinge.y - height)
-      .lineTo(hinge.x, hinge.y)
-      .fill({ color: palette.primary, alpha: 0.82 })
-      .stroke({ width: 1, color: palette.accent, alpha: 0.62 });
+    door.moveTo(hinge.x, hinge.y).lineTo(swing.x, swing.y).lineTo(swing.x, swing.y - height).lineTo(hinge.x, hinge.y - height).lineTo(hinge.x, hinge.y).fill({ color: palette.primary, alpha: 0.82 }).stroke({ width: 1, color: palette.accent, alpha: 0.62 });
   } else {
-    door
-      .moveTo(a.x, a.y - inset)
-      .lineTo(b.x, b.y - inset)
-      .lineTo(b.x, b.y - height)
-      .lineTo(a.x, a.y - height)
-      .lineTo(a.x, a.y - inset)
-      .fill({ color: palette.primary, alpha: 1 })
-      .stroke({ width: 1, color: palette.accent, alpha: 0.58 });
+    door.moveTo(a.x, a.y - inset).lineTo(b.x, b.y - inset).lineTo(b.x, b.y - height).lineTo(a.x, a.y - height).lineTo(a.x, a.y - inset).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.58 });
   }
 
   const knob = new Graphics();
@@ -485,14 +432,7 @@ function renderWindow(partId: BuildPartId, rotation: BuildRotation): Container {
   const topY = -height * 0.72;
   const bottomY = -height * 0.34;
 
-  pane
-    .moveTo(a.x, a.y + bottomY)
-    .lineTo(b.x, b.y + bottomY)
-    .lineTo(b.x, b.y + topY)
-    .lineTo(a.x, a.y + topY)
-    .lineTo(a.x, a.y + bottomY)
-    .fill({ color: 0x83d9ff, alpha: 0.78 })
-    .stroke({ width: 1, color: 0xe9fbff, alpha: 0.84 });
+  pane.moveTo(a.x, a.y + bottomY).lineTo(b.x, b.y + bottomY).lineTo(b.x, b.y + topY).lineTo(a.x, a.y + topY).lineTo(a.x, a.y + bottomY).fill({ color: 0x83d9ff, alpha: 0.78 }).stroke({ width: 1, color: 0xe9fbff, alpha: 0.84 });
 
   node.addChild(pane);
   return node;
@@ -506,15 +446,10 @@ function renderPillar(partId: BuildPartId, rotation: BuildRotation): Container {
   const height = partId === 'short_post' ? 22 : PILLAR_RENDER_HEIGHT;
   const palette = getPalette(partId);
 
-  pillar
-    .rect(pos.x - width / 2, pos.y - height, width, height)
-    .fill({ color: palette.primary, alpha: 1 })
-    .stroke({ width: 1, color: palette.accent, alpha: 0.58 });
+  pillar.rect(pos.x - width / 2, pos.y - height, width, height).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.58 });
 
   const cap = new Graphics();
-  cap
-    .ellipse(pos.x, pos.y - height, width * 0.8, 3)
-    .fill({ color: palette.secondary, alpha: 1 });
+  cap.ellipse(pos.x, pos.y - height, width * 0.8, 3).fill({ color: palette.secondary, alpha: 1 });
 
   node.addChild(pillar, cap);
   return node;
@@ -680,18 +615,56 @@ function getCornerPoint(rotation: BuildRotation): Point {
   }
 }
 
-function getQuarterArcPoints(rotation: BuildRotation, radiusX: number, radiusY: number, steps: number): Point[] {
-  const start = rotation * Math.PI / 2 + Math.PI;
+function getQuarterDiskPoints(rotation: BuildRotation): Point[] {
+  const corner = getRoundPieceCenterCorner(rotation);
+  const arc = getQuarterDiskArcPoints(rotation);
+  return [corner, ...arc];
+}
+
+function getQuarterDiskArcPoints(rotation: BuildRotation): Point[] {
+  const center = getRoundPieceCenterCorner(rotation);
+  const start = getRoundArcStartAngle(rotation);
   const end = start + Math.PI / 2;
   const points: Point[] = [];
 
-  for (let i = 0; i <= steps; i += 1) {
-    const t = i / steps;
-    const angle = start + (end - start) * t;
-    points.push({ x: Math.cos(angle) * radiusX, y: Math.sin(angle) * radiusY });
+  for (let i = 0; i <= ROUND_SEGMENT_STEPS; i += 1) {
+    const angle = start + (end - start) * (i / ROUND_SEGMENT_STEPS);
+    points.push({
+      x: center.x + Math.cos(angle) * ISO_TILE_WIDTH,
+      y: center.y + Math.sin(angle) * ISO_TILE_HEIGHT,
+    });
   }
 
   return points;
+}
+
+function getRoundPieceCenterCorner(rotation: BuildRotation): Point {
+  const halfW = ISO_TILE_WIDTH / 2;
+  const halfH = ISO_TILE_HEIGHT / 2;
+
+  switch (rotation) {
+    case 0:
+      return { x: halfW, y: halfH };
+    case 1:
+      return { x: -halfW, y: halfH };
+    case 2:
+      return { x: -halfW, y: -halfH };
+    case 3:
+      return { x: halfW, y: -halfH };
+  }
+}
+
+function getRoundArcStartAngle(rotation: BuildRotation): number {
+  switch (rotation) {
+    case 0:
+      return Math.PI;
+    case 1:
+      return -Math.PI / 2;
+    case 2:
+      return 0;
+    case 3:
+      return Math.PI / 2;
+  }
 }
 
 function getStairBasePolygon(rotation: BuildRotation): { lowA: Point; lowB: Point; highA: Point; highB: Point } {
@@ -722,30 +695,19 @@ function drawPolygon(graphics: Graphics, points: Point[], color: number, alpha: 
 }
 
 function drawVerticalPost(g: Graphics, point: Point, height: number, color: number): void {
-  g
-    .roundRect(point.x - WALL_POST_WIDTH / 2, point.y - height, WALL_POST_WIDTH, height, 1.5)
-    .fill({ color, alpha: 1 });
+  g.roundRect(point.x - WALL_POST_WIDTH / 2, point.y - height, WALL_POST_WIDTH, height, 1.5).fill({ color, alpha: 1 });
 }
 
 function trimToward(from: Point, to: Point, ratio: number): Point {
-  return {
-    x: from.x + (to.x - from.x) * ratio,
-    y: from.y + (to.y - from.y) * ratio,
-  };
+  return { x: from.x + (to.x - from.x) * ratio, y: from.y + (to.y - from.y) * ratio };
 }
 
 function interpolate(a: Point, b: Point, t: number): Point {
-  return {
-    x: a.x + (b.x - a.x) * t,
-    y: a.y + (b.y - a.y) * t,
-  };
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
 
 function interpolate3d(a: Point, b: Point, t: number, zLift: number): Point {
-  return {
-    x: a.x + (b.x - a.x) * t,
-    y: a.y + (b.y - a.y) * t - zLift,
-  };
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t - zLift };
 }
 
 function rotateAround(point: Point, pivot: Point, radians: number): Point {
@@ -754,10 +716,7 @@ function rotateAround(point: Point, pivot: Point, radians: number): Point {
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
 
-  return {
-    x: pivot.x + dx * cos - dy * sin,
-    y: pivot.y + dx * sin + dy * cos,
-  };
+  return { x: pivot.x + dx * cos - dy * sin, y: pivot.y + dx * sin + dy * cos };
 }
 
 function distancePointToSegment(px: number, py: number, a: Point, b: Point): number {
@@ -775,7 +734,4 @@ function distance(ax: number, ay: number, bx: number, by: number): number {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-type Point = {
-  x: number;
-  y: number;
-};
+type Point = { x: number; y: number };
