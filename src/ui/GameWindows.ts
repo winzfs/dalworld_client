@@ -1,4 +1,4 @@
-import type { Inventory, ItemType } from '../protocol/messages';
+import type { PlayerSnapshot } from '../protocol/messages';
 import { BUILD_PART_LIST } from '../systems/building/BuildingParts';
 import { getBuildPartItemDefinition } from '../systems/building/BuildPartInventoryCatalog';
 import type { BuildingModeSnapshot } from '../systems/building/BuildingModeState';
@@ -9,8 +9,10 @@ import { BASE_ITEM_DEFINITIONS, type ItemDefinition } from '../systems/inventory
 import {
   getInventorySlotsForTab,
   INVENTORY_TABS,
+  normalizeInventoryStacks,
   type InventoryBuildPartSlotView,
   type InventoryResourceSlotView,
+  type InventorySource,
   type InventoryTabId,
 } from '../systems/inventory/InventoryViewModel';
 
@@ -49,10 +51,10 @@ export class GameWindows {
   private readonly root: HTMLDivElement;
   private readonly options: GameWindowsOptions;
   private zIndex = 30;
-  private selectedItem: ItemType | null = null;
+  private selectedItem: string | null = null;
   private selectedBuildPart: BuildPartId | null = null;
   private activeInventoryTab: InventoryTabId = 'general';
-  private lastInventory: Inventory | null = null;
+  private lastInventory: InventorySource = null;
   private buildingMode: BuildingModeSnapshot = {
     enabled: false,
     toolMode: 'place',
@@ -73,7 +75,7 @@ export class GameWindows {
     this.renderBuildingMode(this.buildingMode);
   }
 
-  renderInventory(inventory: Inventory | null): void {
+  renderInventory(inventory: InventorySource): void {
     this.lastInventory = inventory;
 
     const slots = [...this.root.querySelectorAll<HTMLButtonElement>('[data-inventory-slot]')];
@@ -159,10 +161,11 @@ export class GameWindows {
     slot.classList.add('has-item', 'is-build-part');
     slot.classList.toggle('is-selected', selected);
     slot.dataset.buildInventoryPart = view.buildPartId;
-    slot.title = `${view.definition.label} 선택`;
+    slot.title = view.amount === null ? `${view.definition.label} 선택` : `${view.definition.label} x${view.amount}`;
     slot.innerHTML = `
       <span class="inventory-item-icon">${view.definition.icon}</span>
       <span class="inventory-build-label">${view.definition.label}</span>
+      ${view.amount === null ? '' : `<span class="inventory-item-count">${view.amount}</span>`}
     `;
   }
 
@@ -227,7 +230,7 @@ export class GameWindows {
           return;
         }
 
-        const itemType = slot.dataset.item as ItemType | '';
+        const itemType = slot.dataset.item ?? '';
         if (!itemType) {
           this.selectedItem = null;
           this.selectedBuildPart = null;
@@ -501,12 +504,9 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function canAffordBuildPart(inventory: Inventory | null, costs: { itemId: string; quantity: number }[]): boolean {
-  if (!inventory) return false;
-  return costs.every((cost) => {
-    if (cost.itemId !== 'wood' && cost.itemId !== 'stone') return false;
-    return (inventory[cost.itemId] ?? 0) >= cost.quantity;
-  });
+function canAffordBuildPart(inventory: InventorySource, costs: { itemId: string; quantity: number }[]): boolean {
+  const stacks = normalizeInventoryStacks(inventory);
+  return costs.every((cost) => (stacks.find((stack) => stack.itemId === cost.itemId)?.quantity ?? 0) >= cost.quantity);
 }
 
 function getBuildingStatusText(mode: BuildingModeSnapshot): string {
