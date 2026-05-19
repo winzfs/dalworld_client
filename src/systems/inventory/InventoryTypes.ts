@@ -1,10 +1,6 @@
-export type InventoryItemId =
-  | "wood"
-  | "stone"
-  | "fiber"
-  | "floor_kit"
-  | "wall_kit"
-  | "roof_kit";
+import { BASE_ITEM_DEFINITIONS, type InventoryItemId } from './ItemDefinitions';
+
+export type { InventoryItemId };
 
 export type InventoryItemStack = {
   itemId: InventoryItemId;
@@ -17,11 +13,6 @@ export type InventorySnapshot = {
   updatedAt: number;
 };
 
-export const INVENTORY_ITEM_LABELS: Record<InventoryItemId, string> = {
-  wood: "나무",
-  stone: "돌",
-  fiber: "섬유",
-  floor_kit: "바닥 키트",
-  wall_kit: "벽 키트",
-  roof_kit: "지붕 키트",
-};
+export const INVENTORY_ITEM_LABELS: Record<string, string> = Object.fromEntries(
+  Object.values(BASE_ITEM_DEFINITIONS).map((definition) => [definition.id, definition.label]),
+);
