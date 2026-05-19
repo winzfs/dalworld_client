@@ -56,6 +56,8 @@ type BuildingEditDraft = {
 type BuildingDragState = {
   pointerId: number;
   z: number;
+  startGrid: { x: number; y: number; z: number };
+  originDraft: BuildingEditDraft;
 };
 
 export class GameApp {
@@ -99,6 +101,7 @@ export class GameApp {
   private editorTransitioning = false;
   private buildingEditDraft: BuildingEditDraft | null = null;
   private buildingDragState: BuildingDragState | null = null;
+  private buildingGridVisible = true;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
   private gameplayConfig: PublicGameplayConfig = DEFAULT_GAMEPLAY;
@@ -117,11 +120,13 @@ export class GameApp {
       new GameHud(),
       new GameWindows({
         onSelectBuildPart: (partId) => {
+          this.setBuildingGridVisible(true);
           this.buildingModeState.enter(partId);
           this.beginNewBuildingDraft(partId);
         },
         onEnterRemoveMode: () => {
           this.cancelBuildingDraft();
+          this.setBuildingGridVisible(true);
           this.buildingModeState.enterRemoveMode();
         },
         onExitBuildingMode: () => {
@@ -143,6 +148,7 @@ export class GameApp {
     this.world.addChild(this.buildingGridOverlay.container);
     this.world.addChild(this.buildingPlacementRenderer.container);
     this.world.addChild(this.buildingGhostPreviewRenderer.container);
+    this.setBuildingGridVisible(this.buildingGridVisible);
     this.worldMapRenderer = new GameWorldMapRenderer(this.world);
     this.resourceRenderer = new ResourceRenderer(this.world);
     this.monsterRenderer = new MonsterRenderer(this.world);
@@ -357,8 +363,17 @@ export class GameApp {
 
   private handleGlobalPointerMove(event: PointerEvent): void {
     if (!this.buildingDragState || !this.buildingEditDraft) return;
+
     const grid = this.pointerToBuildingGrid(event, this.buildingDragState.z);
-    this.updateBuildingDraft({ ...this.buildingEditDraft, x: grid.x, y: grid.y, z: grid.z });
+    const dx = grid.x - this.buildingDragState.startGrid.x;
+    const dy = grid.y - this.buildingDragState.startGrid.y;
+
+    this.updateBuildingDraft({
+      ...this.buildingDragState.originDraft,
+      x: this.buildingDragState.originDraft.x + dx,
+      y: this.buildingDragState.originDraft.y + dy,
+      z: grid.z,
+    });
   }
 
   private handleGlobalPointerUp(event: PointerEvent): void {
@@ -380,6 +395,12 @@ export class GameApp {
 
     if (event.key === 'Enter') {
       this.confirmBuildingDraft();
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key === 'g' || event.key === 'G') {
+      this.toggleBuildingGridVisible();
       event.preventDefault();
       return;
     }
@@ -446,10 +467,12 @@ export class GameApp {
     const me = this.findMe();
     const mode = this.buildingModeState.getSnapshot();
     const center = me ? screenToGridApprox(me.x, me.y, mode.currentZ) : { x: 0, y: 0, z: mode.currentZ };
+    this.setBuildingGridVisible(true);
     this.updateBuildingDraft({ source: 'new', partId, x: center.x, y: center.y, z: center.z, rotation: mode.rotation });
   }
 
   private beginExistingBuildingDraft(part: PlacedBuildPart): void {
+    this.setBuildingGridVisible(true);
     this.buildingModeState.enter(part.partId);
     this.buildingModeState.setCurrentZ(part.z);
     this.updateBuildingDraft({ source: 'existing', entityId: part.entityId, partId: part.partId, x: part.x, y: part.y, z: part.z, rotation: part.rotation });
@@ -525,20 +548,38 @@ export class GameApp {
     const screen = gridToScreen(draft.x, draft.y, draft.z);
     const global = this.world.toGlobal({ x: screen.x, y: screen.y });
     this.buildingEditControls.root.hidden = false;
-    this.buildingEditControls.root.style.left = `${Math.round(global.x - 56)}px`;
+    this.buildingEditControls.root.style.left = `${Math.round(global.x - 74)}px`;
     this.buildingEditControls.root.style.top = `${Math.round(global.y + 38)}px`;
   }
 
   private installBuildingEditControls(): void {
     this.buildingEditControls.move.addEventListener('pointerdown', (event) => {
       if (!this.buildingEditDraft) return;
-      this.buildingDragState = { pointerId: event.pointerId, z: this.buildingEditDraft.z };
+      this.buildingDragState = {
+        pointerId: event.pointerId,
+        z: this.buildingEditDraft.z,
+        startGrid: this.pointerToBuildingGrid(event, this.buildingEditDraft.z),
+        originDraft: { ...this.buildingEditDraft },
+      };
       this.buildingEditControls.move.setPointerCapture(event.pointerId);
       event.preventDefault();
     });
+    this.buildingEditControls.grid.addEventListener('click', () => this.toggleBuildingGridVisible());
     this.buildingEditControls.rotate.addEventListener('click', () => this.rotateBuildingDraftOrMode());
     this.buildingEditControls.confirm.addEventListener('click', () => this.confirmBuildingDraft());
     this.buildingEditControls.cancel.addEventListener('click', () => this.cancelBuildingDraft());
+  }
+
+  private toggleBuildingGridVisible(): void {
+    this.setBuildingGridVisible(!this.buildingGridVisible);
+  }
+
+  private setBuildingGridVisible(visible: boolean): void {
+    this.buildingGridVisible = visible;
+    this.buildingGridOverlay.container.visible = visible;
+    this.buildingEditControls.root.classList.toggle('is-grid-hidden', !visible);
+    this.buildingEditControls.grid.textContent = visible ? '▦' : '□';
+    this.buildingEditControls.grid.title = visible ? '그리드 끄기' : '그리드 켜기';
   }
 
   private pointerToBuildingGrid(event: PointerEvent, z: number): { x: number; y: number; z: number } {
@@ -574,6 +615,7 @@ function createBuildingEditControls(): {
   root: HTMLDivElement;
   move: HTMLButtonElement;
   rotate: HTMLButtonElement;
+  grid: HTMLButtonElement;
   confirm: HTMLButtonElement;
   cancel: HTMLButtonElement;
 } {
@@ -583,15 +625,17 @@ function createBuildingEditControls(): {
   root.innerHTML = `
     <button type="button" class="building-edit-control" data-building-edit-move title="드래그해서 이동">↔</button>
     <button type="button" class="building-edit-control" data-building-edit-rotate title="회전 / 슬롯 변경">⟳</button>
+    <button type="button" class="building-edit-control" data-building-edit-grid title="그리드 끄기">▦</button>
     <button type="button" class="building-edit-control is-confirm" data-building-edit-confirm title="건설 확정">✓</button>
     <button type="button" class="building-edit-control is-cancel" data-building-edit-cancel title="취소">×</button>
   `;
   const move = root.querySelector<HTMLButtonElement>('[data-building-edit-move]');
   const rotate = root.querySelector<HTMLButtonElement>('[data-building-edit-rotate]');
+  const grid = root.querySelector<HTMLButtonElement>('[data-building-edit-grid]');
   const confirm = root.querySelector<HTMLButtonElement>('[data-building-edit-confirm]');
   const cancel = root.querySelector<HTMLButtonElement>('[data-building-edit-cancel]');
-  if (!move || !rotate || !confirm || !cancel) throw new Error('Missing building edit controls');
-  return { root, move, rotate, confirm, cancel };
+  if (!move || !rotate || !grid || !confirm || !cancel) throw new Error('Missing building edit controls');
+  return { root, move, rotate, grid, confirm, cancel };
 }
 
 function isEditorEnabled(): boolean {
