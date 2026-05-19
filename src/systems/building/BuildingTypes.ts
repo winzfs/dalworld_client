@@ -2,11 +2,23 @@ import type { InventoryItemStack } from "../inventory/InventoryTypes";
 
 export type BuildPartId =
   | "floor_1x1"
+  | "stone_floor_1x1"
+  | "deck_floor_1x1"
   | "thin_wall"
+  | "stone_wall"
+  | "half_wall"
+  | "railing"
+  | "fence"
   | "roof_1x1"
+  | "flat_roof_1x1"
+  | "thatch_roof_1x1"
   | "pillar"
+  | "stone_pillar"
+  | "short_post"
   | "door"
-  | "window";
+  | "stone_door"
+  | "window"
+  | "wide_window";
 
 export type BuildCategory =
   | "floor"
