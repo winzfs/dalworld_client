@@ -299,6 +299,7 @@ export class GameApp {
 
     const me = this.findMe();
     this.buildingPlacementRenderer.applyOcclusionFocus(me ? { worldX: me.x, worldY: me.y } : null);
+    this.monsterRenderer.applyOcclusion((x, y) => this.buildingPlacementRenderer.isOccludingFocus({ worldX: x, worldY: y }));
     this.cameraSystem.update({ player: me, world: this.worldInfo, screenWidth: this.app.renderer.width, screenHeight: this.app.renderer.height });
     this.hudSystem.update({ status: this.status, tick: this.snapshotSystem.snapshot.tick, player: me, latencyMs: this.network.latencyMs, buildingMode: this.buildingModeState.getSnapshot() });
     this.syncBuildingControlsPosition();
@@ -430,12 +431,12 @@ export class GameApp {
       case 'BUILD_PLACED':
         this.buildingOccupancy.addOrUpdate(event.part);
         this.buildingPlacementRenderer.addOrUpdate(event.part);
-        this.clearBuildingDraftAfterServerAck();
+        this.clearBuildingDraftAfterServerAck(event.part);
         return;
       case 'BUILD_UPDATED':
         this.buildingOccupancy.addOrUpdate(event.part);
         this.buildingPlacementRenderer.addOrUpdate(event.part);
-        this.clearBuildingDraftAfterServerAck();
+        this.clearBuildingDraftAfterServerAck(event.part);
         return;
       case 'BUILD_REMOVED':
         this.buildingOccupancy.remove(event.entityId);
@@ -499,11 +500,13 @@ export class GameApp {
     this.setBuildingGridVisible(true);
     this.buildingModeState.enter(part.partId);
     this.buildingModeState.setCurrentZ(part.z);
+    this.buildingModeState.setRotation(part.rotation);
     this.renderBuildingDraft(this.buildingEdit.beginExisting(part));
   }
 
   private renderBuildingDraft(draft: BuildingEditDraft): void {
     this.buildingModeState.setCurrentZ(draft.z);
+    this.buildingModeState.setRotation(draft.rotation);
     const canPlace = this.buildingEdit.validate(draft).ok;
     this.buildingGhostPreviewRenderer.show({ partId: draft.partId, x: draft.x, y: draft.y, z: draft.z, rotation: draft.rotation, canPlace });
     this.buildingEditControls.setValid(canPlace);
@@ -540,10 +543,21 @@ export class GameApp {
     this.buildingEditControls.hide();
   }
 
-  private clearBuildingDraftAfterServerAck(): void {
+  private clearBuildingDraftAfterServerAck(placedPart?: PlacedBuildPart): void {
+    const mode = this.buildingModeState.getSnapshot();
+    const nextPartId = placedPart?.partId ?? mode.selectedPartId;
+    const nextRotation = placedPart?.rotation ?? mode.rotation;
+    const nextZ = placedPart?.z ?? mode.currentZ;
+
     this.buildingEdit.clear();
     this.buildingGhostPreviewRenderer.hide();
     this.buildingEditControls.hide();
+
+    if (!nextPartId || !mode.enabled || mode.toolMode !== 'place') return;
+
+    this.buildingModeState.enter(nextPartId);
+    this.buildingModeState.setRotation(nextRotation);
+    this.buildingModeState.setCurrentZ(nextZ);
   }
 
   private syncBuildingControlsPosition(): void {
