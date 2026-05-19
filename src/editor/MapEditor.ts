@@ -490,22 +490,21 @@ export class MapEditor {
 
     try {
       const report = await this.storage.saveWorld(worldSave);
-      const ok = report !== null && mapSaved;
-      const resources = report?.resources;
+      const resources = report.resources;
       this.showToast(
-        ok
-          ? `저장 완료 · 셀 ${report.cells}개 · 자원 ${resources?.total ?? 0}개(나무 ${resources?.tree ?? 0}, 돌 ${resources?.stone ?? 0})`
-          : '로컬 저장 실패 · 서버 반영을 확인할 수 없습니다.',
-        ok ? 'success' : 'error',
+        mapSaved
+          ? `저장 완료 · 셀 ${report.cells}개 · 자원 ${resources.total}개(나무 ${resources.tree}, 돌 ${resources.stone})`
+          : `서버 저장 완료 · 로컬 백업은 용량 부족으로 생략 · 셀 ${report.cells}개 · 자원 ${resources.total}개`,
+        'success',
         4_500,
       );
       console.info('[MapEditor] Save completed.', {
         report,
-        mapSaved,
+        localBackupSaved: mapSaved,
         cellCount: worldSave.cells.length,
       });
     } catch (error) {
-      console.error('[MapEditor] Local save completed, but server upload failed.', error);
+      console.error('[MapEditor] Server upload failed.', error);
       this.showToast('서버 업로드 실패 · 게임에는 아직 반영되지 않았습니다.', 'error', 5_000);
     }
   }
