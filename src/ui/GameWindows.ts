@@ -1,4 +1,3 @@
-import type { PlayerSnapshot } from '../protocol/messages';
 import { BUILD_PART_LIST } from '../systems/building/BuildingParts';
 import { getBuildPartItemDefinition } from '../systems/building/BuildPartInventoryCatalog';
 import type { BuildingModeSnapshot } from '../systems/building/BuildingModeState';
