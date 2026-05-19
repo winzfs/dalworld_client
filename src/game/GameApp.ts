@@ -362,6 +362,9 @@ export class GameApp {
       case 'BUILD_REMOVED':
         this.buildingPlacementRenderer.remove(event.entityId);
         return;
+      case 'BUILD_DOOR_UPDATED':
+        this.buildingPlacementRenderer.updateDoor(event.entityId, event.open);
+        return;
       case 'BUILD_REJECTED':
         console.warn('[Building] request rejected:', event.reason);
         return;
