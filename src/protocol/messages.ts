@@ -1,7 +1,7 @@
 // 서버 src/protocol/messages.ts 와 동일한 프로토콜.
 // 모노레포 의존을 피하기 위해 클라이언트 측에 복사해 둔다.
 
-import type { GameWorldMap } from '../worldMap/types';
+import type { GameWorldMap, WorldMapSourceRect } from '../worldMap/types';
 
 export type MovementKeys = {
   up: boolean;
@@ -46,6 +46,10 @@ export type ResourceSnapshot = {
   cellY: number;
   /** Original map editor sprite URL, when this resource was created from a map placement. */
   assetUrl?: string;
+  /** Original map editor placement scale, when this resource was created from a map placement. */
+  assetScale?: number;
+  /** Original source rectangle, when this resource was sliced from a larger tileset. */
+  sourceRect?: WorldMapSourceRect;
   hp: number;
   maxHp: number;
   /** 0 if alive, otherwise epoch ms when it will respawn */
