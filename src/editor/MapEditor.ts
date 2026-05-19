@@ -228,7 +228,7 @@ export class MapEditor {
   }
 
   private paintFromPointerEvent(event: PointerEvent): void {
-    const worldPoint = this.screenToWorld(event.clientX, event.clientY);
+    const worldPoint = this.clampWorldPoint(this.screenToWorld(event.clientX, event.clientY));
     const tileSize = this.state.gridSize;
     const x = Math.floor(worldPoint.x / tileSize) * tileSize;
     const y = Math.floor(worldPoint.y / tileSize) * tileSize;
@@ -241,7 +241,7 @@ export class MapEditor {
   }
 
   private pickBrushFromPointerEvent(event: PointerEvent): void {
-    const worldPoint = this.screenToWorld(event.clientX, event.clientY);
+    const worldPoint = this.clampWorldPoint(this.screenToWorld(event.clientX, event.clientY));
     const picked = this.placement.pickAt(worldPoint.x, worldPoint.y);
     if (!picked) return;
 
@@ -578,6 +578,13 @@ export class MapEditor {
     };
   }
 
+  private clampWorldPoint(point: { x: number; y: number }): { x: number; y: number } {
+    return {
+      x: clamp(point.x, 0, Math.max(0, this.worldWidth - 1)),
+      y: clamp(point.y, 0, Math.max(0, this.worldHeight - 1)),
+    };
+  }
+
   private showToast(message: string, kind: ToastKind, durationMs = 2_500): void {
     if (this.toastHideTimeout !== null) {
       window.clearTimeout(this.toastHideTimeout);
@@ -618,46 +625,12 @@ function createEditorToast(): HTMLDivElement {
   toast.style.pointerEvents = 'none';
   toast.style.opacity = '0';
   toast.style.transition = 'opacity 160ms ease, transform 160ms ease, background 160ms ease';
-
-  const observer = new MutationObserver(() => {
-    switch (toast.dataset.kind) {
-      case 'success':
-        toast.style.background = 'rgba(22, 101, 52, 0.96)';
-        break;
-      case 'error':
-        toast.style.background = 'rgba(185, 28, 28, 0.96)';
-        break;
-      default:
-        toast.style.background = 'rgba(17, 24, 39, 0.94)';
-        break;
-    }
-  });
-  observer.observe(toast, { attributes: true, attributeFilter: ['data-kind'] });
-
   return toast;
 }
 
 function isEditorUiTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && (
-    target.closest('.map-editor-panel') !== null ||
-    target.closest('.tile-picker-window') !== null ||
-    target.closest('.world-map-panel') !== null ||
-    target.closest('.editor-minimap') !== null
-  );
-}
-
-function loadImageSize(url: string): Promise<{ width: number; height: number } | null> {
-  return new Promise((resolve) => {
-    const image = new Image();
-
-    image.onload = () => resolve({
-      width: image.naturalWidth,
-      height: image.naturalHeight,
-    });
-
-    image.onerror = () => resolve(null);
-    image.src = url;
-  });
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest('.tileset-panel, .tile-picker-window, .world-map-panel'));
 }
 
 function cellKey(gridX: number, gridY: number): string {
@@ -665,6 +638,19 @@ function cellKey(gridX: number, gridY: number): string {
 }
 
 function parseCellKey(key: string): [number, number] {
-  const [x, y] = key.split(':').map(Number);
+  const [x, y] = key.split(':').map((value) => Number(value));
   return [Number.isFinite(x) ? x : 0, Number.isFinite(y) ? y : 0];
+}
+
+function loadImageSize(url: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
