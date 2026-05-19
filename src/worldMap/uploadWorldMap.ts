@@ -1,7 +1,7 @@
 import type { EditorWorldSave } from '../editor/types';
 import { getServerHttpPath } from '../net/serverHttp';
 import { compileRuntimeWorldMap } from './compileRuntimeWorldMap';
-import type { GameWorldMap } from './types';
+import type { GameWorldMap, WorldMapCell } from './types';
 
 export type UploadedWorldMapReport = {
   cells: number;
@@ -13,25 +13,19 @@ export type UploadedWorldMapReport = {
   };
 };
 
+type WorldMapManifest = {
+  version: 1;
+  name: string;
+  tileSize: number;
+  cellSize: number;
+  cells: Array<{ gridX: number; gridY: number }>;
+};
+
 export async function uploadWorldMap(world: EditorWorldSave): Promise<UploadedWorldMapReport> {
   const payload = compileRuntimeWorldMap(world);
-  const url = getServerHttpPath('/maps/default');
+  await uploadWorldMapByCell(payload);
 
-  const response = await fetch(url, {
-    method: 'PUT',
-    cache: 'no-store',
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-store',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to upload world map: ${response.status}`);
-  }
-
-  const verified = await fetchWorldMap(url);
+  const verified = await fetchWorldMap(getServerHttpPath('/maps/default'));
   const expectedSignature = createMapSignature(payload);
   const actualSignature = createMapSignature(verified);
 
@@ -42,8 +36,46 @@ export async function uploadWorldMap(world: EditorWorldSave): Promise<UploadedWo
   }
 
   const report = createUploadReport(payload);
-  console.info('[WorldMap] Uploaded and verified world cells:', payload.cells.map((cell) => `${cell.gridX}:${cell.gridY}`), report);
+  console.info('[WorldMap] Uploaded and verified world cells:', payload.cells.map((cell) => `${cell.gridX}:${cell.gridY}`), {
+    ...report,
+    approxBytes: estimateJsonBytes(payload),
+  });
   return report;
+}
+
+async function uploadWorldMapByCell(map: GameWorldMap): Promise<void> {
+  for (const cell of map.cells) {
+    await putJson(getServerHttpPath(`/maps/default/cell?gridX=${cell.gridX}&gridY=${cell.gridY}`), cell);
+  }
+
+  const manifest: WorldMapManifest = {
+    version: map.version,
+    name: map.name,
+    tileSize: map.tileSize,
+    cellSize: map.cellSize,
+    cells: map.cells.map((cell) => ({ gridX: cell.gridX, gridY: cell.gridY })),
+  };
+
+  await putJson(getServerHttpPath('/maps/default/manifest'), manifest);
+}
+
+async function putJson(url: string, value: unknown): Promise<void> {
+  const approxBytes = estimateJsonBytes(value);
+  const response = await fetch(url, {
+    method: 'PUT',
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'X-Dalworld-Payload-Bytes': String(approxBytes),
+    },
+    body: JSON.stringify(value),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Failed to upload world map chunk: ${response.status} ${text}`.trim());
+  }
 }
 
 async function fetchWorldMap(url: string): Promise<GameWorldMap | null> {
@@ -66,11 +98,18 @@ function createMapSignature(map: GameWorldMap | null | undefined): string {
   if (!map) return 'null';
 
   const cells = map.cells
-    .map((cell) => `${cell.gridX}:${cell.gridY}:${cell.placements.length}`)
+    .map((cell) => `${cell.gridX}:${cell.gridY}:${cell.placements.length}:${createCellSignature(cell)}`)
     .sort()
     .join('|');
 
   return `${map.version}:${map.name}:${map.tileSize}:${map.cellSize}:${cells}`;
+}
+
+function createCellSignature(cell: WorldMapCell): string {
+  return cell.placements
+    .map((placement) => `${placement.id}:${placement.assetId}:${placement.x}:${placement.y}:${placement.layer}`)
+    .sort()
+    .join(',');
 }
 
 function createUploadReport(map: GameWorldMap): UploadedWorldMapReport {
@@ -96,6 +135,14 @@ function createUploadReport(map: GameWorldMap): UploadedWorldMapReport {
       total: tree + stone,
     },
   };
+}
+
+function estimateJsonBytes(value: unknown): number {
+  try {
+    return new Blob([JSON.stringify(value)]).size;
+  } catch {
+    return -1;
+  }
 }
 
 function withCacheBuster(url: string): string {
