@@ -72,50 +72,50 @@ export function normalizeInventoryStacks(source: InventorySource): InventoryItem
 }
 
 function getGeneralResourceSlots(stacks: InventoryItemStack[]): InventoryResourceSlotView[] {
-  return stacks
-    .map((stack) => {
-      const definition = BASE_ITEM_DEFINITIONS[stack.itemId];
-      if (!definition || definition.category !== 'resource' || stack.quantity <= 0) return null;
-      return {
-        kind: 'resource' as const,
-        itemId: stack.itemId,
-        definition,
-        amount: stack.quantity,
-      };
-    })
-    .filter((slot): slot is InventoryResourceSlotView => slot !== null);
+  return getResourceSlotsByCategory(stacks, 'resource');
 }
 
 function getCraftingMaterialSlots(stacks: InventoryItemStack[]): InventoryResourceSlotView[] {
-  return stacks
-    .map((stack) => {
-      const definition = BASE_ITEM_DEFINITIONS[stack.itemId];
-      if (!definition || definition.category !== 'crafting_material' || stack.quantity <= 0) return null;
-      return {
-        kind: 'resource' as const,
-        itemId: stack.itemId,
-        definition,
-        amount: stack.quantity,
-      };
-    })
-    .filter((slot): slot is InventoryResourceSlotView => slot !== null);
+  return getResourceSlotsByCategory(stacks, 'crafting_material');
+}
+
+function getResourceSlotsByCategory(
+  stacks: InventoryItemStack[],
+  category: ItemDefinition['category'],
+): InventoryResourceSlotView[] {
+  const slots: InventoryResourceSlotView[] = [];
+
+  for (const stack of stacks) {
+    const definition = BASE_ITEM_DEFINITIONS[stack.itemId];
+    if (!definition || definition.category !== category || stack.quantity <= 0) continue;
+
+    slots.push({
+      kind: 'resource',
+      itemId: stack.itemId,
+      definition,
+      amount: stack.quantity,
+    });
+  }
+
+  return slots;
 }
 
 function getBuildingPartSlots(stacks: InventoryItemStack[]): InventoryBuildPartSlotView[] {
   const quantities = new Map(stacks.map((stack) => [stack.itemId, stack.quantity]));
-  const owned = stacks
-    .map((stack) => {
-      const buildPartId = getBuildPartIdFromItemId(stack.itemId);
-      const entry = buildPartId ? BUILD_PART_ITEM_ENTRIES.find((candidate) => candidate.buildPartId === buildPartId) : null;
-      if (!entry || stack.quantity <= 0) return null;
-      return {
-        kind: 'building_part' as const,
-        buildPartId: entry.buildPartId,
-        definition: entry.definition,
-        amount: stack.quantity,
-      };
-    })
-    .filter((slot): slot is InventoryBuildPartSlotView => slot !== null);
+  const owned: InventoryBuildPartSlotView[] = [];
+
+  for (const stack of stacks) {
+    const buildPartId = getBuildPartIdFromItemId(stack.itemId);
+    const entry = buildPartId ? BUILD_PART_ITEM_ENTRIES.find((candidate) => candidate.buildPartId === buildPartId) : null;
+    if (!entry || stack.quantity <= 0) continue;
+
+    owned.push({
+      kind: 'building_part',
+      buildPartId: entry.buildPartId,
+      definition: entry.definition,
+      amount: stack.quantity,
+    });
+  }
 
   if (owned.length > 0) return owned;
 
