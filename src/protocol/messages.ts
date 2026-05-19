@@ -1,6 +1,7 @@
 // 서버 src/protocol/messages.ts 와 동일한 프로토콜.
 // 모노레포 의존을 피하기 위해 클라이언트 측에 복사해 둔다.
 
+import type { BuildingClientMessage, BuildingServerEvent } from '../systems/building/BuildingTypes';
 import type { GameWorldMap, WorldMapSourceRect } from '../worldMap/types';
 
 export type MovementKeys = {
@@ -50,7 +51,7 @@ export type ResourceSnapshot = {
   assetScale?: number;
   /** Original display width before scale, when this resource was created from a map placement. */
   displayWidth?: number;
-  /** Original display height before scale, when this resource was created from a map placement. */
+  /** Original display height before scale, when this resource was sliced from a larger tileset. */
   displayHeight?: number;
   /** Original source rectangle, when this resource was sliced from a larger tileset. */
   sourceRect?: WorldMapSourceRect;
@@ -108,7 +109,8 @@ export type ClientToServerMessage =
       /** Preferred target; server picks nearest in range when omitted or invalid. */
       resourceId?: string;
     }
-  | { type: 'ping'; now: number };
+  | { type: 'ping'; now: number }
+  | BuildingClientMessage;
 
 export type ServerEvent =
   | { type: 'player_joined'; playerId: string }
@@ -139,4 +141,5 @@ export type ServerToClientMessage =
       monsters: MonsterSnapshot[];
     }
   | { type: 'event'; serverTime: number; event: ServerEvent }
-  | { type: 'pong'; now: number };
+  | { type: 'pong'; now: number }
+  | BuildingServerEvent;
