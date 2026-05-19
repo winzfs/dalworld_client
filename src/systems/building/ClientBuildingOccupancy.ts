@@ -1,4 +1,5 @@
 import { BUILD_PARTS } from './BuildingParts';
+import { gridToScreen, ISO_LAYER_HEIGHT, ISO_TILE_HEIGHT, ISO_TILE_WIDTH } from './IsoBuildingMath';
 import type {
   BuildCategory,
   BuildCorner,
@@ -23,6 +24,7 @@ export type ClientPlacementCheck =
 
 const STACKABLE_EDGE_CATEGORIES: BuildCategory[] = ['wall', 'door', 'window'];
 const UPPER_TILE_SUPPORT_CATEGORIES: BuildCategory[] = ['floor', 'wall', 'door', 'window', 'support'];
+const DEMOLITION_PICK_RADIUS = 34;
 
 export class ClientBuildingOccupancy {
   private readonly cells = new Map<string, CellSlots>();
@@ -151,6 +153,20 @@ export class ClientBuildingOccupancy {
       })[0] ?? null;
   }
 
+  findNearestAtWorld(worldX: number, worldY: number, currentZ: number, preferredRotation: BuildRotation): PlacedBuildPart | null {
+    let best: { part: PlacedBuildPart; score: number } | null = null;
+
+    for (const part of this.parts.values()) {
+      const score = getPickScore(part, worldX, worldY, currentZ, preferredRotation);
+      if (score > DEMOLITION_PICK_RADIUS) continue;
+      if (!best || score < best.score || (score === best.score && getInteractionPriority(part) > getInteractionPriority(best.part))) {
+        best = { part, score };
+      }
+    }
+
+    return best?.part ?? null;
+  }
+
   findDoorAtCell(x: number, y: number, z: number, preferredRotation: BuildRotation): PlacedBuildPart | null {
     const cell = this.cells.get(this.toKey(x, y, z));
     if (!cell) return null;
@@ -240,6 +256,28 @@ export class ClientBuildingOccupancy {
   }
 }
 
+function getPickScore(part: PlacedBuildPart, worldX: number, worldY: number, currentZ: number, preferredRotation: BuildRotation): number {
+  const definition = BUILD_PARTS[part.partId];
+  const origin = gridToScreen(part.x, part.y, part.z);
+  const layerPenalty = Math.abs(part.z - currentZ) * 10;
+  const rotationBonus = part.rotation === preferredRotation ? -4 : 0;
+  const priorityBonus = -getInteractionPriority(part) * 0.08;
+
+  if (!definition) return Number.POSITIVE_INFINITY;
+
+  if (definition.slotKind === 'edge') {
+    const segment = getEdgeSegment(origin, part.rotation);
+    return distancePointToSegment(worldX, worldY, segment.a, segment.b) + layerPenalty + rotationBonus + priorityBonus;
+  }
+
+  if (definition.slotKind === 'corner') {
+    const point = getCornerPoint(origin, part.rotation);
+    return distance(worldX, worldY, point.x, point.y) + layerPenalty + rotationBonus + priorityBonus;
+  }
+
+  return distance(worldX, worldY, origin.x, origin.y) * 0.7 + layerPenalty + priorityBonus;
+}
+
 function getInteractionPriority(part: PlacedBuildPart): number {
   const definition = BUILD_PARTS[part.partId];
   switch (definition?.category) {
@@ -258,4 +296,57 @@ function getInteractionPriority(part: PlacedBuildPart): number {
     default:
       return 0;
   }
+}
+
+type Point = { x: number; y: number };
+
+function getEdgeSegment(origin: Point, rotation: BuildRotation): { a: Point; b: Point } {
+  const halfW = ISO_TILE_WIDTH / 2;
+  const halfH = ISO_TILE_HEIGHT / 2;
+  const north = { x: origin.x, y: origin.y - halfH };
+  const east = { x: origin.x + halfW, y: origin.y };
+  const south = { x: origin.x, y: origin.y + halfH };
+  const west = { x: origin.x - halfW, y: origin.y };
+
+  switch (rotation) {
+    case 0:
+      return { a: west, b: north };
+    case 1:
+      return { a: north, b: east };
+    case 2:
+      return { a: east, b: south };
+    case 3:
+      return { a: south, b: west };
+  }
+}
+
+function getCornerPoint(origin: Point, rotation: BuildRotation): Point {
+  const halfW = ISO_TILE_WIDTH / 2;
+  const halfH = ISO_TILE_HEIGHT / 2;
+
+  switch (rotation) {
+    case 0:
+      return { x: origin.x - halfW, y: origin.y };
+    case 1:
+      return { x: origin.x, y: origin.y - halfH };
+    case 2:
+      return { x: origin.x + halfW, y: origin.y };
+    case 3:
+      return { x: origin.x, y: origin.y + halfH };
+  }
+}
+
+function distancePointToSegment(px: number, py: number, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return distance(px, py, a.x, a.y);
+  const t = Math.max(0, Math.min(1, ((px - a.x) * dx + (py - a.y) * dy) / lengthSquared));
+  return distance(px, py, a.x + t * dx, a.y + t * dy);
+}
+
+function distance(ax: number, ay: number, bx: number, by: number): number {
+  const dx = ax - bx;
+  const dy = ay - by;
+  return Math.sqrt(dx * dx + dy * dy);
 }
