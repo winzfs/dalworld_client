@@ -38,7 +38,7 @@ async function fetchWorldMap(url: string): Promise<GameWorldMap | null> {
     throw new Error(`Failed to verify uploaded world map: ${response.status}`);
   }
 
-  return await response.json<GameWorldMap | null>();
+  return await response.json() as GameWorldMap | null;
 }
 
 function createMapSignature(map: GameWorldMap | null | undefined): string {
