@@ -71,9 +71,13 @@ export class BuildingModeState {
   }
 
   rotateNext(): void {
+    this.setRotation(((this.snapshot.rotation + 1) % 4) as BuildRotation);
+  }
+
+  setRotation(rotation: BuildRotation): void {
     this.snapshot = {
       ...this.snapshot,
-      rotation: ((this.snapshot.rotation + 1) % 4) as BuildRotation,
+      rotation,
     };
     this.emit();
   }
