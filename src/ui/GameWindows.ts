@@ -405,8 +405,13 @@ function getCraftingWindowMarkup(): string {
         <p>레시피를 누르면 서버가 재료를 검증한 뒤 제작합니다.</p>
         <div class="placeholder-grid">
           ${recipes.map((view) => `
-            <button class="placeholder-card" type="button" data-craft-recipe="${view.recipe.id}" title="${getRecipeTooltip(view.inputDefinitions)}">
-              ${view.outputDefinition?.icon ?? '▣'}
+            <button class="placeholder-card" type="button" data-craft-recipe="${view.recipe.id}" title="${getRecipeTooltip(view.inputDefinitions)}" style="display:grid; grid-template-columns:28px 1fr; gap:8px; align-items:center; min-height:64px; text-align:left; padding:8px;">
+              <span style="font-size:22px; text-align:center;">${view.outputDefinition?.icon ?? '▣'}</span>
+              <span style="display:flex; min-width:0; flex-direction:column; gap:2px;">
+                <strong style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff1bf; font-size:11px;">${view.recipe.label}</strong>
+                <small style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:rgba(255,255,255,.62); font-size:10px;">${getRecipeTooltip(view.inputDefinitions)}</small>
+                <small style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:rgba(126,231,255,.88); font-size:10px;">→ ${getRecipeOutputText(view)}</small>
+              </span>
             </button>
           `).join('')}
         </div>
@@ -526,4 +531,10 @@ function getBuildCostLabel(itemId: string): string {
 
 function getRecipeTooltip(inputs: Array<{ itemId: string; quantity: number; definition: ItemDefinition | null }>): string {
   return inputs.map((input) => `${input.definition?.label ?? input.itemId} ${input.quantity}`).join(' · ');
+}
+
+function getRecipeOutputText(view: ReturnType<typeof getCraftingCategories>[number]['recipes'][number]): string {
+  return view.recipe.outputs
+    .map((output) => `${view.outputDefinition?.label ?? output.itemId} ${output.quantity}`)
+    .join(' · ');
 }
