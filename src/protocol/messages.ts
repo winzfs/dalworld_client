@@ -4,6 +4,7 @@
 import type { BuildingClientMessage, BuildingServerEvent } from '../systems/building/BuildingTypes';
 import type { CraftingRecipeId } from '../systems/crafting/CraftingTypes';
 import type { InventoryItemStack, InventorySnapshot } from '../systems/inventory/InventoryTypes';
+import type { TimeOfDayState } from '../systems/timeOfDay/TimeOfDayTypes';
 import type { GameWorldMap, WorldMapSourceRect } from '../worldMap/types';
 
 export type MovementKeys = {
@@ -93,6 +94,11 @@ export type CraftingClientMessage = {
   recipeId: CraftingRecipeId;
 };
 
+export type TimeOfDayToggleRequest = {
+  type: 'TIME_OF_DAY_TOGGLE_REQUEST';
+  requestId: string;
+};
+
 export type CraftingCompletedEvent = {
   type: 'CRAFT_COMPLETED';
   requestId: string;
@@ -127,7 +133,8 @@ export type ClientToServerMessage =
     }
   | { type: 'ping'; now: number }
   | BuildingClientMessage
-  | CraftingClientMessage;
+  | CraftingClientMessage
+  | TimeOfDayToggleRequest;
 
 export type ServerEvent =
   | { type: 'player_joined'; playerId: string }
@@ -144,6 +151,7 @@ export type ServerToClientMessage =
       world: WorldInfo;
       gameplay?: PublicGameplayConfig;
       map?: GameWorldMap | null;
+      timeOfDay?: TimeOfDayState;
       serverTime: number;
     }
   | {
@@ -153,6 +161,7 @@ export type ServerToClientMessage =
       players: PlayerSnapshot[];
       resources: ResourceSnapshot[];
       monsters: MonsterSnapshot[];
+      timeOfDay?: TimeOfDayState;
     }
   | { type: 'event'; serverTime: number; event: ServerEvent }
   | { type: 'pong'; now: number }
