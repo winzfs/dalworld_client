@@ -24,6 +24,12 @@ export type ClientPlacementCheck =
 
 const STACKABLE_EDGE_CATEGORIES: BuildCategory[] = ['wall', 'door', 'window'];
 const UPPER_TILE_SUPPORT_CATEGORIES: BuildCategory[] = ['floor', 'wall', 'door', 'window', 'support'];
+const FLOOR_ADJACENCY_OFFSETS = [
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 0, y: -1 },
+];
 const DEMOLITION_PICK_RADIUS = 42;
 
 export class ClientBuildingOccupancy {
@@ -185,17 +191,32 @@ export class ClientBuildingOccupancy {
 
   private canPlaceUpperTile(x: number, y: number, z: number, ignoredEntityId: string | null): ClientPlacementCheck {
     if (z <= 0) return { ok: true };
-    const supportCell = this.cells.get(this.toKey(x, y, z - 1));
-    if (!supportCell) return { ok: false, reason: '2층 바닥을 받칠 벽/기둥이 없습니다.' };
+    if (this.hasDirectUpperTileSupport(x, y, z, ignoredEntityId)) return { ok: true };
+    if (this.hasAdjacentFloorSupport(x, y, z, ignoredEntityId)) return { ok: true };
+    return { ok: false, reason: '위층 바닥은 아래 지지물 또는 같은 층 인접 바닥에 이어서 배치해야 합니다.' };
+  }
 
-    const supported = this.getPartsFromCell(supportCell)
+  private hasDirectUpperTileSupport(x: number, y: number, z: number, ignoredEntityId: string | null): boolean {
+    const supportCell = this.cells.get(this.toKey(x, y, z - 1));
+    if (!supportCell) return false;
+
+    return this.getPartsFromCell(supportCell)
       .filter((part) => part.entityId !== ignoredEntityId)
       .some((part) => {
         const definition = BUILD_PARTS[part.partId];
         return Boolean(definition && UPPER_TILE_SUPPORT_CATEGORIES.includes(definition.category));
       });
+  }
 
-    return supported ? { ok: true } : { ok: false, reason: '2층 바닥을 받칠 벽/기둥이 없습니다.' };
+  private hasAdjacentFloorSupport(x: number, y: number, z: number, ignoredEntityId: string | null): boolean {
+    return FLOOR_ADJACENCY_OFFSETS.some((offset) => {
+      const neighbor = this.cells.get(this.toKey(x + offset.x, y + offset.y, z));
+      const entityId = neighbor?.tile;
+      if (!entityId || entityId === ignoredEntityId) return false;
+      const part = this.parts.get(entityId);
+      const definition = part ? BUILD_PARTS[part.partId] : null;
+      return Boolean(definition && definition.category === 'floor');
+    });
   }
 
   private getOccupiedSlotEntityId(cell: CellSlots | undefined, slotKind: BuildSlotKind, rotation: BuildRotation): string | undefined {
