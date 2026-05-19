@@ -1,4 +1,5 @@
 import './style.css';
+import './timeOfDay.css';
 import { GameApp } from './game/GameApp';
 import { installTimeOfDayClientFeature } from './systems/timeOfDay/TimeOfDayClientFeature';
 import { BootOverlay, installGlobalErrorOverlay } from './utils/bootOverlay';
