@@ -66,8 +66,8 @@ export const BUILD_PARTS: Record<BuildPartId, BuildPartDefinition> = {
   half_wall: common("half_wall", "반벽", "wall", "edge", "▂", true, true, FLOOR_SUPPORTS, [{ itemId: "wood", quantity: 1 }]),
   railing: common("railing", "난간", "wall", "edge", "╫", true, true, FLOOR_SUPPORTS, [{ itemId: "wood", quantity: 1 }]),
   fence: common("fence", "울타리", "wall", "edge", "♯", true, true, FLOOR_SUPPORTS, [{ itemId: "wood", quantity: 1 }]),
-  wood_round_wall: common("wood_round_wall", "나무 원형벽", "wall", "edge", "◠", true, true, ["wood_round_floor", "stone_round_floor"], [{ itemId: "wood", quantity: 2 }]),
-  stone_round_wall: common("stone_round_wall", "돌 원형벽", "wall", "edge", "◡", true, true, ["wood_round_floor", "stone_round_floor"], [{ itemId: "stone", quantity: 3 }]),
+  wood_round_wall: common("wood_round_wall", "나무 원형벽", "wall", "edge", "◠", true, true, FLOOR_SUPPORTS, [{ itemId: "wood", quantity: 2 }]),
+  stone_round_wall: common("stone_round_wall", "돌 원형벽", "wall", "edge", "◡", true, true, FLOOR_SUPPORTS, [{ itemId: "stone", quantity: 3 }]),
 
   roof_1x1: common("roof_1x1", "나무 지붕", "roof", "tile", "⌂", true, true, WALL_SUPPORTS, [{ itemId: "wood", quantity: 2 }, { itemId: "stone", quantity: 1 }]),
   flat_roof_1x1: common("flat_roof_1x1", "평지붕", "roof", "tile", "▔", true, true, WALL_SUPPORTS, [{ itemId: "wood", quantity: 2 }]),
