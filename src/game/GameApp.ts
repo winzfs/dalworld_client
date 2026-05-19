@@ -99,6 +99,7 @@ export class GameApp {
       new GameHud(),
       new GameWindows({
         onSelectBuildPart: (partId) => this.buildingModeState.enter(partId),
+        onEnterRemoveMode: () => this.buildingModeState.enterRemoveMode(),
         onExitBuildingMode: () => this.buildingModeState.exit(),
         onRotateBuildingPart: () => this.buildingModeState.rotateNext(),
         onSetBuildingLayer: (z) => this.buildingModeState.setCurrentZ(z),
@@ -309,7 +310,7 @@ export class GameApp {
 
   private handleCanvasPointerMove(event: PointerEvent): void {
     const mode = this.buildingModeState.getSnapshot();
-    if (!mode.enabled || !mode.selectedPartId) {
+    if (!mode.enabled || mode.toolMode === 'remove' || !mode.selectedPartId) {
       this.buildingGhostPreviewRenderer.hide();
       return;
     }
@@ -334,9 +335,34 @@ export class GameApp {
     if (event.button !== 0) return;
 
     const mode = this.buildingModeState.getSnapshot();
-    if (!mode.enabled || !mode.selectedPartId) return;
+    if (!mode.enabled) return;
 
     const grid = this.pointerToBuildingGrid(event, mode.currentZ);
+
+    if (mode.toolMode === 'remove') {
+      const target = this.buildingOccupancy.findTopAtCell(grid.x, grid.y, grid.z, mode.rotation);
+      if (!target) return;
+
+      this.network.send({
+        type: 'BUILD_REMOVE_REQUEST',
+        requestId: crypto.randomUUID(),
+        entityId: target.entityId,
+      });
+      return;
+    }
+
+    if (!mode.selectedPartId) return;
+
+    const door = this.buildingOccupancy.findDoorAtCell(grid.x, grid.y, grid.z, mode.rotation);
+    if (door && mode.selectedPartId === 'door') {
+      this.network.send({
+        type: 'BUILD_DOOR_TOGGLE_REQUEST',
+        requestId: crypto.randomUUID(),
+        entityId: door.entityId,
+      });
+      return;
+    }
+
     const definition = BUILD_PARTS[mode.selectedPartId];
     if (!definition) return;
 
@@ -363,6 +389,13 @@ export class GameApp {
 
     if (event.key === 'Escape') {
       this.buildingModeState.exit();
+      this.buildingGhostPreviewRenderer.hide();
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      this.buildingModeState.enterRemoveMode();
       this.buildingGhostPreviewRenderer.hide();
       event.preventDefault();
       return;
