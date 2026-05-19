@@ -10,6 +10,7 @@ import {
 import { getWorldEntityZIndex } from '../systems/building/IsoBuildingMath';
 
 const MONSTER_DEPTH_OFFSET = 130;
+const MONSTER_LAYER_Z_INDEX = 110;
 
 type MonsterView = {
   container: Container;
@@ -44,6 +45,7 @@ export class MonsterRenderer {
 
   constructor(parent: Container) {
     this.layer.sortableChildren = true;
+    this.layer.zIndex = MONSTER_LAYER_Z_INDEX;
     parent.addChild(this.layer);
     void this.loadConfiguredSpriteSheets();
   }
