@@ -16,6 +16,7 @@ import {
 } from '../systems/inventory/InventoryViewModel';
 
 type WindowId = 'inventory' | 'crafting' | 'building';
+type CraftingRecipeView = ReturnType<typeof getCraftingCategories>[number]['recipes'][number];
 
 type FloatingButtonConfig = {
   id: WindowId;
@@ -39,6 +40,7 @@ export type GameWindowsOptions = {
 
 const WINDOW_ROOT_ID = 'dalworld-windows';
 const INVENTORY_SLOT_COUNT = 36;
+const CRAFTING_RECIPE_VIEWS = getCraftingCategories().flatMap((category) => category.recipes);
 
 const BUTTONS: FloatingButtonConfig[] = [
   { id: 'inventory', label: '가방', icon: '🎒', title: '가방', defaultButtonX: 18, defaultButtonY: 180, defaultWindowX: 96, defaultWindowY: 120 },
@@ -72,6 +74,7 @@ export class GameWindows {
     this.installCraftingInteractions();
     this.installBuildingInteractions();
     this.renderBuildingMode(this.buildingMode);
+    this.renderCraftingAvailability();
   }
 
   renderInventory(inventory: InventorySource): void {
@@ -103,6 +106,7 @@ export class GameWindows {
     }
 
     this.renderBuildingMode(this.buildingMode);
+    this.renderCraftingAvailability();
   }
 
   renderBuildingMode(mode: BuildingModeSnapshot): void {
@@ -166,6 +170,21 @@ export class GameWindows {
       <span class="inventory-build-label">${view.definition.label}</span>
       ${view.amount === null ? '' : `<span class="inventory-item-count">${view.amount}</span>`}
     `;
+  }
+
+  private renderCraftingAvailability(): void {
+    const buttons = [...this.root.querySelectorAll<HTMLButtonElement>('[data-craft-recipe]')];
+
+    for (const button of buttons) {
+      const recipe = getCraftingRecipeView(button.dataset.craftRecipe);
+      if (!recipe) continue;
+      const canCraft = canCraftRecipe(this.lastInventory, recipe);
+      button.disabled = !canCraft;
+      button.classList.toggle('is-disabled-by-cost', !canCraft);
+      button.title = canCraft
+        ? `${recipe.recipe.label} 제작 가능 · ${getRecipeTooltip(recipe.inputDefinitions)}`
+        : `${recipe.recipe.label} 재료 부족 · 필요: ${getRecipeTooltip(recipe.inputDefinitions)}`;
+    }
   }
 
   private installFloatingButtons(): void {
@@ -256,6 +275,7 @@ export class GameWindows {
 
     for (const button of buttons) {
       button.addEventListener('click', () => {
+        if (button.disabled) return;
         const recipeId = button.dataset.craftRecipe;
         if (!recipeId) return;
         this.options.onCraftRecipe?.(recipeId);
@@ -396,7 +416,7 @@ function getInventoryWindowMarkup(): string {
 }
 
 function getCraftingWindowMarkup(): string {
-  const recipes = getCraftingCategories().flatMap((category) => category.recipes).slice(0, 12);
+  const recipes = CRAFTING_RECIPE_VIEWS.slice(0, 12);
   return `
     <section class="game-window simple-system-window crafting-window" data-window="crafting" hidden>
       ${getWindowHeaderMarkup('제작')}
@@ -513,6 +533,18 @@ function canAffordBuildPart(inventory: InventorySource, costs: { itemId: string;
   return costs.every((cost) => (stacks.find((stack) => stack.itemId === cost.itemId)?.quantity ?? 0) >= cost.quantity);
 }
 
+function canCraftRecipe(inventory: InventorySource, recipe: CraftingRecipeView): boolean {
+  const stacks = normalizeInventoryStacks(inventory);
+  return recipe.recipe.inputs.every((input) => (
+    (stacks.find((stack) => stack.itemId === input.itemId)?.quantity ?? 0) >= input.quantity
+  ));
+}
+
+function getCraftingRecipeView(recipeId: string | undefined): CraftingRecipeView | null {
+  if (!recipeId) return null;
+  return CRAFTING_RECIPE_VIEWS.find((view) => view.recipe.id === recipeId) ?? null;
+}
+
 function getBuildingStatusText(mode: BuildingModeSnapshot): string {
   if (!mode.enabled) return '부품을 선택하면 건설모드로 진입합니다.';
   if (mode.toolMode === 'remove') return '철거모드: 제거할 건설물을 클릭하세요.';
@@ -533,7 +565,7 @@ function getRecipeTooltip(inputs: Array<{ itemId: string; quantity: number; defi
   return inputs.map((input) => `${input.definition?.label ?? input.itemId} ${input.quantity}`).join(' · ');
 }
 
-function getRecipeOutputText(view: ReturnType<typeof getCraftingCategories>[number]['recipes'][number]): string {
+function getRecipeOutputText(view: CraftingRecipeView): string {
   return view.recipe.outputs
     .map((output) => `${view.outputDefinition?.label ?? output.itemId} ${output.quantity}`)
     .join(' · ');
