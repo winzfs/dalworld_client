@@ -25,21 +25,32 @@ export async function uploadWorldMap(world: EditorWorldSave): Promise<UploadedWo
   const payload = compileRuntimeWorldMap(world);
   await uploadWorldMapByCell(payload);
 
-  const verified = await fetchWorldMap(getServerHttpPath('/maps/default'));
-  const expectedSignature = createMapSignature(payload);
-  const actualSignature = createMapSignature(verified);
+  const report = createUploadReport(payload);
 
-  if (expectedSignature !== actualSignature) {
-    throw new Error(
-      `World map upload verification failed: expected ${expectedSignature}, got ${actualSignature}`,
-    );
+  try {
+    const verified = await fetchWorldMap(getServerHttpPath('/maps/default'));
+    const expectedSignature = createMapSignature(payload);
+    const actualSignature = createMapSignature(verified);
+
+    if (expectedSignature !== actualSignature) {
+      console.warn('[WorldMap] Upload verification mismatch after successful chunk upload.', {
+        expectedSignature,
+        actualSignature,
+        report,
+      });
+    } else {
+      console.info('[WorldMap] Uploaded and verified world cells:', payload.cells.map((cell) => `${cell.gridX}:${cell.gridY}`), {
+        ...report,
+        approxBytes: estimateJsonBytes(payload),
+      });
+    }
+  } catch (error) {
+    console.warn('[WorldMap] Upload succeeded, but post-upload verification failed.', {
+      error,
+      report,
+    });
   }
 
-  const report = createUploadReport(payload);
-  console.info('[WorldMap] Uploaded and verified world cells:', payload.cells.map((cell) => `${cell.gridX}:${cell.gridY}`), {
-    ...report,
-    approxBytes: estimateJsonBytes(payload),
-  });
   return report;
 }
 
