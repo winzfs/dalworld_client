@@ -30,7 +30,7 @@ export class HudSystem {
       latencyMs: context.latencyMs,
     });
 
-    this.windows.renderInventory(context.player?.inventory ?? null);
+    this.windows.renderInventory(context.player ?? null);
 
     if (context.buildingMode) {
       this.windows.renderBuildingMode(context.buildingMode);
