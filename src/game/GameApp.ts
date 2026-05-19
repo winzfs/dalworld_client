@@ -1,6 +1,7 @@
 import { Application, Container, Graphics } from 'pixi.js';
 import { GameNetwork, getDefaultWebSocketUrl, type NetworkStatus } from '../net/network';
 import type {
+  CraftingServerEvent,
   PlayerSnapshot,
   PublicGameplayConfig,
   ResourceSnapshot,
@@ -183,6 +184,7 @@ export class GameApp {
         void this.loadWorldMap();
       },
       onBuildingEvent: (event) => this.handleBuildingEvent(event),
+      onCraftingEvent: (event) => this.handleCraftingEvent(event),
     });
 
     this.mapEditor = this.editorMode
@@ -446,6 +448,33 @@ export class GameApp {
       case 'INVENTORY_SNAPSHOT':
         return;
     }
+  }
+
+  private handleCraftingEvent(event: CraftingServerEvent): void {
+    if (event.type === 'CRAFT_REJECTED') {
+      console.warn('[Crafting] request rejected:', event.reason);
+      return;
+    }
+
+    const me = this.findMe();
+    if (!me) return;
+
+    const next: PlayerSnapshot = {
+      ...me,
+      inventory: {
+        wood: event.inventory.items.find((item) => item.itemId === 'wood')?.quantity ?? 0,
+        stone: event.inventory.items.find((item) => item.itemId === 'stone')?.quantity ?? 0,
+      },
+    };
+
+    this.snapshotSystem.setLocalPlayer(next);
+    this.hudSystem.update({
+      status: this.status,
+      tick: this.snapshotSystem.snapshot.tick,
+      player: next,
+      latencyMs: this.network.latencyMs,
+      buildingMode: this.buildingModeState.getSnapshot(),
+    });
   }
 
   private beginNewBuildingDraft(partId: BuildPartId): void {
