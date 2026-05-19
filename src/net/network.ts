@@ -5,6 +5,7 @@ type Listener<T> = (payload: T) => void;
 
 const RECONNECT_DELAYS_MS = [2_000, 4_000, 8_000, 16_000, 30_000];
 const PING_INTERVAL_MS = 5_000;
+const CLIENT_ID_STORAGE_KEY = 'dalworld:client-id';
 
 export class GameNetwork {
   private socket: WebSocket | null = null;
@@ -163,11 +164,37 @@ export class GameNetwork {
 
 export function getDefaultWebSocketUrl(): string {
   const envUrl = import.meta.env.VITE_DALWORLD_WS_URL;
+  const clientId = getOrCreateClientId();
+
   if (typeof envUrl === 'string' && envUrl.length > 0) {
-    return envUrl;
+    return appendClientId(envUrl, clientId);
   }
+
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/ws`;
+  return appendClientId(`${protocol}//${window.location.host}/ws`, clientId);
+}
+
+function appendClientId(rawUrl: string, clientId: string): string {
+  const url = new URL(rawUrl, window.location.href);
+  url.searchParams.set('clientId', clientId);
+  return url.toString();
+}
+
+function getOrCreateClientId(): string {
+  try {
+    const existing = window.localStorage.getItem(CLIENT_ID_STORAGE_KEY);
+    if (existing && isValidClientId(existing)) return existing;
+
+    const next = `client_${crypto.randomUUID()}`;
+    window.localStorage.setItem(CLIENT_ID_STORAGE_KEY, next);
+    return next;
+  } catch {
+    return `client_${crypto.randomUUID()}`;
+  }
+}
+
+function isValidClientId(value: string): boolean {
+  return /^client_[0-9a-fA-F-]{36}$/.test(value);
 }
 
 export type { NetworkStatus };
