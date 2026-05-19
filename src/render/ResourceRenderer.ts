@@ -29,6 +29,7 @@ type ResourceView = {
   hpBar: Graphics;
   sprite: Sprite | null;
   type: ResourceSnapshot['type'];
+  assetUrl?: string;
 };
 
 type ResourceTextures = Record<ResourceSnapshot['type'], Texture[]>;
@@ -36,6 +37,7 @@ type ResourceTextures = Record<ResourceSnapshot['type'], Texture[]>;
 export class ResourceRenderer {
   private readonly layer = new Container();
   private readonly views = new Map<string, ResourceView>();
+  private readonly assetTextureCache = new Map<string, Promise<Texture | null>>();
   private textures: Partial<ResourceTextures> = {};
 
   constructor(parent: Container) {
@@ -58,7 +60,7 @@ export class ResourceRenderer {
       view.container.position.set(resource.x, resource.y);
       view.container.zIndex = Math.round(resource.y);
 
-      if (!view.sprite) {
+      if (!view.sprite || view.assetUrl !== resource.assetUrl || view.type !== resource.type) {
         this.applySprite(view, resource);
       }
 
@@ -125,7 +127,7 @@ export class ResourceRenderer {
     };
 
     for (const [id, view] of this.views) {
-      this.applySprite(view, { id, type: view.type });
+      this.applySprite(view, { id, type: view.type, assetUrl: view.assetUrl });
     }
   }
 
@@ -148,28 +150,61 @@ export class ResourceRenderer {
       hpBar,
       sprite: null,
       type: resource.type,
+      assetUrl: resource.assetUrl,
     };
 
     this.applySprite(view, resource);
     return view;
   }
 
-  private applySprite(view: ResourceView, resource: Pick<ResourceSnapshot, 'id' | 'type'>): void {
+  private applySprite(view: ResourceView, resource: Pick<ResourceSnapshot, 'id' | 'type' | 'assetUrl'>): void {
+    view.type = resource.type;
+    view.assetUrl = resource.assetUrl;
+
+    if (resource.assetUrl) {
+      void this.loadAssetTexture(resource.assetUrl).then((texture) => {
+        if (!texture || this.views.get(resource.id) !== view) return;
+        this.setSpriteTexture(view, texture, resource.type, false);
+      });
+      return;
+    }
+
     const list = this.textures[resource.type];
     if (!list || list.length === 0) return;
 
     const texture = list[pickStableIndex(resource.id, list.length)];
+    this.setSpriteTexture(view, texture, resource.type, true);
+  }
 
+  private setSpriteTexture(
+    view: ResourceView,
+    texture: Texture,
+    type: ResourceSnapshot['type'],
+    useDefaultResourceScale: boolean,
+  ): void {
     if (!view.sprite) {
       view.sprite = new Sprite(texture);
-      view.sprite.anchor.set(0.5, 1);
-      view.sprite.scale.set(resource.type === 'tree' ? 1.55 : 1.8);
+      view.sprite.anchor.set(useDefaultResourceScale ? 0.5 : 0, useDefaultResourceScale ? 1 : 0);
       view.container.addChildAt(view.sprite, 0);
     } else {
       view.sprite.texture = texture;
+      view.sprite.anchor.set(useDefaultResourceScale ? 0.5 : 0, useDefaultResourceScale ? 1 : 0);
     }
 
+    view.sprite.scale.set(useDefaultResourceScale ? (type === 'tree' ? 1.55 : 1.8) : 1);
     view.fallback.visible = false;
+  }
+
+  private loadAssetTexture(url: string): Promise<Texture | null> {
+    let promise = this.assetTextureCache.get(url);
+    if (!promise) {
+      promise = loadTexture(url).catch((error: unknown) => {
+        console.warn(error);
+        return null;
+      });
+      this.assetTextureCache.set(url, promise);
+    }
+    return promise;
   }
 
   private drawFallback(g: Graphics, type: ResourceSnapshot['type']): void {
