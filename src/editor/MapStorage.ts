@@ -25,18 +25,13 @@ export class MapStorage {
     }
   }
 
-  saveWorld(world: EditorWorldSave): boolean {
+  async saveWorld(world: EditorWorldSave): Promise<boolean> {
     const saved = this.writeJson(this.worldKey, world);
+    if (!saved) return false;
 
-    void uploadWorldMap(world)
-      .then(() => {
-        console.info('[MapStorage] Uploaded editor world map to server.');
-      })
-      .catch((error: unknown) => {
-        console.warn('[MapStorage] Local save completed, but server map upload failed.', error);
-      });
-
-    return saved;
+    await uploadWorldMap(world);
+    console.info('[MapStorage] Uploaded editor world map to server.');
+    return true;
   }
 
   loadWorld(): EditorWorldSave | null {
