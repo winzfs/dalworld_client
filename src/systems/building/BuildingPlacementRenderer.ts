@@ -4,8 +4,17 @@ import { getIsoZIndex, gridToScreen, ISO_LAYER_HEIGHT, ISO_TILE_HEIGHT, ISO_TILE
 import type { BuildPartId, BuildRotation, BuildingSnapshot, PlacedBuildPart } from './BuildingTypes';
 
 type Point = { x: number; y: number };
+type Edge = { a: Point; b: Point };
 type LocalPoint = { u: number; v: number };
 type Palette = { primary: number; secondary: number; accent: number; shadow: number; highlight: number };
+type CornerStairLayout = {
+  firstLow: Edge;
+  firstHigh: Edge;
+  secondLow: Edge;
+  secondHigh: Edge;
+  platform: Point[];
+  turn: Point;
+};
 
 export type BuildingOcclusionFocus = { worldX: number; worldY: number; z?: number };
 
@@ -22,6 +31,8 @@ const PILLAR_OCCLUSION_RADIUS = 18;
 const ROOF_OCCLUSION_PADDING = 8;
 const OCCLUSION_LAYER_PENALTY = 8;
 const ROUND_SEGMENT_STEPS = 14;
+const STRAIGHT_STAIR_RISE = ISO_LAYER_HEIGHT * 0.74;
+const CORNER_STAIR_RISE = ISO_LAYER_HEIGHT * 0.74;
 
 export class BuildingPlacementRenderer {
   readonly container = new Container();
@@ -220,7 +231,7 @@ function renderStairs(partId: BuildPartId, rotation: BuildRotation): Container {
   const steps = 6;
   const lowEdge = getStairLowEdge(rotation);
   const highEdge = getStairHighEdge(rotation);
-  const rise = ISO_LAYER_HEIGHT * 0.74;
+  const rise = STRAIGHT_STAIR_RISE;
 
   for (let i = 0; i < steps; i += 1) {
     const t0 = i / steps;
@@ -241,45 +252,66 @@ function renderStairs(partId: BuildPartId, rotation: BuildRotation): Container {
 function renderCornerStairs(partId: BuildPartId, rotation: BuildRotation): Container {
   const node = new Container();
   const palette = getPalette(partId);
-  const center = { x: 0, y: 0 };
-  const outer = getCornerPoint(rotation);
-  const first = getCornerPoint(((rotation + 1) % 4) as BuildRotation);
-  const second = getCornerPoint(((rotation + 2) % 4) as BuildRotation);
-  const steps = 6;
-  const halfRise = ISO_LAYER_HEIGHT * 0.36;
-  const fullRise = ISO_LAYER_HEIGHT * 0.74;
+  const stone = isStoneLike(partId);
+  const layout = getCornerStairLayout(rotation);
+  const halfRise = CORNER_STAIR_RISE * 0.52;
 
-  for (let i = 0; i < 3; i += 1) {
-    const t0 = i / 3;
-    const t1 = (i + 1) / 3;
-    const frontA = interpolate3d(first, center, t0, halfRise * t0);
-    const frontB = interpolate3d(outer, center, t0, halfRise * t0);
-    const backA = interpolate3d(first, center, t1, halfRise * t1);
-    const backB = interpolate3d(outer, center, t1, halfRise * t1);
-    drawStep(node, palette, frontA, frontB, backA, backB, i, steps, isStoneLike(partId));
-  }
+  drawStairRun(node, palette, layout.firstLow, layout.firstHigh, 0, halfRise, 0, stone);
+  drawCornerLanding(node, palette, layout.platform, halfRise, stone);
+  drawStairRun(node, palette, layout.secondLow, layout.secondHigh, halfRise, CORNER_STAIR_RISE, 3, stone);
 
-  const landing = new Graphics();
-  const landingA = interpolate3d(first, center, 1, halfRise);
-  const landingB = interpolate3d(outer, center, 1, halfRise);
-  const landingC = interpolate3d(second, center, 1, halfRise);
-  landing.moveTo(landingA.x, landingA.y).lineTo(landingB.x, landingB.y).lineTo(landingC.x, landingC.y).lineTo(landingA.x, landingA.y).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.5 });
-  node.addChild(landing);
-
-  for (let i = 0; i < 3; i += 1) {
-    const t0 = i / 3;
-    const t1 = (i + 1) / 3;
-    const frontA = interpolate3d(outer, second, t0, halfRise + (fullRise - halfRise) * t0);
-    const frontB = interpolate3d(center, second, t0, halfRise + (fullRise - halfRise) * t0);
-    const backA = interpolate3d(outer, second, t1, halfRise + (fullRise - halfRise) * t1);
-    const backB = interpolate3d(center, second, t1, halfRise + (fullRise - halfRise) * t1);
-    drawStep(node, palette, frontA, frontB, backA, backB, i + 3, steps, isStoneLike(partId));
-  }
-
-  const trim = new Graphics();
-  trim.moveTo(second.x, second.y - fullRise).lineTo(center.x, center.y - fullRise).stroke({ width: 2, color: palette.highlight, alpha: 0.42 });
-  node.addChild(trim);
+  const join = new Graphics();
+  const turn = { x: layout.turn.x, y: layout.turn.y - halfRise };
+  const exitMid = midpoint(
+    { x: layout.secondHigh.a.x, y: layout.secondHigh.a.y - CORNER_STAIR_RISE },
+    { x: layout.secondHigh.b.x, y: layout.secondHigh.b.y - CORNER_STAIR_RISE },
+  );
+  join.moveTo(turn.x, turn.y).lineTo(exitMid.x, exitMid.y).stroke({ width: 2, color: palette.highlight, alpha: 0.28 });
+  node.addChild(join);
   return node;
+}
+
+function drawStairRun(node: Container, palette: Palette, low: Edge, high: Edge, z0: number, z1: number, indexOffset: number, stone: boolean): void {
+  const steps = 3;
+  for (let i = 0; i < steps; i += 1) {
+    const t0 = i / steps;
+    const t1 = (i + 1) / steps;
+    const h0 = z0 + (z1 - z0) * t0;
+    const h1 = z0 + (z1 - z0) * t1;
+    drawStep(
+      node,
+      palette,
+      interpolate3d(low.a, high.a, t0, h0),
+      interpolate3d(low.b, high.b, t0, h0),
+      interpolate3d(low.a, high.a, t1, h1),
+      interpolate3d(low.b, high.b, t1, h1),
+      indexOffset + i,
+      6,
+      stone,
+    );
+  }
+}
+
+function drawCornerLanding(node: Container, palette: Palette, points: Point[], z: number, stone: boolean): void {
+  const top = new Graphics();
+  const skirt = new Graphics();
+  const lifted = points.map((point) => ({ x: point.x, y: point.y - z }));
+
+  for (let i = 0; i < lifted.length; i += 1) {
+    const a = lifted[i];
+    const b = lifted[(i + 1) % lifted.length];
+    skirt.moveTo(a.x, a.y).lineTo(b.x, b.y).lineTo(b.x, b.y + 5).lineTo(a.x, a.y + 5).lineTo(a.x, a.y).fill({ color: palette.secondary, alpha: 0.42 });
+  }
+
+  drawPolygon(top, lifted, palette.primary, 1);
+  top.stroke({ width: 1, color: palette.accent, alpha: 0.55 });
+  for (let i = 0; i < lifted.length; i += 1) {
+    const a = midpoint(lifted[i], lifted[(i + 1) % lifted.length]);
+    const b = midpoint(lifted[(i + 2) % lifted.length], lifted[(i + 3) % lifted.length]);
+    top.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 1, color: stone ? palette.shadow : palette.highlight, alpha: 0.18 });
+  }
+
+  node.addChild(skirt, top);
 }
 
 function drawStep(node: Container, palette: Palette, frontA: Point, frontB: Point, backA: Point, backB: Point, index: number, total: number, stone: boolean): void {
@@ -773,7 +805,7 @@ function getHalfDiamondPoints(rotation: BuildRotation): Point[] {
   }
 }
 
-function getEdgeSegment(rotation: BuildRotation): { a: Point; b: Point } {
+function getEdgeSegment(rotation: BuildRotation): Edge {
   const [n, e, s, w] = getDiamondPoints();
   switch (rotation) {
     case 0: return { a: w, b: n };
@@ -793,7 +825,7 @@ function getCornerPoint(rotation: BuildRotation): Point {
   }
 }
 
-function getStairLowEdge(rotation: BuildRotation): { a: Point; b: Point } {
+function getStairLowEdge(rotation: BuildRotation): Edge {
   const [n, e, s, w] = getDiamondPoints();
   switch (rotation) {
     case 0: return { a: s, b: e };
@@ -803,13 +835,61 @@ function getStairLowEdge(rotation: BuildRotation): { a: Point; b: Point } {
   }
 }
 
-function getStairHighEdge(rotation: BuildRotation): { a: Point; b: Point } {
+function getStairHighEdge(rotation: BuildRotation): Edge {
   const [n, e, s, w] = getDiamondPoints();
   switch (rotation) {
     case 0: return { a: w, b: n };
     case 1: return { a: n, b: e };
     case 2: return { a: e, b: s };
     case 3: return { a: s, b: w };
+  }
+}
+
+function getCornerStairLayout(rotation: BuildRotation): CornerStairLayout {
+  const [n, e, s, w] = getDiamondPoints();
+  const c = { x: 0, y: 0 };
+  const nw = interpolate(n, w, 0.5);
+  const ne = interpolate(n, e, 0.5);
+  const se = interpolate(s, e, 0.5);
+  const sw = interpolate(s, w, 0.5);
+
+  switch (rotation) {
+    case 0:
+      return {
+        firstLow: { a: s, b: sw },
+        firstHigh: { a: c, b: w },
+        secondLow: { a: c, b: w },
+        secondHigh: { a: ne, b: n },
+        platform: [w, nw, c, sw],
+        turn: w,
+      };
+    case 1:
+      return {
+        firstLow: { a: w, b: nw },
+        firstHigh: { a: c, b: n },
+        secondLow: { a: c, b: n },
+        secondHigh: { a: se, b: e },
+        platform: [n, ne, c, nw],
+        turn: n,
+      };
+    case 2:
+      return {
+        firstLow: { a: n, b: ne },
+        firstHigh: { a: c, b: e },
+        secondLow: { a: c, b: e },
+        secondHigh: { a: sw, b: s },
+        platform: [e, se, c, ne],
+        turn: e,
+      };
+    case 3:
+      return {
+        firstLow: { a: e, b: se },
+        firstHigh: { a: c, b: s },
+        secondLow: { a: c, b: s },
+        secondHigh: { a: nw, b: w },
+        platform: [s, sw, c, se],
+        turn: s,
+      };
   }
 }
 
@@ -868,8 +948,12 @@ function drawWoodFloorDetail(g: Graphics, polygon: Point[], palette: Palette, de
 
 function drawStoneFloorDetail(g: Graphics, polygon: Point[], palette: Palette): void {
   const [n, e, s, w] = polygon;
-  g.moveTo(interpolate(w, n, 0.5).x, interpolate(w, n, 0.5).y).lineTo(interpolate(s, e, 0.5).x, interpolate(s, e, 0.5).y).stroke({ width: 1, color: palette.shadow, alpha: 0.28 });
-  g.moveTo(interpolate(n, e, 0.5).x, interpolate(n, e, 0.5).y).lineTo(interpolate(w, s, 0.5).x, interpolate(w, s, 0.5).y).stroke({ width: 1, color: palette.highlight, alpha: 0.22 });
+  const a1 = interpolate(w, n, 0.5);
+  const b1 = interpolate(s, e, 0.5);
+  const a2 = interpolate(n, e, 0.5);
+  const b2 = interpolate(w, s, 0.5);
+  g.moveTo(a1.x, a1.y).lineTo(b1.x, b1.y).stroke({ width: 1, color: palette.shadow, alpha: 0.28 });
+  g.moveTo(a2.x, a2.y).lineTo(b2.x, b2.y).stroke({ width: 1, color: palette.highlight, alpha: 0.22 });
 }
 
 function drawHalfFloorDetail(g: Graphics, polygon: Point[], rotation: BuildRotation, palette: Palette, stone: boolean): void {
@@ -923,6 +1007,10 @@ function shadeStep(color: number, index: number): number {
   const g = Math.max(0, Math.min(255, ((color >> 8) & 255) * factor));
   const b = Math.max(0, Math.min(255, (color & 255) * factor));
   return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
+}
+
+function midpoint(a: Point, b: Point): Point {
+  return interpolate(a, b, 0.5);
 }
 
 function trimToward(from: Point, to: Point, ratio: number): Point {
