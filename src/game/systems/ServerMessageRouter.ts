@@ -1,4 +1,5 @@
 import type { ResourceSnapshot, ServerToClientMessage, WorldInfo, PublicGameplayConfig } from '../../protocol/messages';
+import type { BuildingServerEvent } from '../../systems/building/BuildingTypes';
 import { PROTOCOL_VERSION } from '../../protocol/version';
 import type { InputState } from '../InputController';
 import type { SnapshotSystem } from './SnapshotSystem';
@@ -23,6 +24,7 @@ export type ServerMessageRouterContext = {
   setGameplayConfig: (gameplay: PublicGameplayConfig | undefined) => void;
   redrawWorld: () => void;
   reloadWorldMap: () => void;
+  onBuildingEvent?: (event: BuildingServerEvent) => void;
 };
 
 /**
@@ -44,6 +46,14 @@ export class ServerMessageRouter {
 
       case 'event':
         this.handleEvent(message);
+        return;
+
+      case 'BUILD_PLACED':
+      case 'BUILD_REMOVED':
+      case 'BUILD_REJECTED':
+      case 'BUILD_SNAPSHOT':
+      case 'INVENTORY_SNAPSHOT':
+        this.context.onBuildingEvent?.(message);
         return;
 
       case 'pong':
