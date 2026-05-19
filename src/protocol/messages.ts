@@ -2,6 +2,8 @@
 // 모노레포 의존을 피하기 위해 클라이언트 측에 복사해 둔다.
 
 import type { BuildingClientMessage, BuildingServerEvent } from '../systems/building/BuildingTypes';
+import type { CraftingRecipeId } from '../systems/crafting/CraftingTypes';
+import type { InventorySnapshot } from '../systems/inventory/InventoryTypes';
 import type { GameWorldMap, WorldMapSourceRect } from '../worldMap/types';
 
 export type MovementKeys = {
@@ -45,21 +47,14 @@ export type ResourceSnapshot = {
   y: number;
   cellX: number;
   cellY: number;
-  /** Original map editor sprite URL, when this resource was created from a map placement. */
   assetUrl?: string;
-  /** Original map editor placement scale, when this resource was created from a map placement. */
   assetScale?: number;
-  /** Original display width before scale, when this resource was created from a map placement. */
   displayWidth?: number;
-  /** Original display height before scale, when this resource was sliced from a larger tileset. */
   displayHeight?: number;
-  /** Original source rectangle, when this resource was sliced from a larger tileset. */
   sourceRect?: WorldMapSourceRect;
   hp: number;
   maxHp: number;
-  /** 0 if alive, otherwise epoch ms when it will respawn */
   respawnAt: number;
-  /** true when the resource is harvestable (hp > 0 and not waiting to respawn) */
   alive: boolean;
 };
 
@@ -91,6 +86,27 @@ export type PublicGameConfig = {
   gameplay: PublicGameplayConfig;
 };
 
+export type CraftingClientMessage = {
+  type: 'CRAFT_REQUEST';
+  requestId: string;
+  recipeId: CraftingRecipeId;
+};
+
+export type CraftingCompletedEvent = {
+  type: 'CRAFT_COMPLETED';
+  requestId: string;
+  recipeId: CraftingRecipeId;
+  inventory: InventorySnapshot;
+};
+
+export type CraftingRejectedEvent = {
+  type: 'CRAFT_REJECTED';
+  requestId: string;
+  reason: string;
+};
+
+export type CraftingServerEvent = CraftingCompletedEvent | CraftingRejectedEvent;
+
 export type ClientToServerMessage =
   | { type: 'hello'; name?: string }
   | {
@@ -106,11 +122,11 @@ export type ClientToServerMessage =
   | {
       type: 'gather';
       seq: number;
-      /** Preferred target; server picks nearest in range when omitted or invalid. */
       resourceId?: string;
     }
   | { type: 'ping'; now: number }
-  | BuildingClientMessage;
+  | BuildingClientMessage
+  | CraftingClientMessage;
 
 export type ServerEvent =
   | { type: 'player_joined'; playerId: string }
@@ -122,13 +138,10 @@ export type ServerEvent =
 export type ServerToClientMessage =
   | {
       type: 'welcome';
-      /** New servers send this. Optional keeps older deployed Worker builds compatible. */
       protocolVersion?: number;
       playerId: string;
       world: WorldInfo;
-      /** New servers send this. Optional keeps older deployed Worker builds compatible. */
       gameplay?: PublicGameplayConfig;
-      /** Editor-authored runtime map. Optional keeps older deployed Worker builds compatible. */
       map?: GameWorldMap | null;
       serverTime: number;
     }
@@ -142,4 +155,5 @@ export type ServerToClientMessage =
     }
   | { type: 'event'; serverTime: number; event: ServerEvent }
   | { type: 'pong'; now: number }
-  | BuildingServerEvent;
+  | BuildingServerEvent
+  | CraftingServerEvent;
