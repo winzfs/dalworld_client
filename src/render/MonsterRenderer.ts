@@ -11,6 +11,8 @@ import { getWorldEntityZIndex } from '../systems/building/IsoBuildingMath';
 
 const MONSTER_DEPTH_OFFSET = 130;
 const MONSTER_LAYER_Z_INDEX = 110;
+const MONSTER_NORMAL_ALPHA = 1;
+const MONSTER_OCCLUDED_ALPHA = 0.42;
 
 type MonsterView = {
   container: Container;
@@ -101,6 +103,14 @@ export class MonsterRenderer {
       }
 
       this.updateSpriteAnimation(view, dt, moving);
+    }
+  }
+
+  applyOcclusion(isOccluded: (x: number, y: number) => boolean): void {
+    for (const view of this.views.values()) {
+      view.container.alpha = isOccluded(view.container.x, view.container.y)
+        ? MONSTER_OCCLUDED_ALPHA
+        : MONSTER_NORMAL_ALPHA;
     }
   }
 
