@@ -23,13 +23,15 @@ input {
 
 body.is-map-editor-mode #dalworld-ui,
 body.is-map-editor-mode #dalworld-windows,
-body.is-map-editor-mode #dalworld-mobile .gather-btn {
+body.is-map-editor-mode #dalworld-mobile .gather-btn,
+body.is-map-editor-mode .building-edit-controls {
   display: none !important;
 }
 
 #dalworld-ui,
 #dalworld-windows,
-#dalworld-mobile {
+#dalworld-mobile,
+.building-edit-controls {
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -65,367 +67,60 @@ body.is-map-editor-mode #dalworld-mobile .gather-btn {
   touch-action: none;
 }
 
-.floating-icon:active {
-  cursor: grabbing;
-}
+.floating-icon:active { cursor: grabbing; }
+.floating-icon:hover { border-color: rgba(255, 209, 102, 0.72); background: linear-gradient(180deg, rgba(62, 48, 36, 0.97), rgba(25, 30, 35, 0.97)); }
+.floating-icon-symbol { font-size: 23px; line-height: 1; }
+.floating-icon-label { font-size: 10px; font-weight: 900; line-height: 1; letter-spacing: -0.02em; }
 
-.floating-icon:hover {
-  border-color: rgba(255, 209, 102, 0.72);
-  background: linear-gradient(180deg, rgba(62, 48, 36, 0.97), rgba(25, 30, 35, 0.97));
-}
+.game-window { position: fixed; z-index: 30; min-width: 280px; max-width: min(520px, calc(100vw - 24px)); max-height: min(680px, calc(100vh - 24px)); overflow: hidden; border: 1px solid rgba(255, 232, 180, 0.28); border-radius: 18px; background: linear-gradient(180deg, rgba(45, 35, 28, 0.97), rgba(18, 22, 26, 0.97)); color: #f7f0dd; box-shadow: 0 18px 55px rgba(0, 0, 0, 0.55); pointer-events: auto; }
+.game-window[hidden] { display: none !important; }
+.game-window-header { height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; background: rgba(255, 209, 102, 0.14); border-bottom: 1px solid rgba(255, 232, 180, 0.16); color: #ffe4a3; font-size: 14px; font-weight: 900; cursor: grab; touch-action: none; }
+.game-window-header:active { cursor: grabbing; }
+.game-window-close { width: 28px; height: 28px; padding: 0; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; background: rgba(0,0,0,.22); color: rgba(255,255,255,.82); font-size: 18px; font-weight: 900; cursor: pointer; }
+.inventory-window { width: min(560px, calc(100vw - 24px)); }
+.inventory-tabs { display: flex; gap: 6px; padding: 10px 10px 8px; border-bottom: 1px solid rgba(255,255,255,.1); overflow-x: auto; }
+.inventory-tab { flex: 0 0 auto; min-height: 30px; padding: 6px 10px; border: 1px solid rgba(255,255,255,.14); border-radius: 999px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.75); font-size: 12px; font-weight: 900; cursor: pointer; }
+.inventory-tab.is-active { border-color: rgba(255, 209, 102, 0.9); background: rgba(255, 209, 102, 0.24); color: #fff1bf; }
+.inventory-body { display: grid; grid-template-columns: 1fr 164px; gap: 10px; padding: 12px; }
+.inventory-grid { display: grid; grid-template-columns: repeat(6, 48px); grid-auto-rows: 48px; gap: 7px; }
+.inventory-slot { position: relative; width: 48px; height: 48px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; background: rgba(0,0,0,.24); color: rgba(255,255,255,.86); cursor: pointer; }
+.inventory-slot:hover, .inventory-slot.is-selected { border-color: rgba(255, 209, 102, 0.82); box-shadow: 0 0 0 2px rgba(255,209,102,.14) inset; }
+.inventory-slot.has-item { background: rgba(255,255,255,.08); }
+.inventory-slot.is-build-part { background: linear-gradient(180deg, rgba(126, 231, 255, 0.12), rgba(255,255,255,.055)); border-color: rgba(126, 231, 255, 0.26); }
+.inventory-slot.is-build-part:hover, .inventory-slot.is-build-part.is-selected { border-color: rgba(126, 231, 255, 0.9); box-shadow: 0 0 0 2px rgba(126,231,255,.2) inset, 0 0 18px rgba(126,231,255,.12); }
+.inventory-item-icon { display: block; font-size: 22px; line-height: 1; }
+.inventory-build-label { position: absolute; left: 3px; right: 3px; bottom: 2px; overflow: hidden; color: rgba(255,255,255,.78); font-size: 8px; font-weight: 900; line-height: 1.05; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-item-count { position: absolute; right: 5px; bottom: 3px; padding: 1px 4px; border-radius: 999px; background: rgba(0,0,0,.58); color: #fff; font-size: 10px; font-weight: 900; }
+.inventory-detail { min-height: 220px; padding: 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 14px; background: rgba(255,255,255,.05); }
+.inventory-detail h3, .system-window-body h3 { margin: 0 0 8px; color: #ffe4a3; font-size: 14px; }
+.inventory-detail p, .system-window-body p { margin: 0; color: rgba(255,255,255,.7); font-size: 12px; line-height: 1.45; }
+.simple-system-window { width: min(390px, calc(100vw - 24px)); }
+.system-window-body { padding: 12px; }
+.placeholder-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+.placeholder-card { min-height: 44px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.72); font-weight: 900; cursor: pointer; }
 
-.floating-icon-symbol {
-  font-size: 23px;
-  line-height: 1;
-}
+.building-edit-controls { position: fixed; z-index: 80; display: flex; align-items: center; gap: 5px; padding: 5px; border: 1px solid rgba(126,231,255,.42); border-radius: 999px; background: rgba(9, 16, 22, 0.88); box-shadow: 0 12px 32px rgba(0,0,0,.42); pointer-events: auto; touch-action: none; }
+.building-edit-controls[hidden] { display: none !important; }
+.building-edit-controls.is-invalid { border-color: rgba(255,79,95,.72); background: rgba(35, 12, 18, 0.9); }
+.building-edit-control { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.9); font-size: 15px; font-weight: 900; line-height: 1; cursor: pointer; }
+.building-edit-control:hover { background: rgba(255,255,255,.16); }
+.building-edit-control:disabled { opacity: .38; cursor: not-allowed; }
+.building-edit-control.is-confirm { border-color: rgba(102,255,136,.55); color: #9dffb0; }
+.building-edit-control.is-cancel { border-color: rgba(255,79,95,.55); color: #ffb3bd; }
 
-.floating-icon-label {
-  font-size: 10px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: -0.02em;
-}
-
-.game-window {
-  position: fixed;
-  z-index: 30;
-  min-width: 280px;
-  max-width: min(520px, calc(100vw - 24px));
-  max-height: min(680px, calc(100vh - 24px));
-  overflow: hidden;
-  border: 1px solid rgba(255, 232, 180, 0.28);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(45, 35, 28, 0.97), rgba(18, 22, 26, 0.97));
-  color: #f7f0dd;
-  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.55);
-  pointer-events: auto;
-}
-
-.game-window[hidden] {
-  display: none !important;
-}
-
-.game-window-header {
-  height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  background: rgba(255, 209, 102, 0.14);
-  border-bottom: 1px solid rgba(255, 232, 180, 0.16);
-  color: #ffe4a3;
-  font-size: 14px;
-  font-weight: 900;
-  cursor: grab;
-  touch-action: none;
-}
-
-.game-window-header:active {
-  cursor: grabbing;
-}
-
-.game-window-close {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid rgba(255,255,255,.14);
-  border-radius: 10px;
-  background: rgba(0,0,0,.22);
-  color: rgba(255,255,255,.82);
-  font-size: 18px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.inventory-window {
-  width: min(560px, calc(100vw - 24px));
-}
-
-.inventory-tabs {
-  display: flex;
-  gap: 6px;
-  padding: 10px 10px 8px;
-  border-bottom: 1px solid rgba(255,255,255,.1);
-  overflow-x: auto;
-}
-
-.inventory-tab {
-  flex: 0 0 auto;
-  min-height: 30px;
-  padding: 6px 10px;
-  border: 1px solid rgba(255,255,255,.14);
-  border-radius: 999px;
-  background: rgba(255,255,255,.06);
-  color: rgba(255,255,255,.75);
-  font-size: 12px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.inventory-tab.is-active {
-  border-color: rgba(255, 209, 102, 0.9);
-  background: rgba(255, 209, 102, 0.24);
-  color: #fff1bf;
-}
-
-.inventory-body {
-  display: grid;
-  grid-template-columns: 1fr 164px;
-  gap: 10px;
-  padding: 12px;
-}
-
-.inventory-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 48px);
-  grid-auto-rows: 48px;
-  gap: 7px;
-}
-
-.inventory-slot {
-  position: relative;
-  width: 48px;
-  height: 48px;
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 12px;
-  background: rgba(0,0,0,.24);
-  color: rgba(255,255,255,.86);
-  cursor: pointer;
-}
-
-.inventory-slot:hover,
-.inventory-slot.is-selected {
-  border-color: rgba(255, 209, 102, 0.82);
-  box-shadow: 0 0 0 2px rgba(255,209,102,.14) inset;
-}
-
-.inventory-slot.has-item {
-  background: rgba(255,255,255,.08);
-}
-
-.inventory-slot.is-build-part {
-  background: linear-gradient(180deg, rgba(126, 231, 255, 0.12), rgba(255,255,255,.055));
-  border-color: rgba(126, 231, 255, 0.26);
-}
-
-.inventory-slot.is-build-part:hover,
-.inventory-slot.is-build-part.is-selected {
-  border-color: rgba(126, 231, 255, 0.9);
-  box-shadow: 0 0 0 2px rgba(126,231,255,.2) inset, 0 0 18px rgba(126,231,255,.12);
-}
-
-.inventory-item-icon {
-  display: block;
-  font-size: 22px;
-  line-height: 1;
-}
-
-.inventory-build-label {
-  position: absolute;
-  left: 3px;
-  right: 3px;
-  bottom: 2px;
-  overflow: hidden;
-  color: rgba(255,255,255,.78);
-  font-size: 8px;
-  font-weight: 900;
-  line-height: 1.05;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inventory-item-count {
-  position: absolute;
-  right: 5px;
-  bottom: 3px;
-  padding: 1px 4px;
-  border-radius: 999px;
-  background: rgba(0,0,0,.58);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 900;
-}
-
-.inventory-detail {
-  min-height: 220px;
-  padding: 12px;
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 14px;
-  background: rgba(255,255,255,.05);
-}
-
-.inventory-detail h3,
-.system-window-body h3 {
-  margin: 0 0 8px;
-  color: #ffe4a3;
-  font-size: 14px;
-}
-
-.inventory-detail p,
-.system-window-body p {
-  margin: 0;
-  color: rgba(255,255,255,.7);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.simple-system-window {
-  width: min(390px, calc(100vw - 24px));
-}
-
-.system-window-body {
-  padding: 12px;
-}
-
-.placeholder-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.placeholder-card {
-  min-height: 44px;
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 12px;
-  background: rgba(255,255,255,.06);
-  color: rgba(255,255,255,.72);
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.map-editor-panel,
-.tile-picker-window,
-.world-map-panel,
-.editor-minimap {
-  position: fixed;
-  z-index: 220;
-  border: 1px solid rgba(255, 232, 180, 0.3);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(45, 35, 28, 0.97), rgba(18, 22, 26, 0.97));
-  color: #f7f0dd;
-  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.55);
-  pointer-events: auto;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-
-.map-editor-panel {
-  width: 320px;
-  max-height: min(720px, calc(100vh - 32px));
-  overflow: hidden;
-}
-
-.map-editor-header,
-.tile-picker-header,
-.world-map-header {
-  height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  background: rgba(255, 209, 102, 0.14);
-  border-bottom: 1px solid rgba(255, 232, 180, 0.16);
-  color: #ffe4a3;
-  font-size: 14px;
-  font-weight: 900;
-  cursor: grab;
-  touch-action: none;
-}
-
-.map-editor-header:active,
-.tile-picker-header:active,
-.world-map-header:active {
-  cursor: grabbing;
-}
-
-.map-editor-scale,
-.map-editor-grid-controls,
-.map-editor-layers,
-.map-editor-tools,
-.map-editor-fill,
-.map-editor-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 10px;
-  border-bottom: 1px solid rgba(255,255,255,.1);
-}
-
-.map-editor-scale-label,
-.map-editor-scale-suffix,
-.map-editor-percent-suffix,
-.map-editor-layer-label {
-  font-size: 12px;
-  font-weight: 800;
-  color: rgba(255,255,255,.8);
-}
-
+.map-editor-panel, .tile-picker-window, .world-map-panel, .editor-minimap { position: fixed; z-index: 220; border: 1px solid rgba(255, 232, 180, 0.3); border-radius: 18px; background: linear-gradient(180deg, rgba(45, 35, 28, 0.97), rgba(18, 22, 26, 0.97)); color: #f7f0dd; box-shadow: 0 18px 55px rgba(0, 0, 0, 0.55); pointer-events: auto; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.map-editor-panel { width: 320px; max-height: min(720px, calc(100vh - 32px)); overflow: hidden; }
+.map-editor-header, .tile-picker-header, .world-map-header { height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; background: rgba(255, 209, 102, 0.14); border-bottom: 1px solid rgba(255, 232, 180, 0.16); color: #ffe4a3; font-size: 14px; font-weight: 900; cursor: grab; touch-action: none; }
+.map-editor-header:active, .tile-picker-header:active, .world-map-header:active { cursor: grabbing; }
+.map-editor-scale, .map-editor-grid-controls, .map-editor-layers, .map-editor-tools, .map-editor-fill, .map-editor-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.1); }
+.map-editor-scale-label, .map-editor-scale-suffix, .map-editor-percent-suffix, .map-editor-layer-label { font-size: 12px; font-weight: 800; color: rgba(255,255,255,.8); }
 .map-editor-scale-button { width: 34px; height: 30px; }
-.map-editor-tool,
-.map-editor-action,
-.map-editor-grid-button,
-.map-editor-layer,
-.map-editor-category,
-.world-map-action,
-.world-map-delete-current,
-.tile-picker-confirm,
-.tile-picker-close,
-.world-map-close {
-  min-height: 30px;
-  padding: 6px 9px;
-  border: 1px solid rgba(255,255,255,.16);
-  border-radius: 10px;
-  background: rgba(255,255,255,.06);
-  color: rgba(255,255,255,.82);
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.map-editor-tool.is-active,
-.map-editor-category.is-active,
-.map-editor-grid-button.is-active,
-.map-editor-layer.is-active,
-.map-editor-action.is-active {
-  border-color: rgba(255, 209, 102, 0.95);
-  background: rgba(255, 209, 102, 0.28);
-  color: #fff1bf;
-  box-shadow: 0 0 0 2px rgba(255,209,102,.18) inset;
-}
-
-.map-editor-layer.is-collision {
-  border-color: rgba(239,71,111,.42);
-  color: #ffb3c1;
-}
-
-.map-editor-layer.is-collision.is-active {
-  border-color: rgba(255, 45, 85, 0.95);
-  background: rgba(239,71,111,.24);
-  color: #ffd3dc;
-  box-shadow: 0 0 0 2px rgba(255,45,85,.22) inset;
-}
-
-.map-editor-action.is-danger,
-.world-map-delete-current {
-  border-color: rgba(239,71,111,.65);
-  color: #ff9bb0;
-}
-
-.map-editor-scale-input,
-.map-editor-percent-input,
-.tile-picker-controls input {
-  width: 58px;
-  height: 30px;
-  box-sizing: border-box;
-  border: 1px solid rgba(255,255,255,.14);
-  border-radius: 9px;
-  background: rgba(0,0,0,.28);
-  color: #ffe4a3;
-  text-align: center;
-  font-weight: 800;
-}
-
+.map-editor-tool, .map-editor-action, .map-editor-grid-button, .map-editor-layer, .map-editor-category, .world-map-action, .world-map-delete-current, .tile-picker-confirm, .tile-picker-close, .world-map-close { min-height: 30px; padding: 6px 9px; border: 1px solid rgba(255,255,255,.16); border-radius: 10px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.82); font-weight: 800; cursor: pointer; }
+.map-editor-tool.is-active, .map-editor-category.is-active, .map-editor-grid-button.is-active, .map-editor-layer.is-active, .map-editor-action.is-active { border-color: rgba(255, 209, 102, 0.95); background: rgba(255, 209, 102, 0.28); color: #fff1bf; box-shadow: 0 0 0 2px rgba(255,209,102,.18) inset; }
+.map-editor-layer.is-collision { border-color: rgba(239,71,111,.42); color: #ffb3c1; }
+.map-editor-layer.is-collision.is-active { border-color: rgba(255, 45, 85, 0.95); background: rgba(239,71,111,.24); color: #ffd3dc; box-shadow: 0 0 0 2px rgba(255,45,85,.22) inset; }
+.map-editor-action.is-danger, .world-map-delete-current { border-color: rgba(239,71,111,.65); color: #ff9bb0; }
+.map-editor-scale-input, .map-editor-percent-input, .tile-picker-controls input { width: 58px; height: 30px; box-sizing: border-box; border: 1px solid rgba(255,255,255,.14); border-radius: 9px; background: rgba(0,0,0,.28); color: #ffe4a3; text-align: center; font-weight: 800; }
 .map-editor-percent-input { width: 50px; }
 .map-editor-categories { display: flex; gap: 6px; padding: 10px; overflow-x: auto; border-bottom: 1px solid rgba(255,255,255,.1); }
 .map-editor-category { flex: 0 0 auto; padding: 7px 10px; border-radius: 999px; }
@@ -434,18 +129,9 @@ body.is-map-editor-mode #dalworld-mobile .gather-btn {
 .map-editor-asset.is-selected { border-color: #ffd166; box-shadow: 0 0 0 2px rgba(255,209,102,.18) inset; color: #ffe4a3; }
 .map-editor-asset img { width: 42px; height: 42px; object-fit: contain; image-rendering: pixelated; }
 .map-editor-asset span { width: 100%; overflow: hidden; font-size: 11px; font-weight: 800; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-
-.tile-picker-window {
-  left: 360px;
-  top: 20px;
-  width: min(720px, calc(100vw - 380px));
-  max-height: min(760px, calc(100vh - 40px));
-  overflow: hidden;
-}
-.tile-picker-window[hidden],
-.world-map-panel[hidden] { display: none !important; }
-.tile-picker-close,
-.world-map-close { width: 28px; height: 28px; padding: 0; font-size: 18px; }
+.tile-picker-window { left: 360px; top: 20px; width: min(720px, calc(100vw - 380px)); max-height: min(760px, calc(100vh - 40px)); overflow: hidden; }
+.tile-picker-window[hidden], .world-map-panel[hidden] { display: none !important; }
+.tile-picker-close, .world-map-close { width: 28px; height: 28px; padding: 0; font-size: 18px; }
 .tile-picker-controls { display: flex; align-items: center; gap: 8px; padding: 10px; border-bottom: 1px solid rgba(255,255,255,.1); }
 .tile-picker-controls label { font-size: 12px; font-weight: 800; color: rgba(255,255,255,.78); }
 .tile-picker-confirm:disabled { opacity: .45; cursor: not-allowed; }
@@ -453,12 +139,7 @@ body.is-map-editor-mode #dalworld-mobile .gather-btn {
 .tile-picker-image-wrap { position: relative; display: inline-block; overflow: hidden; background-color: rgba(255,255,255,.04); background-image: linear-gradient(to right, rgba(255,255,255,.16) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,.16) 1px, transparent 1px); background-size: var(--tile-picker-grid, 32px) var(--tile-picker-grid, 32px); image-rendering: pixelated; touch-action: none; }
 .tile-picker-image { display: block; max-width: 100%; image-rendering: pixelated; }
 .tile-picker-selection { position: absolute; border: 2px solid #ffd166; background: rgba(255,209,102,.2); box-sizing: border-box; pointer-events: none; }
-
-.world-map-panel {
-  width: 300px;
-  overflow: hidden;
-  z-index: 230;
-}
+.world-map-panel { width: 300px; overflow: hidden; z-index: 230; }
 .world-map-controls { padding: 10px; border-bottom: 1px solid rgba(255,255,255,.1); }
 .world-map-info { margin-bottom: 8px; color: rgba(255,255,255,.82); font-size: 12px; font-weight: 800; }
 .world-map-create-row { display: flex; gap: 6px; margin-bottom: 8px; }
@@ -468,159 +149,34 @@ body.is-map-editor-mode #dalworld-mobile .gather-btn {
 .world-map-cell { width: 44px; height: 44px; border: 1px solid rgba(255,255,255,.14); border-radius: 12px; background: rgba(255,255,255,.035); color: rgba(255,255,255,.55); font-size: 12px; font-weight: 800; cursor: pointer; touch-action: manipulation; }
 .world-map-cell.exists { color: #dff8e8; background: rgba(71,184,129,.18); border-color: rgba(71,184,129,.55); }
 .world-map-cell.is-current { color: #1b1f23; background: #ffd166; border-color: #ffe4a3; box-shadow: 0 0 0 2px rgba(255,209,102,.28); }
-
-.editor-minimap {
-  right: 16px;
-  top: 16px;
-  z-index: 210;
-  padding: 10px;
-}
-.editor-minimap-title {
-  margin-bottom: 6px;
-  color: #ffe4a3;
-  font-size: 12px;
-  font-weight: 900;
-}
-.editor-minimap-canvas {
-  display: block;
-  width: 180px;
-  height: 180px;
-  border-radius: 12px;
-  cursor: pointer;
-  touch-action: none;
-}
-
+.editor-minimap { right: 16px; top: 16px; z-index: 210; padding: 10px; }
+.editor-minimap-title { margin-bottom: 6px; color: #ffe4a3; font-size: 12px; font-weight: 900; }
+.editor-minimap-canvas { display: block; width: 180px; height: 180px; border-radius: 12px; cursor: pointer; touch-action: none; }
 #dalworld-mobile { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
-#dalworld-mobile.desktop-hidden .joystick,
-#dalworld-mobile.desktop-hidden .gather-btn { display: none; }
+#dalworld-mobile.desktop-hidden .joystick, #dalworld-mobile.desktop-hidden .gather-btn { display: none; }
 body.is-map-editor-mode #dalworld-mobile.desktop-hidden .joystick { display: block; }
 #dalworld-mobile .joystick { position: absolute; left: 32px; bottom: 32px; width: 160px; height: 160px; border-radius: 50%; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.18); pointer-events: auto; touch-action: none; }
 #dalworld-mobile .joystick-knob { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; border-radius: 50%; background: rgba(85,214,190,.85); transform: translate(-50%, -50%); pointer-events: none; }
 #dalworld-mobile .action-btn { position: absolute; pointer-events: auto; border: none; border-radius: 50%; font: 600 18px/1 ui-sans-serif, system-ui; color: #102027; cursor: pointer; touch-action: manipulation; }
 #dalworld-mobile .gather-btn { right: 36px; bottom: 56px; width: 88px; height: 88px; background: #ffd166; box-shadow: 0 4px 12px rgba(0,0,0,.4); }
 #dalworld-mobile .fullscreen-btn { right: 16px; top: 16px; width: 44px; height: 44px; background: rgba(255,255,255,.85); font-size: 20px; }
-
-.building-system-body {
-  min-width: 300px;
-}
-.building-mode-status {
-  margin-bottom: 10px;
-  padding: 9px 10px;
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 12px;
-  background: rgba(255,255,255,.06);
-  color: rgba(255,255,255,.76);
-  font-size: 12px;
-  font-weight: 800;
-}
-.building-mode-status.is-active {
-  border-color: rgba(126,231,255,.55);
-  background: rgba(126,231,255,.14);
-  color: #dff8ff;
-}
-.building-mode-status.is-remove-mode {
-  border-color: rgba(239,71,111,.68);
-  background: rgba(239,71,111,.16);
-  color: #ffd3dc;
-}
-.building-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-.building-control,
-.building-control-readout {
-  min-height: 30px;
-  padding: 6px 9px;
-  border: 1px solid rgba(255,255,255,.14);
-  border-radius: 10px;
-  background: rgba(255,255,255,.07);
-  color: rgba(255,255,255,.84);
-  font-size: 12px;
-  font-weight: 900;
-}
+.building-system-body { min-width: 300px; }
+.building-mode-status { margin-bottom: 10px; padding: 9px 10px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.76); font-size: 12px; font-weight: 800; }
+.building-mode-status.is-active { border-color: rgba(126,231,255,.55); background: rgba(126,231,255,.14); color: #dff8ff; }
+.building-mode-status.is-remove-mode { border-color: rgba(239,71,111,.68); background: rgba(239,71,111,.16); color: #ffd3dc; }
+.building-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.building-control, .building-control-readout { min-height: 30px; padding: 6px 9px; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; background: rgba(255,255,255,.07); color: rgba(255,255,255,.84); font-size: 12px; font-weight: 900; }
 .building-control { cursor: pointer; }
 .building-control:hover { background: rgba(255,255,255,.12); }
-.building-control.is-danger {
-  border-color: rgba(239,71,111,.45);
-  color: #ffb3c1;
-}
-.building-control.is-selected {
-  border-color: rgba(255, 45, 85, 0.95);
-  background: rgba(239,71,111,.24);
-  color: #ffd3dc;
-}
-.building-part-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-.building-part-card {
-  display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 8px;
-  align-items: center;
-  min-height: 58px;
-  padding: 8px;
-  border: 1px solid rgba(255,255,255,.14);
-  border-radius: 13px;
-  background: rgba(255,255,255,.06);
-  color: rgba(255,255,255,.86);
-  cursor: pointer;
-  text-align: left;
-}
+.building-control.is-danger { border-color: rgba(239,71,111,.45); color: #ffb3c1; }
+.building-control.is-selected { border-color: rgba(255, 45, 85, 0.95); background: rgba(239,71,111,.24); color: #ffd3dc; }
+.building-part-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.building-part-card { display: grid; grid-template-columns: 34px 1fr; gap: 8px; align-items: center; min-height: 58px; padding: 8px; border: 1px solid rgba(255,255,255,.14); border-radius: 13px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.86); cursor: pointer; text-align: left; }
 .building-part-card:hover { background: rgba(255,255,255,.1); }
-.building-part-card.is-selected {
-  border-color: rgba(126,231,255,.9);
-  background: rgba(126,231,255,.18);
-  color: #fff;
-  box-shadow: 0 0 0 2px rgba(126,231,255,.14) inset;
-}
-.building-part-card.is-disabled-by-cost,
-.building-part-card:disabled {
-  opacity: .42;
-  cursor: not-allowed;
-}
-.building-part-icon {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: rgba(0,0,0,.22);
-  font-size: 21px;
-}
-.building-part-main {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-.building-part-main strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-}
-.building-part-main small {
-  overflow: hidden;
-  color: rgba(255,255,255,.58);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@media (max-width: 720px) {
-  .ui-debug-panel { display: none; }
-  .inventory-body { grid-template-columns: 1fr; }
-  .inventory-detail { min-height: 120px; }
-  .inventory-grid { grid-template-columns: repeat(5, 48px); }
-  .building-part-grid { grid-template-columns: 1fr; }
-  .map-editor-panel { width: min(320px, calc(100vw - 24px)); }
-  .tile-picker-window { left: 12px; top: 90px; width: calc(100vw - 24px); }
-  .world-map-panel { left: 12px !important; right: auto !important; top: 96px !important; width: min(300px, calc(100vw - 24px)); }
-  .editor-minimap { right: 12px; top: auto; bottom: 212px; padding: 8px; }
-  .editor-minimap-canvas { width: 132px; height: 132px; }
-}
+.building-part-card.is-selected { border-color: rgba(126,231,255,.9); background: rgba(126,231,255,.18); color: #fff; box-shadow: 0 0 0 2px rgba(126,231,255,.14) inset; }
+.building-part-card.is-disabled-by-cost, .building-part-card:disabled { opacity: .42; cursor: not-allowed; }
+.building-part-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: rgba(0,0,0,.22); font-size: 21px; }
+.building-part-main { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.building-part-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.building-part-main small { overflow: hidden; color: rgba(255,255,255,.58); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 720px) { .ui-debug-panel { display: none; } .inventory-body { grid-template-columns: 1fr; } .inventory-detail { min-height: 120px; } .inventory-grid { grid-template-columns: repeat(5, 48px); } .building-part-grid { grid-template-columns: 1fr; } .map-editor-panel { width: min(320px, calc(100vw - 24px)); } .tile-picker-window { left: 12px; top: 90px; width: calc(100vw - 24px); } .world-map-panel { left: 12px !important; right: auto !important; top: 96px !important; width: min(300px, calc(100vw - 24px)); } .editor-minimap { right: 12px; top: auto; bottom: 212px; padding: 8px; } .editor-minimap-canvas { width: 132px; height: 132px; } }
