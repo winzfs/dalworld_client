@@ -129,6 +129,19 @@ export class ClientBuildingOccupancy {
       : { ok: false, reason: '부적합한 지지대' };
   }
 
+  blocksWorldCircle(worldX: number, worldY: number, radius: number): boolean {
+    for (const part of this.parts.values()) {
+      if (part.z !== 0) continue;
+      if (this.partBlocksWorldCircle(part, worldX, worldY, radius)) return true;
+    }
+
+    return false;
+  }
+
+  canOccupyWorldCircle(worldX: number, worldY: number, radius: number): boolean {
+    return !this.blocksWorldCircle(worldX, worldY, radius);
+  }
+
   findAtSlot(x: number, y: number, z: number, slotKind: BuildSlotKind, rotation: BuildRotation): PlacedBuildPart | null {
     const cell = this.cells.get(this.toKey(x, y, z));
     if (!cell) return null;
@@ -187,6 +200,26 @@ export class ClientBuildingOccupancy {
   clear(): void {
     this.cells.clear();
     this.parts.clear();
+  }
+
+  private partBlocksWorldCircle(part: PlacedBuildPart, worldX: number, worldY: number, radius: number): boolean {
+    const definition = BUILD_PARTS[part.partId];
+    if (!definition?.blocksMovement) return false;
+    if (definition.category === 'door' && part.state?.open === true) return false;
+    if (definition.category === 'floor' || definition.category === 'roof') return false;
+
+    const center = gridToScreen(part.x, part.y, part.z);
+    if (definition.slotKind === 'edge') {
+      const segment = getEdgeSegment(center, part.rotation);
+      return distancePointToSegment(worldX, worldY, segment.a, segment.b) <= radius + 8;
+    }
+
+    if (definition.slotKind === 'corner') {
+      const point = getCornerPoint(center, part.rotation);
+      return distance(worldX, worldY, point.x, point.y) <= radius + 10;
+    }
+
+    return distanceToIsoDiamond(worldX, worldY, center) <= radius;
   }
 
   private canPlaceUpperTile(x: number, y: number, z: number, ignoredEntityId: string | null): ClientPlacementCheck {
