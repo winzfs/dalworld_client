@@ -3,17 +3,11 @@ import { BUILD_PARTS } from './BuildingParts';
 import { getIsoZIndex, gridToScreen, ISO_LAYER_HEIGHT, ISO_TILE_HEIGHT, ISO_TILE_WIDTH } from './IsoBuildingMath';
 import type { BuildPartId, BuildRotation, BuildingSnapshot, PlacedBuildPart } from './BuildingTypes';
 
-type RenderPalette = {
-  primary: number;
-  secondary: number;
-  accent: number;
-};
+type RenderPalette = { primary: number; secondary: number; accent: number };
+type Point = { x: number; y: number };
+type LocalPoint = { u: number; v: number };
 
-export type BuildingOcclusionFocus = {
-  worldX: number;
-  worldY: number;
-  z?: number;
-};
+export type BuildingOcclusionFocus = { worldX: number; worldY: number; z?: number };
 
 const BUILDING_NORMAL_ALPHA = 1;
 const BUILDING_OCCLUDING_ALPHA = 0.42;
@@ -31,7 +25,6 @@ const ROUND_SEGMENT_STEPS = 14;
 
 export class BuildingPlacementRenderer {
   readonly container = new Container();
-
   private readonly nodes = new Map<string, Container>();
   private readonly parts = new Map<string, PlacedBuildPart>();
 
@@ -42,17 +35,12 @@ export class BuildingPlacementRenderer {
 
   applySnapshot(snapshot: BuildingSnapshot): void {
     const aliveIds = new Set(snapshot.parts.map((part) => part.entityId));
-
-    for (const entityId of this.nodes.keys()) {
-      if (!aliveIds.has(entityId)) this.remove(entityId);
-    }
-
+    for (const entityId of this.nodes.keys()) if (!aliveIds.has(entityId)) this.remove(entityId);
     for (const part of snapshot.parts) this.addOrUpdate(part);
   }
 
   addOrUpdate(part: PlacedBuildPart): void {
     let node = this.nodes.get(part.entityId);
-
     if (!node) {
       node = new Container();
       this.nodes.set(part.entityId, node);
@@ -67,7 +55,6 @@ export class BuildingPlacementRenderer {
     node.x = screen.x;
     node.y = screen.y;
     node.zIndex = getIsoZIndex(part.x, part.y, part.z, getPartLayerOffset(part));
-
     if (!definition) return;
 
     switch (definition.category) {
@@ -97,19 +84,14 @@ export class BuildingPlacementRenderer {
       this.resetAlpha();
       return;
     }
-
     for (const [entityId, node] of this.nodes) {
       const part = this.parts.get(entityId);
       const definition = part ? BUILD_PARTS[part.partId] : null;
-
       if (!part || !definition || definition.category === 'floor') {
         node.alpha = BUILDING_NORMAL_ALPHA;
         continue;
       }
-
-      node.alpha = isPartOccludingFocus(part, focus)
-        ? BUILDING_OCCLUDING_ALPHA
-        : BUILDING_NORMAL_ALPHA;
+      node.alpha = isPartOccludingFocus(part, focus) ? BUILDING_OCCLUDING_ALPHA : BUILDING_NORMAL_ALPHA;
     }
   }
 
@@ -119,7 +101,6 @@ export class BuildingPlacementRenderer {
       if (!definition || definition.category === 'floor') continue;
       if (isPartOccludingFocus(part, focus)) return true;
     }
-
     return false;
   }
 
@@ -130,17 +111,14 @@ export class BuildingPlacementRenderer {
   updateDoor(entityId: string, open: boolean): void {
     const part = this.parts.get(entityId);
     if (!part) return;
-
     const definition = BUILD_PARTS[part.partId];
     if (definition?.category !== 'door') return;
-
     this.addOrUpdate({ ...part, state: { ...part.state, open } });
   }
 
   remove(entityId: string): void {
     const node = this.nodes.get(entityId);
     if (!node) return;
-
     node.destroy({ children: true });
     this.nodes.delete(entityId);
     this.parts.delete(entityId);
@@ -165,71 +143,17 @@ function renderFloor(partId: BuildPartId, rotation: BuildRotation): Container {
   const thickness = partId === 'stone_floor_1x1' ? FLOOR_THICKNESS_STONE : FLOOR_THICKNESS_WOOD;
   const palette = getPalette(partId);
 
-  side
-    .moveTo(-halfW, 0)
-    .lineTo(0, halfH)
-    .lineTo(halfW, 0)
-    .lineTo(halfW, thickness)
-    .lineTo(0, halfH + thickness)
-    .lineTo(-halfW, thickness)
-    .lineTo(-halfW, 0)
-    .fill({ color: palette.secondary, alpha: 1 });
-
-  top
-    .moveTo(0, -halfH)
-    .lineTo(halfW, 0)
-    .lineTo(0, halfH)
-    .lineTo(-halfW, 0)
-    .lineTo(0, -halfH)
-    .fill({ color: palette.primary, alpha: 1 })
-    .stroke({ width: 1, color: palette.accent, alpha: 0.55 });
+  side.moveTo(-halfW, 0).lineTo(0, halfH).lineTo(halfW, 0).lineTo(halfW, thickness).lineTo(0, halfH + thickness).lineTo(-halfW, thickness).lineTo(-halfW, 0).fill({ color: palette.secondary, alpha: 1 });
+  top.moveTo(0, -halfH).lineTo(halfW, 0).lineTo(0, halfH).lineTo(-halfW, 0).lineTo(0, -halfH).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.55 });
 
   if (partId === 'deck_floor_1x1') {
     const lines = new Graphics();
-    for (let i = -2; i <= 2; i += 1) {
-      lines.moveTo(-halfW + 10, i * 5).lineTo(halfW - 10, i * 5).stroke({ width: 1, color: 0x5b3d25, alpha: 0.32 });
-    }
+    for (let i = -2; i <= 2; i += 1) lines.moveTo(-halfW + 10, i * 5).lineTo(halfW - 10, i * 5).stroke({ width: 1, color: 0x5b3d25, alpha: 0.32 });
     node.addChild(side, top, lines);
     return node;
   }
 
   node.addChild(side, top);
-  return node;
-}
-
-function renderStairs(partId: BuildPartId, rotation: BuildRotation): Container {
-  const node = new Container();
-  const body = new Graphics();
-  const lines = new Graphics();
-  const palette = getPalette(partId);
-  const steps = 5;
-  const base = getStairBasePolygon(rotation);
-  const rise = ISO_LAYER_HEIGHT * 0.72;
-
-  body
-    .moveTo(base.lowA.x, base.lowA.y)
-    .lineTo(base.lowB.x, base.lowB.y)
-    .lineTo(base.highB.x, base.highB.y - rise)
-    .lineTo(base.highA.x, base.highA.y - rise)
-    .lineTo(base.lowA.x, base.lowA.y)
-    .fill({ color: palette.primary, alpha: 1 })
-    .stroke({ width: 1, color: palette.accent, alpha: 0.55 });
-
-  body
-    .moveTo(base.lowB.x, base.lowB.y)
-    .lineTo(base.highB.x, base.highB.y - rise)
-    .lineTo(base.highB.x, base.highB.y)
-    .lineTo(base.lowB.x, base.lowB.y)
-    .fill({ color: palette.secondary, alpha: 0.88 });
-
-  for (let i = 1; i <= steps; i += 1) {
-    const t = i / steps;
-    const left = interpolate3d(base.lowA, base.highA, t, rise * t);
-    const right = interpolate3d(base.lowB, base.highB, t, rise * t);
-    lines.moveTo(left.x, left.y).lineTo(right.x, right.y).stroke({ width: 2, color: palette.accent, alpha: 0.42 });
-  }
-
-  node.addChild(body, lines);
   return node;
 }
 
@@ -241,22 +165,64 @@ function renderRoundFloor(partId: BuildPartId, rotation: BuildRotation): Contain
   const palette = getPalette(partId);
   const thickness = partId === 'stone_round_floor' ? FLOOR_THICKNESS_STONE : FLOOR_THICKNESS_WOOD;
   const polygon = getQuarterDiskPoints(rotation);
+  const center = getRoundPieceCenterCorner(rotation);
+  const arc = getQuarterDiskArcPoints(rotation);
 
   drawPolygon(side, polygon.map((p) => ({ x: p.x, y: p.y + thickness })), palette.secondary, 0.9);
   drawPolygon(top, polygon, palette.primary, 1);
   top.stroke({ width: 1, color: palette.accent, alpha: 0.65 });
-
-  const center = getRoundPieceCenterCorner(rotation);
-  const arc = getQuarterDiskArcPoints(rotation);
-  seam
-    .moveTo(center.x, center.y)
-    .lineTo(arc[0].x, arc[0].y)
-    .stroke({ width: 1, color: palette.accent, alpha: 0.28 })
-    .moveTo(center.x, center.y)
-    .lineTo(arc[arc.length - 1].x, arc[arc.length - 1].y)
-    .stroke({ width: 1, color: palette.accent, alpha: 0.28 });
-
+  seam.moveTo(center.x, center.y).lineTo(arc[0].x, arc[0].y).stroke({ width: 1, color: palette.accent, alpha: 0.28 }).moveTo(center.x, center.y).lineTo(arc[arc.length - 1].x, arc[arc.length - 1].y).stroke({ width: 1, color: palette.accent, alpha: 0.28 });
   node.addChild(side, top, seam);
+  return node;
+}
+
+function renderStairs(partId: BuildPartId, rotation: BuildRotation): Container {
+  const node = new Container();
+  const body = new Graphics();
+  const lines = new Graphics();
+  const palette = getPalette(partId);
+  const base = getStairBasePolygon(rotation);
+  const rise = ISO_LAYER_HEIGHT * 0.72;
+
+  body.moveTo(base.lowA.x, base.lowA.y).lineTo(base.lowB.x, base.lowB.y).lineTo(base.highB.x, base.highB.y - rise).lineTo(base.highA.x, base.highA.y - rise).lineTo(base.lowA.x, base.lowA.y).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.55 });
+  body.moveTo(base.lowB.x, base.lowB.y).lineTo(base.highB.x, base.highB.y - rise).lineTo(base.highB.x, base.highB.y).lineTo(base.lowB.x, base.lowB.y).fill({ color: palette.secondary, alpha: 0.88 });
+  for (let i = 1; i <= 5; i += 1) {
+    const t = i / 5;
+    const left = interpolate3d(base.lowA, base.highA, t, rise * t);
+    const right = interpolate3d(base.lowB, base.highB, t, rise * t);
+    lines.moveTo(left.x, left.y).lineTo(right.x, right.y).stroke({ width: 2, color: palette.accent, alpha: 0.42 });
+  }
+  node.addChild(body, lines);
+  return node;
+}
+
+function renderWallVariant(partId: BuildPartId, rotation: BuildRotation): Container {
+  if (partId === 'wood_round_wall' || partId === 'stone_round_wall') return renderRoundWall(partId, rotation);
+  if (partId === 'railing' || partId === 'fence') return renderFenceLike(partId, rotation);
+  return renderWallSlab(partId, rotation, partId === 'half_wall' ? WALL_RENDER_HEIGHT * 0.62 : WALL_RENDER_HEIGHT);
+}
+
+function renderRoundWall(partId: BuildPartId, rotation: BuildRotation): Container {
+  const node = new Container();
+  const wall = new Graphics();
+  const cap = new Graphics();
+  const posts = new Graphics();
+  const palette = getPalette(partId);
+  const base = getQuarterDiskArcPoints(rotation);
+  const top = base.map((p) => ({ x: p.x, y: p.y - WALL_RENDER_HEIGHT }));
+
+  for (let i = 0; i < base.length - 1; i += 1) {
+    const a = base[i];
+    const b = base[i + 1];
+    const ta = top[i];
+    const tb = top[i + 1];
+    wall.moveTo(a.x, a.y).lineTo(b.x, b.y).lineTo(tb.x, tb.y).lineTo(ta.x, ta.y).lineTo(a.x, a.y).fill({ color: i % 2 === 0 ? palette.primary : palette.secondary, alpha: 0.96 }).stroke({ width: 1, color: palette.accent, alpha: 0.22 });
+  }
+  for (let i = 0; i < top.length - 1; i += 1) cap.moveTo(top[i].x, top[i].y).lineTo(top[i + 1].x, top[i + 1].y);
+  cap.stroke({ width: 4, color: palette.secondary, alpha: 0.96 });
+  drawVerticalPost(posts, base[0], WALL_RENDER_HEIGHT, palette.secondary);
+  drawVerticalPost(posts, base[base.length - 1], WALL_RENDER_HEIGHT, palette.secondary);
+  node.addChild(wall, posts, cap);
   return node;
 }
 
@@ -268,62 +234,9 @@ function renderRoof(partId: BuildPartId): Container {
   const halfH = ISO_TILE_HEIGHT / 2 + 3;
   const lift = partId === 'flat_roof_1x1' ? 4 : 12;
   const palette = getPalette(partId);
-
-  roof
-    .moveTo(0, -halfH - lift)
-    .lineTo(halfW, -lift)
-    .lineTo(0, halfH - lift)
-    .lineTo(-halfW, -lift)
-    .lineTo(0, -halfH - lift)
-    .fill({ color: palette.primary, alpha: 1 })
-    .stroke({ width: 1, color: palette.accent, alpha: 0.52 });
-
+  roof.moveTo(0, -halfH - lift).lineTo(halfW, -lift).lineTo(0, halfH - lift).lineTo(-halfW, -lift).lineTo(0, -halfH - lift).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.52 });
   if (partId !== 'flat_roof_1x1') ridge.moveTo(0, -halfH - lift).lineTo(0, halfH - lift).stroke({ width: 2, color: palette.secondary, alpha: 0.7 });
-
   node.addChild(roof, ridge);
-  return node;
-}
-
-function renderWallVariant(partId: BuildPartId, rotation: BuildRotation): Container {
-  if (partId === 'wood_round_wall' || partId === 'stone_round_wall') return renderRoundWall(partId, rotation);
-  if (partId === 'railing' || partId === 'fence') return renderFenceLike(partId, rotation);
-
-  const height = partId === 'half_wall' ? WALL_RENDER_HEIGHT * 0.62 : WALL_RENDER_HEIGHT;
-  return renderWallSlab(partId, rotation, height);
-}
-
-function renderRoundWall(partId: BuildPartId, rotation: BuildRotation): Container {
-  const node = new Container();
-  const wall = new Graphics();
-  const cap = new Graphics();
-  const posts = new Graphics();
-  const palette = getPalette(partId);
-  const height = WALL_RENDER_HEIGHT;
-  const base = getQuarterDiskArcPoints(rotation);
-  const top = base.map((p) => ({ x: p.x, y: p.y - height }));
-
-  for (let i = 0; i < base.length - 1; i += 1) {
-    const a = base[i];
-    const b = base[i + 1];
-    const ta = top[i];
-    const tb = top[i + 1];
-    wall
-      .moveTo(a.x, a.y)
-      .lineTo(b.x, b.y)
-      .lineTo(tb.x, tb.y)
-      .lineTo(ta.x, ta.y)
-      .lineTo(a.x, a.y)
-      .fill({ color: i % 2 === 0 ? palette.primary : palette.secondary, alpha: 0.96 })
-      .stroke({ width: 1, color: palette.accent, alpha: 0.22 });
-  }
-
-  for (let i = 0; i < top.length - 1; i += 1) cap.moveTo(top[i].x, top[i].y).lineTo(top[i + 1].x, top[i + 1].y);
-  cap.stroke({ width: 4, color: palette.secondary, alpha: 0.96 });
-
-  drawVerticalPost(posts, base[0], height, palette.secondary);
-  drawVerticalPost(posts, base[base.length - 1], height, palette.secondary);
-
-  node.addChild(wall, posts, cap);
   return node;
 }
 
@@ -339,26 +252,10 @@ function renderWallSlab(partId: BuildPartId, rotation: BuildRotation, height: nu
   const b = trimToward(points.b, points.a, 0.12);
   const topA = { x: a.x, y: a.y - height };
   const topB = { x: b.x, y: b.y - height };
-
-  panel
-    .moveTo(a.x, a.y)
-    .lineTo(b.x, b.y)
-    .lineTo(topB.x, topB.y)
-    .lineTo(topA.x, topA.y)
-    .lineTo(a.x, a.y)
-    .fill({ color: palette.primary, alpha: 0.95 });
-
+  panel.moveTo(a.x, a.y).lineTo(b.x, b.y).lineTo(topB.x, topB.y).lineTo(topA.x, topA.y).lineTo(a.x, a.y).fill({ color: palette.primary, alpha: 0.95 });
   drawVerticalPost(postA, points.a, height, palette.secondary);
   drawVerticalPost(postB, points.b, height, palette.secondary);
-
-  cap
-    .moveTo(topA.x, topA.y)
-    .lineTo(topB.x, topB.y)
-    .stroke({ width: 4, color: palette.secondary, alpha: 0.96 })
-    .moveTo(points.a.x, points.a.y - height)
-    .lineTo(points.b.x, points.b.y - height)
-    .stroke({ width: 1, color: palette.accent, alpha: 0.65 });
-
+  cap.moveTo(topA.x, topA.y).lineTo(topB.x, topB.y).stroke({ width: 4, color: palette.secondary, alpha: 0.96 }).moveTo(points.a.x, points.a.y - height).lineTo(points.b.x, points.b.y - height).stroke({ width: 1, color: palette.accent, alpha: 0.65 });
   panel.stroke({ width: 1, color: palette.accent, alpha: 0.35 });
   node.addChild(panel, postA, postB, cap);
   return node;
@@ -369,26 +266,11 @@ function renderFenceLike(partId: BuildPartId, rotation: BuildRotation): Containe
   const segment = getEdgeSegment(rotation);
   const palette = getPalette(partId);
   const rail = new Graphics();
-  const postA = new Graphics();
-  const postB = new Graphics();
   const height = partId === 'fence' ? 26 : 20;
   const a = interpolate(segment.a, segment.b, 0.12);
   const b = interpolate(segment.a, segment.b, 0.88);
-
-  rail
-    .moveTo(a.x, a.y - height * 0.72)
-    .lineTo(b.x, b.y - height * 0.72)
-    .stroke({ width: 4, color: palette.primary, alpha: 1 })
-    .moveTo(a.x, a.y - height * 0.34)
-    .lineTo(b.x, b.y - height * 0.34)
-    .stroke({ width: 3, color: palette.secondary, alpha: 1 });
-
-  for (const [index, point] of [a, b, interpolate(a, b, 0.5)].entries()) {
-    const post = index === 0 ? postA : index === 1 ? postB : new Graphics();
-    post.rect(point.x - 3, point.y - height, 6, height).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.45 });
-    node.addChild(post);
-  }
-
+  rail.moveTo(a.x, a.y - height * 0.72).lineTo(b.x, b.y - height * 0.72).stroke({ width: 4, color: palette.primary, alpha: 1 }).moveTo(a.x, a.y - height * 0.34).lineTo(b.x, b.y - height * 0.34).stroke({ width: 3, color: palette.secondary, alpha: 1 });
+  for (const point of [a, b, interpolate(a, b, 0.5)]) node.addChild(new Graphics().rect(point.x - 3, point.y - height, 6, height).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.45 }));
   node.addChild(rail);
   return node;
 }
@@ -397,27 +279,19 @@ function renderDoor(partId: BuildPartId, rotation: BuildRotation, open: boolean)
   const node = new Container();
   const frame = renderWallSlab(partId === 'stone_door' ? 'stone_wall' : 'thin_wall', rotation, WALL_RENDER_HEIGHT);
   frame.alpha = 0.82;
-
   const segment = getEdgeSegment(rotation);
   const door = new Graphics();
-  const height = DOOR_RENDER_HEIGHT;
-  const inset = 8;
   const a = interpolate(segment.a, segment.b, 0.25);
   const b = interpolate(segment.a, segment.b, 0.75);
   const palette = getPalette(partId);
-
   if (open) {
-    const hinge = a;
-    const swing = rotateAround(b, hinge, rotation % 2 === 0 ? -0.75 : 0.75);
-    door.moveTo(hinge.x, hinge.y).lineTo(swing.x, swing.y).lineTo(swing.x, swing.y - height).lineTo(hinge.x, hinge.y - height).lineTo(hinge.x, hinge.y).fill({ color: palette.primary, alpha: 0.82 }).stroke({ width: 1, color: palette.accent, alpha: 0.62 });
+    const swing = rotateAround(b, a, rotation % 2 === 0 ? -0.75 : 0.75);
+    door.moveTo(a.x, a.y).lineTo(swing.x, swing.y).lineTo(swing.x, swing.y - DOOR_RENDER_HEIGHT).lineTo(a.x, a.y - DOOR_RENDER_HEIGHT).lineTo(a.x, a.y).fill({ color: palette.primary, alpha: 0.82 }).stroke({ width: 1, color: palette.accent, alpha: 0.62 });
   } else {
-    door.moveTo(a.x, a.y - inset).lineTo(b.x, b.y - inset).lineTo(b.x, b.y - height).lineTo(a.x, a.y - height).lineTo(a.x, a.y - inset).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.58 });
+    door.moveTo(a.x, a.y - 8).lineTo(b.x, b.y - 8).lineTo(b.x, b.y - DOOR_RENDER_HEIGHT).lineTo(a.x, a.y - DOOR_RENDER_HEIGHT).lineTo(a.x, a.y - 8).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.58 });
   }
-
-  const knob = new Graphics();
   const knobPoint = interpolate(a, b, open ? 0.8 : 0.68);
-  knob.circle(knobPoint.x, knobPoint.y - height * 0.48, 2).fill({ color: 0xffd166, alpha: 1 });
-
+  const knob = new Graphics().circle(knobPoint.x, knobPoint.y - DOOR_RENDER_HEIGHT * 0.48, 2).fill({ color: 0xffd166, alpha: 1 });
   node.addChild(frame, door, knob);
   return node;
 }
@@ -426,31 +300,21 @@ function renderWindow(partId: BuildPartId, rotation: BuildRotation): Container {
   const node = renderWallSlab(partId === 'wide_window' ? 'stone_wall' : 'thin_wall', rotation, WALL_RENDER_HEIGHT);
   const segment = getEdgeSegment(rotation);
   const pane = new Graphics();
-  const height = WALL_RENDER_HEIGHT;
   const a = interpolate(segment.a, segment.b, partId === 'wide_window' ? 0.2 : 0.3);
   const b = interpolate(segment.a, segment.b, partId === 'wide_window' ? 0.8 : 0.7);
-  const topY = -height * 0.72;
-  const bottomY = -height * 0.34;
-
-  pane.moveTo(a.x, a.y + bottomY).lineTo(b.x, b.y + bottomY).lineTo(b.x, b.y + topY).lineTo(a.x, a.y + topY).lineTo(a.x, a.y + bottomY).fill({ color: 0x83d9ff, alpha: 0.78 }).stroke({ width: 1, color: 0xe9fbff, alpha: 0.84 });
-
+  pane.moveTo(a.x, a.y - WALL_RENDER_HEIGHT * 0.34).lineTo(b.x, b.y - WALL_RENDER_HEIGHT * 0.34).lineTo(b.x, b.y - WALL_RENDER_HEIGHT * 0.72).lineTo(a.x, a.y - WALL_RENDER_HEIGHT * 0.72).lineTo(a.x, a.y - WALL_RENDER_HEIGHT * 0.34).fill({ color: 0x83d9ff, alpha: 0.78 }).stroke({ width: 1, color: 0xe9fbff, alpha: 0.84 });
   node.addChild(pane);
   return node;
 }
 
 function renderPillar(partId: BuildPartId, rotation: BuildRotation): Container {
   const node = new Container();
-  const pillar = new Graphics();
   const pos = getCornerPoint(rotation);
   const width = partId === 'short_post' ? 7 : partId === 'stone_pillar' ? 10 : 8;
   const height = partId === 'short_post' ? 22 : PILLAR_RENDER_HEIGHT;
   const palette = getPalette(partId);
-
-  pillar.rect(pos.x - width / 2, pos.y - height, width, height).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.58 });
-
-  const cap = new Graphics();
-  cap.ellipse(pos.x, pos.y - height, width * 0.8, 3).fill({ color: palette.secondary, alpha: 1 });
-
+  const pillar = new Graphics().rect(pos.x - width / 2, pos.y - height, width, height).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.58 });
+  const cap = new Graphics().ellipse(pos.x, pos.y - height, width * 0.8, 3).fill({ color: palette.secondary, alpha: 1 });
   node.addChild(pillar, cap);
   return node;
 }
@@ -476,11 +340,8 @@ function getPartLayerOffset(part: PlacedBuildPart): number {
 function isPartOccludingFocus(part: PlacedBuildPart, focus: BuildingOcclusionFocus): boolean {
   const definition = BUILD_PARTS[part.partId];
   if (!definition) return false;
-
   const origin = gridToScreen(part.x, part.y, part.z);
-  const layerOffset = (part.z - (focus.z ?? 0)) * OCCLUSION_LAYER_PENALTY;
-  const focusY = focus.worldY + layerOffset;
-
+  const focusY = focus.worldY + (part.z - (focus.z ?? 0)) * OCCLUSION_LAYER_PENALTY;
   switch (definition.category) {
     case 'wall':
     case 'door':
@@ -501,12 +362,8 @@ function isEdgeStructureOccludingFocus(origin: Point, rotation: BuildRotation, f
   const b = { x: origin.x + segment.b.x, y: origin.y + segment.b.y };
   const baseMinY = Math.min(a.y, b.y);
   const baseMaxY = Math.max(a.y, b.y);
-
   if (focusY < baseMinY - height || focusY > baseMaxY + WALL_OCCLUSION_PADDING) return false;
-
-  const bodyDistance = distancePointToVerticalSegmentBand(focusX, focusY, a, b, height);
-  if (bodyDistance > WALL_OCCLUSION_PADDING) return false;
-
+  if (distancePointToVerticalSegmentBand(focusX, focusY, a, b, height) > WALL_OCCLUSION_PADDING) return false;
   return focusY <= baseMaxY + 2;
 }
 
@@ -520,27 +377,17 @@ function isPillarOccludingFocus(origin: Point, rotation: BuildRotation, focusX: 
 function isRoofOccludingFocus(origin: Point, focusX: number, focusY: number): boolean {
   const halfW = ISO_TILE_WIDTH / 2 + ROOF_OCCLUSION_PADDING;
   const halfH = ISO_TILE_HEIGHT / 2 + ROOF_OCCLUSION_PADDING;
-  const verticalOffset = 8;
-
   if (focusY > origin.y + halfH) return false;
-  return Math.abs(focusX - origin.x) / halfW + Math.abs(focusY - (origin.y - verticalOffset)) / halfH <= 1.2;
+  return Math.abs(focusX - origin.x) / halfW + Math.abs(focusY - (origin.y - 8)) / halfH <= 1.2;
 }
 
 function distancePointToVerticalSegmentBand(px: number, py: number, a: Point, b: Point, height: number): number {
-  const bottom = distancePointToSegment(px, py, a, b);
-  const top = distancePointToSegment(px, py, { x: a.x, y: a.y - height }, { x: b.x, y: b.y - height });
-  const left = distancePointToSegment(px, py, a, { x: a.x, y: a.y - height });
-  const right = distancePointToSegment(px, py, b, { x: b.x, y: b.y - height });
-  const withinY = py <= Math.max(a.y, b.y) + WALL_OCCLUSION_PADDING && py >= Math.min(a.y, b.y) - height;
-  const nearProjectedSegment = distancePointToSegment(px, py, a, b) <= height + WALL_OCCLUSION_PADDING;
-
-  if (withinY && nearProjectedSegment) {
-    const topProjectionDistance = distancePointToSegment(px, py, { x: a.x, y: a.y - height }, { x: b.x, y: b.y - height });
-    const bottomProjectionDistance = distancePointToSegment(px, py, a, b);
-    if (Math.min(topProjectionDistance, bottomProjectionDistance) <= height + WALL_OCCLUSION_PADDING) return 0;
-  }
-
-  return Math.min(bottom, top, left, right);
+  return Math.min(
+    distancePointToSegment(px, py, a, b),
+    distancePointToSegment(px, py, { x: a.x, y: a.y - height }, { x: b.x, y: b.y - height }),
+    distancePointToSegment(px, py, a, { x: a.x, y: a.y - height }),
+    distancePointToSegment(px, py, b, { x: b.x, y: b.y - height }),
+  );
 }
 
 function getPalette(partId: BuildPartId): RenderPalette {
@@ -586,7 +433,6 @@ function getEdgeSegment(rotation: BuildRotation): { a: Point; b: Point } {
   const east = { x: halfW, y: 0 };
   const south = { x: 0, y: halfH };
   const west = { x: -halfW, y: 0 };
-
   switch (rotation) {
     case 0:
       return { a: west, b: north };
@@ -602,7 +448,6 @@ function getEdgeSegment(rotation: BuildRotation): { a: Point; b: Point } {
 function getCornerPoint(rotation: BuildRotation): Point {
   const halfW = ISO_TILE_WIDTH / 2;
   const halfH = ISO_TILE_HEIGHT / 2;
-
   switch (rotation) {
     case 0:
       return { x: -halfW, y: 0 };
@@ -616,55 +461,39 @@ function getCornerPoint(rotation: BuildRotation): Point {
 }
 
 function getQuarterDiskPoints(rotation: BuildRotation): Point[] {
-  const corner = getRoundPieceCenterCorner(rotation);
-  const arc = getQuarterDiskArcPoints(rotation);
-  return [corner, ...arc];
+  const center = getRoundPieceCenterCorner(rotation);
+  return [center, ...getQuarterDiskArcPoints(rotation)];
 }
 
 function getQuarterDiskArcPoints(rotation: BuildRotation): Point[] {
-  const center = getRoundPieceCenterCorner(rotation);
-  const start = getRoundArcStartAngle(rotation);
-  const end = start + Math.PI / 2;
+  const definition = getRoundQuarterDefinition(rotation);
   const points: Point[] = [];
-
   for (let i = 0; i <= ROUND_SEGMENT_STEPS; i += 1) {
-    const angle = start + (end - start) * (i / ROUND_SEGMENT_STEPS);
-    points.push({
-      x: center.x + Math.cos(angle) * ISO_TILE_WIDTH,
-      y: center.y + Math.sin(angle) * ISO_TILE_HEIGHT,
-    });
+    const angle = definition.startAngle + (definition.endAngle - definition.startAngle) * (i / ROUND_SEGMENT_STEPS);
+    points.push(localSquareToIso({ u: definition.center.u + Math.cos(angle), v: definition.center.v + Math.sin(angle) }));
   }
-
   return points;
 }
 
 function getRoundPieceCenterCorner(rotation: BuildRotation): Point {
-  const halfW = ISO_TILE_WIDTH / 2;
-  const halfH = ISO_TILE_HEIGHT / 2;
+  return localSquareToIso(getRoundQuarterDefinition(rotation).center);
+}
 
+function getRoundQuarterDefinition(rotation: BuildRotation): { center: LocalPoint; startAngle: number; endAngle: number } {
   switch (rotation) {
     case 0:
-      return { x: halfW, y: halfH };
+      return { center: { u: 1, v: 1 }, startAngle: Math.PI, endAngle: Math.PI * 1.5 };
     case 1:
-      return { x: -halfW, y: halfH };
+      return { center: { u: 0, v: 1 }, startAngle: -Math.PI / 2, endAngle: 0 };
     case 2:
-      return { x: -halfW, y: -halfH };
+      return { center: { u: 0, v: 0 }, startAngle: 0, endAngle: Math.PI / 2 };
     case 3:
-      return { x: halfW, y: -halfH };
+      return { center: { u: 1, v: 0 }, startAngle: Math.PI / 2, endAngle: Math.PI };
   }
 }
 
-function getRoundArcStartAngle(rotation: BuildRotation): number {
-  switch (rotation) {
-    case 0:
-      return Math.PI;
-    case 1:
-      return -Math.PI / 2;
-    case 2:
-      return 0;
-    case 3:
-      return Math.PI / 2;
-  }
+function localSquareToIso(point: LocalPoint): Point {
+  return { x: (point.u - point.v) * (ISO_TILE_WIDTH / 2), y: (point.u + point.v - 1) * (ISO_TILE_HEIGHT / 2) };
 }
 
 function getStairBasePolygon(rotation: BuildRotation): { lowA: Point; lowB: Point; highA: Point; highB: Point } {
@@ -674,7 +503,6 @@ function getStairBasePolygon(rotation: BuildRotation): { lowA: Point; lowB: Poin
   const east = { x: halfW, y: 0 };
   const south = { x: 0, y: halfH };
   const west = { x: -halfW, y: 0 };
-
   switch (rotation) {
     case 0:
       return { lowA: south, lowB: east, highA: west, highB: north };
@@ -715,7 +543,6 @@ function rotateAround(point: Point, pivot: Point, radians: number): Point {
   const dy = point.y - pivot.y;
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
-
   return { x: pivot.x + dx * cos - dy * sin, y: pivot.y + dx * sin + dy * cos };
 }
 
@@ -733,5 +560,3 @@ function distance(ax: number, ay: number, bx: number, by: number): number {
   const dy = ay - by;
   return Math.sqrt(dx * dx + dy * dy);
 }
-
-type Point = { x: number; y: number };
