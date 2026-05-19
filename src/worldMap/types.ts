@@ -27,6 +27,8 @@ export type WorldMapPlacement = {
   y: number;
   layer: WorldMapLayerId;
   scale: number;
+  displayWidth?: number;
+  displayHeight?: number;
   sourceRect?: WorldMapSourceRect;
   solidColor?: number;
   transparentBlack?: boolean;
