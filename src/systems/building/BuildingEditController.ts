@@ -1,27 +1,9 @@
 import { BUILD_PARTS } from './BuildingParts';
 import type { ClientBuildingOccupancy } from './ClientBuildingOccupancy';
 import type { BuildingEditDraft, BuildingGridPoint } from './BuildingEditTypes';
-import type { BuildPartId, BuildRotation, PlacedBuildPart } from './BuildingTypes';
+import type { BuildPartId, BuildPlaceRequest, BuildRotation, BuildUpdateRequest, PlacedBuildPart } from './BuildingTypes';
 
-export type BuildingEditCommand =
-  | {
-      type: 'BUILD_PLACE_REQUEST';
-      requestId: string;
-      partId: BuildPartId;
-      x: number;
-      y: number;
-      z: number;
-      rotation: BuildRotation;
-    }
-  | {
-      type: 'BUILD_UPDATE_REQUEST';
-      requestId: string;
-      entityId: string;
-      x: number;
-      y: number;
-      z: number;
-      rotation: BuildRotation;
-    };
+export type BuildingEditCommand = BuildPlaceRequest | BuildUpdateRequest;
 
 export type BuildingEditValidation = {
   ok: boolean;
