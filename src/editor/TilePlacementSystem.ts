@@ -243,11 +243,13 @@ export class TilePlacementSystem {
         ? this.createCollisionOverlay(placement)
         : await this.createVisualDisplay(placement, asset);
 
+      this.applyDisplayDepth(display, placement, asset);
       this.displays.set(placement.id, display);
       this.layer.addChild(display);
     } catch (error) {
       console.warn('[MapEditor] Failed to render placement. Using fallback tile.', error);
       const fallback = this.createFallbackTile(placement, asset);
+      this.applyDisplayDepth(fallback, placement, asset);
       this.displays.set(placement.id, fallback);
       this.layer.addChild(fallback);
     }
@@ -273,7 +275,6 @@ export class TilePlacementSystem {
     tile.label = `editor-solid-tile:${placement.id}`;
     tile.x = placement.x;
     tile.y = placement.y;
-    tile.zIndex = layerZIndex(placement.layer);
     tile
       .rect(0, 0, width, height)
       .fill({ color: placement.solidColor ?? asset.solidColor ?? 0x000000, alpha: 1 });
@@ -289,7 +290,6 @@ export class TilePlacementSystem {
     overlay.label = `editor-collision:${placement.id}`;
     overlay.x = placement.x;
     overlay.y = placement.y;
-    overlay.zIndex = layerZIndex('collision');
     overlay
       .rect(0, 0, width, height)
       .fill({ color: 0xef476f, alpha: 0.36 })
@@ -331,8 +331,6 @@ export class TilePlacementSystem {
       (baseHeight / normalTexture.height) * scale,
     );
 
-    sprite.zIndex = layerZIndex(placement.layer) + (placement.transparentBlack ? 0.5 : 0);
-
     if (placement.transparentBlack) {
       void this.loadTransparentTexture(asset.url, safeSourceRect).then((transparentTexture) => {
         const currentDisplay = this.displays.get(placement.id);
@@ -351,7 +349,6 @@ export class TilePlacementSystem {
     tile.label = `editor-fallback-tile:${placement.id}`;
     tile.x = placement.x;
     tile.y = placement.y;
-    tile.zIndex = layerZIndex(placement.layer);
 
     const width = getDisplayWidth(placement, asset, this.state.gridSize) * scale;
     const height = getDisplayHeight(placement, asset, this.state.gridSize) * scale;
@@ -361,6 +358,10 @@ export class TilePlacementSystem {
       .fill({ color: fallbackColor(asset.categoryId), alpha: 1 });
 
     return tile;
+  }
+
+  private applyDisplayDepth(display: PlacedDisplay, placement: EditorTilePlacement, asset: EditorTilesetAsset): void {
+    display.zIndex = placementZIndex(placement, asset, this.state.gridSize);
   }
 
   private loadTexture(url: string): Promise<PixiTexture | null> {
@@ -415,7 +416,9 @@ export class TilePlacementSystem {
         return containsPoint(placement, worldX, worldY, this.state.gridSize);
       })
       .sort((a, b) => {
-        const zDiff = placementZIndex(b) - placementZIndex(a);
+        const assetA = this.getAssetForPlacement(a);
+        const assetB = this.getAssetForPlacement(b);
+        const zDiff = placementZIndex(b, assetB, this.state.gridSize) - placementZIndex(a, assetA, this.state.gridSize);
         if (zDiff !== 0) return zDiff;
         return this.draft.placements.indexOf(b) - this.draft.placements.indexOf(a);
       });
@@ -509,8 +512,16 @@ function containsPoint(placement: EditorTilePlacement, worldX: number, worldY: n
   );
 }
 
-function placementZIndex(placement: EditorTilePlacement): number {
-  return layerZIndex(placement.layer) + (placement.transparentBlack ? 0.5 : 0);
+function placementZIndex(placement: EditorTilePlacement, asset: EditorTilesetAsset, fallbackSize: number): number {
+  const base = layerZIndex(placement.layer);
+  const overlayOffset = placement.transparentBlack ? 0.5 : 0;
+
+  if (placement.layer !== 'object') return base + overlayOffset;
+
+  const scale = normalizePlacementScale(placement.scale);
+  const height = getDisplayHeight(placement, asset, fallbackSize) * scale;
+  const footY = placement.y + height;
+  return base + footY / 1000 + overlayOffset;
 }
 
 function normalizePlacementScale(scale: number | undefined): number {
