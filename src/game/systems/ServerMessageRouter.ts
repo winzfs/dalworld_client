@@ -7,6 +7,7 @@ import type { PlayerRenderer } from '../../render/PlayerRenderer';
 import type { ResourceRenderer } from '../../render/ResourceRenderer';
 import type { MonsterRenderer } from '../../render/MonsterRenderer';
 import { getActiveCell } from '../../worldMap/activeCellStore';
+import { fetchRuntimeWorldMap } from '../../worldMap/fetchRuntimeWorldMap';
 import { setRuntimeWorldMap } from '../../worldMap/runtimeMapStore';
 
 export type ServerMessageRouterContext = {
@@ -65,6 +66,21 @@ export class ServerMessageRouter {
     this.context.cameraSystem.setWorldSize(message.world);
     this.context.redrawWorld();
     this.context.reloadWorldMap();
+
+    void this.refreshRuntimeWorldMapFromHttp();
+  }
+
+  private async refreshRuntimeWorldMapFromHttp(): Promise<void> {
+    try {
+      const map = await fetchRuntimeWorldMap();
+      setRuntimeWorldMap(map);
+      this.context.reloadWorldMap();
+      console.info('[WorldMap] Refreshed runtime world map from HTTP.', {
+        cells: map?.cells.map((cell) => `${cell.gridX}:${cell.gridY}`) ?? [],
+      });
+    } catch (error) {
+      console.warn('[WorldMap] Failed to refresh runtime world map from HTTP.', error);
+    }
   }
 
   private handleSnapshot(message: Extract<ServerToClientMessage, { type: 'snapshot' }>): void {
