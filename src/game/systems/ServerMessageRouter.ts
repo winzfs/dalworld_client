@@ -1,4 +1,4 @@
-import type { ResourceSnapshot, ServerToClientMessage, WorldInfo, PublicGameplayConfig } from '../../protocol/messages';
+import type { ResourceSnapshot, ServerToClientMessage, WorldInfo, PublicGameplayConfig, CraftingServerEvent } from '../../protocol/messages';
 import type { BuildingServerEvent } from '../../systems/building/BuildingTypes';
 import { PROTOCOL_VERSION } from '../../protocol/version';
 import type { InputState } from '../InputController';
@@ -25,6 +25,7 @@ export type ServerMessageRouterContext = {
   redrawWorld: () => void;
   reloadWorldMap: () => void;
   onBuildingEvent?: (event: BuildingServerEvent) => void;
+  onCraftingEvent?: (event: CraftingServerEvent) => void;
 };
 
 /** Routes server messages to client systems. */
@@ -50,6 +51,10 @@ export class ServerMessageRouter {
       case 'BUILD_DOOR_UPDATED':
       case 'INVENTORY_SNAPSHOT':
         this.context.onBuildingEvent?.(message);
+        return;
+      case 'CRAFT_COMPLETED':
+      case 'CRAFT_REJECTED':
+        this.context.onCraftingEvent?.(message);
         return;
       case 'pong':
         return;
