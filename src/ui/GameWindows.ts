@@ -1,7 +1,7 @@
 import { BUILD_PART_LIST } from '../systems/building/BuildingParts';
 import { getBuildPartItemDefinition } from '../systems/building/BuildPartInventoryCatalog';
 import type { BuildingModeSnapshot } from '../systems/building/BuildingModeState';
-import type { BuildPartId } from '../systems/building/BuildingTypes';
+import type { BuildPartDefinition, BuildPartId } from '../systems/building/BuildingTypes';
 import type { CraftingRecipeId } from '../systems/crafting/CraftingTypes';
 import { getCraftingCategories } from '../systems/crafting/CraftingViewModel';
 import { BASE_ITEM_DEFINITIONS, type ItemDefinition } from '../systems/inventory/ItemDefinitions';
@@ -17,6 +17,7 @@ import {
 
 type WindowId = 'inventory' | 'crafting' | 'building';
 type CraftingRecipeView = ReturnType<typeof getCraftingCategories>[number]['recipes'][number];
+type BuildingCategoryId = 'all' | 'floor' | 'stairs' | 'wall' | 'support' | 'roof' | 'door-window';
 
 type FloatingButtonConfig = {
   id: WindowId;
@@ -27,6 +28,12 @@ type FloatingButtonConfig = {
   defaultButtonY: number;
   defaultWindowX: number;
   defaultWindowY: number;
+};
+
+type BuildingCategoryView = {
+  id: BuildingCategoryId;
+  label: string;
+  matches: (part: BuildPartDefinition) => boolean;
 };
 
 export type GameWindowsOptions = {
@@ -41,6 +48,18 @@ export type GameWindowsOptions = {
 const WINDOW_ROOT_ID = 'dalworld-windows';
 const INVENTORY_SLOT_COUNT = 36;
 const CRAFTING_RECIPE_VIEWS = getCraftingCategories().flatMap((category) => category.recipes);
+const STAIR_PART_IDS = new Set<BuildPartId>(['wood_stairs', 'stone_stairs']);
+const DOOR_WINDOW_CATEGORIES = new Set<BuildPartDefinition['category']>(['door', 'window']);
+
+const BUILDING_CATEGORIES: BuildingCategoryView[] = [
+  { id: 'all', label: '전체', matches: () => true },
+  { id: 'floor', label: '바닥', matches: (part) => part.category === 'floor' && !STAIR_PART_IDS.has(part.id) },
+  { id: 'stairs', label: '계단', matches: (part) => STAIR_PART_IDS.has(part.id) },
+  { id: 'wall', label: '벽', matches: (part) => part.category === 'wall' },
+  { id: 'support', label: '기둥', matches: (part) => part.category === 'support' },
+  { id: 'roof', label: '지붕', matches: (part) => part.category === 'roof' },
+  { id: 'door-window', label: '문/창문', matches: (part) => DOOR_WINDOW_CATEGORIES.has(part.category) },
+];
 
 const BUTTONS: FloatingButtonConfig[] = [
   { id: 'inventory', label: '가방', icon: '🎒', title: '가방', defaultButtonX: 18, defaultButtonY: 180, defaultWindowX: 96, defaultWindowY: 120 },
@@ -55,6 +74,7 @@ export class GameWindows {
   private selectedItem: string | null = null;
   private selectedBuildPart: BuildPartId | null = null;
   private activeInventoryTab: InventoryTabId = 'general';
+  private activeBuildingCategory: BuildingCategoryId = 'all';
   private lastInventory: InventorySource = null;
   private buildingMode: BuildingModeSnapshot = {
     enabled: false,
@@ -118,6 +138,9 @@ export class GameWindows {
     const removeButton = query<HTMLButtonElement>(this.root, '[data-building-remove-mode]');
     const buttons = [...this.root.querySelectorAll<HTMLButtonElement>('[data-build-part]')];
     const inventoryBuildSlots = [...this.root.querySelectorAll<HTMLButtonElement>('[data-build-inventory-part], [data-build-inventory-part=""]')];
+
+    this.renderBuildingCategoryTabs();
+    this.updateBuildingPartVisibility();
 
     status.textContent = getBuildingStatusText(mode);
     status.classList.toggle('is-active', mode.enabled);
@@ -184,6 +207,30 @@ export class GameWindows {
       button.title = canCraft
         ? `${recipe.recipe.label} 제작 가능 · ${getRecipeTooltip(recipe.inputDefinitions)}`
         : `${recipe.recipe.label} 재료 부족 · 필요: ${getRecipeTooltip(recipe.inputDefinitions)}`;
+    }
+  }
+
+  private renderBuildingCategoryTabs(): void {
+    const tabs = [...this.root.querySelectorAll<HTMLButtonElement>('[data-building-category]')];
+    for (const tab of tabs) {
+      const categoryId = tab.dataset.buildingCategory as BuildingCategoryId;
+      const category = getBuildingCategory(categoryId);
+      const count = BUILD_PART_LIST.filter((part) => category.matches(part)).length;
+      tab.textContent = `${category.label} ${count}`;
+      tab.classList.toggle('is-active', categoryId === this.activeBuildingCategory);
+      tab.style.background = categoryId === this.activeBuildingCategory ? 'rgba(84, 220, 120, 0.2)' : 'rgba(255, 255, 255, 0.08)';
+      tab.style.borderColor = categoryId === this.activeBuildingCategory ? 'rgba(84, 220, 120, 0.95)' : 'rgba(255, 255, 255, 0.14)';
+      tab.style.color = categoryId === this.activeBuildingCategory ? '#f5fff7' : 'rgba(245, 247, 251, 0.76)';
+    }
+  }
+
+  private updateBuildingPartVisibility(): void {
+    const category = getBuildingCategory(this.activeBuildingCategory);
+    const cards = [...this.root.querySelectorAll<HTMLButtonElement>('[data-build-part]')];
+    for (const card of cards) {
+      const partId = card.dataset.buildPart as BuildPartId;
+      const part = BUILD_PART_LIST.find((candidate) => candidate.id === partId);
+      card.hidden = !part || !category.matches(part);
     }
   }
 
@@ -285,12 +332,22 @@ export class GameWindows {
 
   private installBuildingInteractions(): void {
     const building = query<HTMLDivElement>(this.root, '[data-window="building"]');
+    const categoryButtons = [...building.querySelectorAll<HTMLButtonElement>('[data-building-category]')];
     const partButtons = [...building.querySelectorAll<HTMLButtonElement>('[data-build-part]')];
     const exitButton = query<HTMLButtonElement>(building, '[data-building-exit]');
     const rotateButton = query<HTMLButtonElement>(building, '[data-building-rotate]');
     const removeButton = query<HTMLButtonElement>(building, '[data-building-remove-mode]');
     const layerDownButton = query<HTMLButtonElement>(building, '[data-building-layer-down]');
     const layerUpButton = query<HTMLButtonElement>(building, '[data-building-layer-up]');
+    const partScroller = query<HTMLDivElement>(building, '[data-building-part-scroller]');
+
+    for (const button of categoryButtons) {
+      button.addEventListener('click', () => {
+        this.activeBuildingCategory = (button.dataset.buildingCategory ?? 'all') as BuildingCategoryId;
+        partScroller.scrollTop = 0;
+        this.renderBuildingMode(this.buildingMode);
+      });
+    }
 
     for (const button of partButtons) {
       button.addEventListener('click', () => {
@@ -455,20 +512,33 @@ function getBuildingWindowMarkup(): string {
           <button type="button" class="building-control is-danger" data-building-remove-mode>철거</button>
           <button type="button" class="building-control is-danger" data-building-exit>해제</button>
         </div>
-        <div class="building-part-grid" aria-label="건설 부품 목록">
-          ${BUILD_PART_LIST.map((part) => `
-            <button class="building-part-card" type="button" data-build-part="${part.id}">
-              <span class="building-part-icon">${part.icon}</span>
-              <span class="building-part-main">
-                <strong>${part.label}</strong>
-                <small>${part.placementCost.map((cost) => `${getBuildCostLabel(cost.itemId)} ${cost.quantity}`).join(' · ')}</small>
-              </span>
+        <div class="building-category-tabs" aria-label="건설 부품 카테고리" style="display:flex; gap:6px; overflow-x:auto; padding:2px 0 8px; margin-top:8px; scrollbar-width:thin; touch-action:pan-x;">
+          ${BUILDING_CATEGORIES.map((category) => `
+            <button class="building-category-tab" type="button" data-building-category="${category.id}" style="flex:0 0 auto; padding:6px 9px; border-radius:999px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.08); color:rgba(245,247,251,.76); font-size:12px; font-weight:700; white-space:nowrap; cursor:pointer;">
+              ${category.label}
             </button>
           `).join('')}
+        </div>
+        <div data-building-part-scroller style="max-height:360px; overflow-y:auto; padding-right:4px; scrollbar-width:thin; touch-action:pan-y; overscroll-behavior:contain;">
+          <div class="building-part-grid" aria-label="건설 부품 목록">
+            ${BUILD_PART_LIST.map((part) => `
+              <button class="building-part-card" type="button" data-build-part="${part.id}">
+                <span class="building-part-icon">${part.icon}</span>
+                <span class="building-part-main">
+                  <strong>${part.label}</strong>
+                  <small>${part.placementCost.map((cost) => `${getBuildCostLabel(cost.itemId)} ${cost.quantity}`).join(' · ')}</small>
+                </span>
+              </button>
+            `).join('')}
+          </div>
         </div>
       </div>
     </section>
   `;
+}
+
+function getBuildingCategory(categoryId: BuildingCategoryId): BuildingCategoryView {
+  return BUILDING_CATEGORIES.find((category) => category.id === categoryId) ?? BUILDING_CATEGORIES[0];
 }
 
 function query<T extends Element>(root: ParentNode, selector: string): T {
