@@ -23,6 +23,7 @@ const FLOOR_THICKNESS_STONE = 10;
 const WALL_RENDER_HEIGHT = ISO_LAYER_HEIGHT;
 const DOOR_RENDER_HEIGHT = ISO_LAYER_HEIGHT - 8;
 const PILLAR_RENDER_HEIGHT = ISO_LAYER_HEIGHT;
+const WALL_POST_WIDTH = 5;
 
 export class BuildingPlacementRenderer {
   readonly container = new Container();
@@ -255,28 +256,38 @@ function renderWallVariant(partId: BuildPartId, rotation: BuildRotation): Contai
 
 function renderWallSlab(partId: BuildPartId, rotation: BuildRotation, height: number): Container {
   const node = new Container();
-  const wall = new Graphics();
-  const top = new Graphics();
+  const panel = new Graphics();
+  const postA = new Graphics();
+  const postB = new Graphics();
+  const cap = new Graphics();
   const points = getEdgeSegment(rotation);
   const palette = getPalette(partId);
-  const topA = { x: points.a.x, y: points.a.y - height };
-  const topB = { x: points.b.x, y: points.b.y - height };
+  const a = trimToward(points.a, points.b, 0.12);
+  const b = trimToward(points.b, points.a, 0.12);
+  const topA = { x: a.x, y: a.y - height };
+  const topB = { x: b.x, y: b.y - height };
 
-  wall
-    .moveTo(points.a.x, points.a.y)
-    .lineTo(points.b.x, points.b.y)
+  panel
+    .moveTo(a.x, a.y)
+    .lineTo(b.x, b.y)
     .lineTo(topB.x, topB.y)
     .lineTo(topA.x, topA.y)
-    .lineTo(points.a.x, points.a.y)
-    .fill({ color: palette.primary, alpha: 1 })
-    .stroke({ width: 1, color: palette.accent, alpha: 0.45 });
+    .lineTo(a.x, a.y)
+    .fill({ color: palette.primary, alpha: 0.95 });
 
-  top
+  drawVerticalPost(postA, points.a, height, palette.secondary);
+  drawVerticalPost(postB, points.b, height, palette.secondary);
+
+  cap
     .moveTo(topA.x, topA.y)
     .lineTo(topB.x, topB.y)
-    .stroke({ width: 3, color: palette.secondary, alpha: 0.9 });
+    .stroke({ width: 4, color: palette.secondary, alpha: 0.96 })
+    .moveTo(points.a.x, points.a.y - height)
+    .lineTo(points.b.x, points.b.y - height)
+    .stroke({ width: 1, color: palette.accent, alpha: 0.65 });
 
-  node.addChild(wall, top);
+  panel.stroke({ width: 1, color: palette.accent, alpha: 0.35 });
+  node.addChild(panel, postA, postB, cap);
   return node;
 }
 
@@ -482,6 +493,19 @@ function getCornerPoint(rotation: BuildRotation): Point {
     case 3:
       return { x: 0, y: halfH };
   }
+}
+
+function drawVerticalPost(g: Graphics, point: Point, height: number, color: number): void {
+  g
+    .roundRect(point.x - WALL_POST_WIDTH / 2, point.y - height, WALL_POST_WIDTH, height, 1.5)
+    .fill({ color, alpha: 1 });
+}
+
+function trimToward(from: Point, to: Point, ratio: number): Point {
+  return {
+    x: from.x + (to.x - from.x) * ratio,
+    y: from.y + (to.y - from.y) * ratio,
+  };
 }
 
 function interpolate(a: Point, b: Point, t: number): Point {
