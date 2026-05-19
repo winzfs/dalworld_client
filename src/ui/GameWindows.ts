@@ -84,6 +84,7 @@ export class GameWindows {
   private readonly options: GameWindowsOptions;
   private zIndex = 30;
   private selectedItem: ItemType | null = null;
+  private selectedBuildPart: BuildPartId | null = null;
   private activeInventoryCategory = '일반';
   private lastInventory: Inventory | null = null;
   private buildingMode: BuildingModeSnapshot = {
@@ -109,31 +110,53 @@ export class GameWindows {
     this.lastInventory = inventory;
 
     const slots = [...this.root.querySelectorAll<HTMLButtonElement>('[data-inventory-slot]')];
-    const items = this.activeInventoryCategory === '일반' ? getGeneralInventoryItems(inventory) : [];
+    const resourceItems = this.activeInventoryCategory === '일반' ? getGeneralInventoryItems(inventory) : [];
+    const buildParts = this.activeInventoryCategory === '건설' ? BUILD_PART_LIST : [];
 
     for (const [index, slot] of slots.entries()) {
-      const item = items[index];
+      const resourceItem = resourceItems[index];
+      const buildPart = buildParts[index];
       slot.innerHTML = '';
-      slot.classList.remove('has-item');
+      slot.classList.remove('has-item', 'is-build-part', 'is-selected');
       slot.dataset.item = '';
+      slot.dataset.buildInventoryPart = '';
       slot.title = `슬롯 ${index + 1}`;
 
-      if (!item) continue;
+      if (resourceItem) {
+        slot.classList.add('has-item');
+        slot.dataset.item = resourceItem.item;
+        slot.title = `${resourceItem.label} x${resourceItem.amount}`;
+        slot.innerHTML = `
+          <span class="inventory-item-icon">${getItemIcon(resourceItem.item)}</span>
+          <span class="inventory-item-count">${resourceItem.amount}</span>
+        `;
+        continue;
+      }
 
-      slot.classList.add('has-item');
-      slot.dataset.item = item.item;
-      slot.title = `${item.label} x${item.amount}`;
-      slot.innerHTML = `
-        <span class="inventory-item-icon">${getItemIcon(item.item)}</span>
-        <span class="inventory-item-count">${item.amount}</span>
-      `;
+      if (buildPart) {
+        const selected = this.buildingMode.enabled &&
+          this.buildingMode.toolMode === 'place' &&
+          this.buildingMode.selectedPartId === buildPart.id;
+        slot.classList.add('has-item', 'is-build-part');
+        slot.classList.toggle('is-selected', selected);
+        slot.dataset.buildInventoryPart = buildPart.id;
+        slot.title = `${buildPart.label} 선택`;
+        slot.innerHTML = `
+          <span class="inventory-item-icon">${buildPart.icon}</span>
+          <span class="inventory-build-label">${buildPart.label}</span>
+        `;
+      }
     }
 
-    if (this.selectedItem) {
-      const selected = items.find((item) => item.item === this.selectedItem);
+    if (this.selectedItem && this.activeInventoryCategory === '일반') {
+      const selected = resourceItems.find((item) => item.item === this.selectedItem);
       if (selected) {
         this.renderItemDetail(selected);
       }
+    }
+
+    if (this.selectedBuildPart && this.activeInventoryCategory === '건설') {
+      this.renderBuildPartDetail(this.selectedBuildPart);
     }
 
     this.renderBuildingMode(this.buildingMode);
@@ -147,6 +170,7 @@ export class GameWindows {
     const rotation = query<HTMLSpanElement>(this.root, '[data-building-rotation]');
     const removeButton = query<HTMLButtonElement>(this.root, '[data-building-remove-mode]');
     const buttons = [...this.root.querySelectorAll<HTMLButtonElement>('[data-build-part]')];
+    const inventoryBuildSlots = [...this.root.querySelectorAll<HTMLButtonElement>('[data-build-inventory-part], [data-build-inventory-part=""]')];
 
     status.textContent = getBuildingStatusText(mode);
     status.classList.toggle('is-active', mode.enabled);
@@ -168,6 +192,13 @@ export class GameWindows {
       button.title = canAfford
         ? `${part.label} 배치`
         : `${part.label} 선택 가능 · 배치는 서버에서 재료 검증`;
+    }
+
+    for (const slot of inventoryBuildSlots) {
+      const partId = slot.dataset.buildInventoryPart as BuildPartId | '';
+      if (!partId) continue;
+      const selected = mode.enabled && mode.toolMode === 'place' && mode.selectedPartId === partId;
+      slot.classList.toggle('is-selected', selected);
     }
   }
 
@@ -210,10 +241,13 @@ export class GameWindows {
         for (const other of tabs) other.classList.toggle('is-active', other === tab);
         this.activeInventoryCategory = tab.dataset.inventoryTab ?? '일반';
         this.selectedItem = null;
+        this.selectedBuildPart = null;
         detailTitle.textContent = `${this.activeInventoryCategory} 가방`;
         detailBody.textContent = this.activeInventoryCategory === '일반'
           ? '채집한 자원이 이곳에 표시됩니다.'
-          : '아직 서버 데이터가 연결되지 않은 카테고리입니다.';
+          : this.activeInventoryCategory === '건설'
+            ? '건설 부품을 선택하면 건설모드로 진입합니다.'
+            : '아직 서버 데이터가 연결되지 않은 카테고리입니다.';
         this.renderInventory(this.lastInventory);
       });
     }
@@ -221,15 +255,35 @@ export class GameWindows {
     for (const slot of slots) {
       slot.addEventListener('click', () => {
         for (const other of slots) other.classList.toggle('is-selected', other === slot);
-        const itemType = slot.dataset.item as ItemType | '';
-        if (!itemType) {
+
+        const buildPartId = slot.dataset.buildInventoryPart as BuildPartId | '';
+        if (buildPartId) {
           this.selectedItem = null;
-          const index = Number(slot.dataset.inventorySlot ?? '0') + 1;
-          detailTitle.textContent = `빈 슬롯 ${index}`;
-          detailBody.textContent = '아직 아이템이 없는 빈 슬롯입니다.';
+          this.selectedBuildPart = buildPartId;
+          this.renderBuildPartDetail(buildPartId);
+          this.options.onSelectBuildPart?.(buildPartId);
+          this.renderBuildingMode({
+            ...this.buildingMode,
+            enabled: true,
+            toolMode: 'place',
+            selectedPartId: buildPartId,
+          });
           return;
         }
 
+        const itemType = slot.dataset.item as ItemType | '';
+        if (!itemType) {
+          this.selectedItem = null;
+          this.selectedBuildPart = null;
+          const index = Number(slot.dataset.inventorySlot ?? '0') + 1;
+          detailTitle.textContent = `빈 슬롯 ${index}`;
+          detailBody.textContent = this.activeInventoryCategory === '건설'
+            ? '이 슬롯에는 아직 건설 부품이 없습니다.'
+            : '아직 아이템이 없는 빈 슬롯입니다.';
+          return;
+        }
+
+        this.selectedBuildPart = null;
         this.selectedItem = itemType;
         const meta = ITEM_LABELS[itemType];
         const countText = slot.querySelector('.inventory-item-count')?.textContent ?? '0';
@@ -255,16 +309,36 @@ export class GameWindows {
     for (const button of partButtons) {
       button.addEventListener('click', () => {
         const partId = button.dataset.buildPart as BuildPartId;
+        this.selectedBuildPart = partId;
+        this.renderBuildPartDetail(partId);
         this.options.onSelectBuildPart?.(partId);
+        this.renderBuildingMode({
+          ...this.buildingMode,
+          enabled: true,
+          toolMode: 'place',
+          selectedPartId: partId,
+        });
       });
     }
 
     removeButton.addEventListener('click', () => {
       this.options.onEnterRemoveMode?.();
+      this.renderBuildingMode({
+        ...this.buildingMode,
+        enabled: true,
+        toolMode: 'remove',
+        selectedPartId: null,
+      });
     });
 
     exitButton.addEventListener('click', () => {
       this.options.onExitBuildingMode?.();
+      this.renderBuildingMode({
+        ...this.buildingMode,
+        enabled: false,
+        toolMode: 'place',
+        selectedPartId: null,
+      });
     });
 
     rotateButton.addEventListener('click', () => {
@@ -286,6 +360,17 @@ export class GameWindows {
     const detailBody = query<HTMLParagraphElement>(inventory, '[data-inventory-detail-body]');
     detailTitle.textContent = `${item.label} x${item.amount}`;
     detailBody.textContent = item.description;
+  }
+
+  private renderBuildPartDetail(partId: BuildPartId): void {
+    const inventory = query<HTMLDivElement>(this.root, '[data-window="inventory"]');
+    const detailTitle = query<HTMLHeadingElement>(inventory, '[data-inventory-detail-title]');
+    const detailBody = query<HTMLParagraphElement>(inventory, '[data-inventory-detail-body]');
+    const part = BUILD_PART_LIST.find((candidate) => candidate.id === partId);
+    if (!part) return;
+
+    detailTitle.textContent = `${part.icon} ${part.label}`;
+    detailBody.textContent = `슬롯: ${getSlotKindLabel(part.slotKind)} · 비용: ${part.placementCost.map((cost) => `${getBuildCostLabel(cost.itemId)} ${cost.quantity}`).join(', ')} · 클릭하면 건설모드로 진입합니다.`;
   }
 
   private toggleWindow(id: WindowId): void {
@@ -544,5 +629,18 @@ function getBuildCostLabel(itemId: string): string {
       return '섬유';
     default:
       return itemId;
+  }
+}
+
+function getSlotKindLabel(slotKind: string): string {
+  switch (slotKind) {
+    case 'tile':
+      return '타일';
+    case 'edge':
+      return '엣지';
+    case 'corner':
+      return '코너';
+    default:
+      return slotKind;
   }
 }
