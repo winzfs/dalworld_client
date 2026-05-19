@@ -14,6 +14,7 @@ const PLAYER_RING_Y = -10;
 const PLAYER_FALLBACK_Y = -16;
 const PLAYER_HP_Y = -Math.round(PLAYER_RENDER_HEIGHT - 8);
 const PLAYER_DEPTH_OFFSET = 140;
+const PLAYER_LAYER_Z_INDEX = 120;
 const PLAYER_SHADOW_SOURCES = [
   '/assets/characters/female_adventurer/Shadow.png',
   '/assets/characters/female_adventurer/shadow.png',
@@ -55,6 +56,7 @@ export class PlayerRenderer {
 
   constructor(parent: Container) {
     this.layer.sortableChildren = true;
+    this.layer.zIndex = PLAYER_LAYER_Z_INDEX;
     parent.addChild(this.layer);
     void this.load();
   }
