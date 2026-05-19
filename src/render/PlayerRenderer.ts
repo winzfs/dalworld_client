@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import type { Facing, PlayerSnapshot } from '../protocol/messages';
 import { Interpolator2D } from '../game/interpolation';
 import { FEMALE_ADVENTURER, type FemaleAdventurerAnim } from '../assets/femaleAdventurer';
+import { getWorldEntityZIndex } from '../systems/building/IsoBuildingMath';
 import { loadSpriteStrip } from './spriteStrip';
 
 const REQUIRED_ANIMS: FemaleAdventurerAnim[] = ['idle', 'walk'];
@@ -12,6 +13,7 @@ const PLAYER_SHADOW_Y = -34;
 const PLAYER_RING_Y = -10;
 const PLAYER_FALLBACK_Y = -16;
 const PLAYER_HP_Y = -Math.round(PLAYER_RENDER_HEIGHT - 8);
+const PLAYER_DEPTH_OFFSET = 140;
 const PLAYER_SHADOW_SOURCES = [
   '/assets/characters/female_adventurer/Shadow.png',
   '/assets/characters/female_adventurer/shadow.png',
@@ -52,6 +54,7 @@ export class PlayerRenderer {
   private shadowTexture: Texture | null = null;
 
   constructor(parent: Container) {
+    this.layer.sortableChildren = true;
     parent.addChild(this.layer);
     void this.load();
   }
@@ -102,6 +105,7 @@ export class PlayerRenderer {
     for (const v of this.views.values()) {
       const pos = v.interp.update(dt);
       v.c.position.set(Math.round(pos.x), Math.round(pos.y));
+      v.c.zIndex = getWorldEntityZIndex(pos.y, PLAYER_DEPTH_OFFSET);
 
       const anim = this.selectAnim(v);
 
@@ -163,6 +167,7 @@ export class PlayerRenderer {
     const hp = new Graphics();
     const shadow = this.makeShadow();
 
+    c.zIndex = getWorldEntityZIndex(p.y, PLAYER_DEPTH_OFFSET);
     ring.visible = local;
     c.addChild(shadow, fallback, ring, hp);
     c.position.set(p.x, p.y);
