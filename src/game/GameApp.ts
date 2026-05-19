@@ -21,8 +21,8 @@ import { BuildingModeState } from '../systems/building/BuildingModeState';
 import { BuildingPlacementRenderer } from '../systems/building/BuildingPlacementRenderer';
 import { BuildingGhostPreviewRenderer } from '../systems/building/BuildingGhostPreviewRenderer';
 import { ClientBuildingOccupancy } from '../systems/building/ClientBuildingOccupancy';
-import { screenToGridApprox } from '../systems/building/IsoBuildingMath';
-import type { BuildingServerEvent } from '../systems/building/BuildingTypes';
+import { gridToScreen, screenToGridApprox } from '../systems/building/IsoBuildingMath';
+import type { BuildPartId, BuildRotation, BuildingServerEvent, PlacedBuildPart } from '../systems/building/BuildingTypes';
 import { ClientMovementSystem } from './systems/ClientMovementSystem';
 import { InputSendSystem } from './systems/InputSendSystem';
 import { SnapshotSystem } from './systems/SnapshotSystem';
@@ -42,6 +42,21 @@ const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, playerSpeed: 220, gatherRange: 80 };
 const CELL_TRANSFER_TRIGGER_PADDING = 32;
 const CELL_EDGE_PADDING = CELL_TRANSFER_TRIGGER_PADDING + 96;
+
+type BuildingEditDraft = {
+  source: 'new' | 'existing';
+  entityId?: string;
+  partId: BuildPartId;
+  x: number;
+  y: number;
+  z: number;
+  rotation: BuildRotation;
+};
+
+type BuildingDragState = {
+  pointerId: number;
+  z: number;
+};
 
 export class GameApp {
   private readonly app = new Application();
@@ -68,6 +83,7 @@ export class GameApp {
   private readonly buildingPlacementRenderer = new BuildingPlacementRenderer();
   private readonly buildingGhostPreviewRenderer = new BuildingGhostPreviewRenderer();
   private readonly buildingOccupancy = new ClientBuildingOccupancy();
+  private readonly buildingEditControls = createBuildingEditControls();
   private readonly movementSystem = new ClientMovementSystem();
   private readonly cellTransitionSystem = new CellTransitionSystem({
     triggerPadding: CELL_TRANSFER_TRIGGER_PADDING,
@@ -81,6 +97,8 @@ export class GameApp {
   private readonly editorMinimap: EditorMinimap | null;
 
   private editorTransitioning = false;
+  private buildingEditDraft: BuildingEditDraft | null = null;
+  private buildingDragState: BuildingDragState | null = null;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
   private gameplayConfig: PublicGameplayConfig = DEFAULT_GAMEPLAY;
@@ -98,11 +116,25 @@ export class GameApp {
     this.hudSystem = new HudSystem(
       new GameHud(),
       new GameWindows({
-        onSelectBuildPart: (partId) => this.buildingModeState.enter(partId),
-        onEnterRemoveMode: () => this.buildingModeState.enterRemoveMode(),
-        onExitBuildingMode: () => this.buildingModeState.exit(),
-        onRotateBuildingPart: () => this.buildingModeState.rotateNext(),
-        onSetBuildingLayer: (z) => this.buildingModeState.setCurrentZ(z),
+        onSelectBuildPart: (partId) => {
+          this.buildingModeState.enter(partId);
+          this.beginNewBuildingDraft(partId);
+        },
+        onEnterRemoveMode: () => {
+          this.cancelBuildingDraft();
+          this.buildingModeState.enterRemoveMode();
+        },
+        onExitBuildingMode: () => {
+          this.cancelBuildingDraft();
+          this.buildingModeState.exit();
+        },
+        onRotateBuildingPart: () => this.rotateBuildingDraftOrMode(),
+        onSetBuildingLayer: (z) => {
+          this.buildingModeState.setCurrentZ(z);
+          if (this.buildingEditDraft) {
+            this.updateBuildingDraft({ ...this.buildingEditDraft, z: Math.max(0, Math.floor(z)) });
+          }
+        },
       }),
     );
 
@@ -197,11 +229,14 @@ export class GameApp {
     mount.appendChild(this.app.canvas);
     this.input.attach();
     this.mobileControls = new MobileControls(this.input);
+    document.body.appendChild(this.buildingEditControls.root);
+    this.installBuildingEditControls();
     this.app.stage.addChild(this.world);
     this.runtimeWorldSystem.drawBackground(this.worldInfo);
     await this.loadWorldMap();
 
     if (this.editorMode) {
+      this.buildingEditControls.root.hidden = true;
       this.editorCameraSystem.setWorldSize(this.worldInfo);
       this.mapEditor?.start();
       this.editorMinimap?.mount(document.body);
@@ -210,8 +245,12 @@ export class GameApp {
     }
 
     this.app.canvas.addEventListener('pointermove', (event) => this.handleCanvasPointerMove(event));
-    this.app.canvas.addEventListener('pointerleave', () => this.buildingGhostPreviewRenderer.hide());
+    this.app.canvas.addEventListener('pointerleave', () => {
+      if (!this.buildingEditDraft) this.buildingGhostPreviewRenderer.hide();
+    });
     this.app.canvas.addEventListener('pointerdown', (event) => this.handleCanvasPointerDown(event));
+    window.addEventListener('pointermove', (event) => this.handleGlobalPointerMove(event));
+    window.addEventListener('pointerup', (event) => this.handleGlobalPointerUp(event));
     window.addEventListener('keydown', (event) => this.handleBuildingHotkey(event));
 
     this.network.onStatus((status) => {
@@ -234,14 +273,8 @@ export class GameApp {
     });
 
     const view = this.editorCameraSystem.getView();
-    this.editorMinimap?.setPlacements(
-      this.mapEditor?.placement.mapDraft.placements ?? [],
-    );
-    this.editorMinimap?.render({
-      ...view,
-      screenWidth: this.app.renderer.width,
-      screenHeight: this.app.renderer.height,
-    });
+    this.editorMinimap?.setPlacements(this.mapEditor?.placement.mapDraft.placements ?? []);
+    this.editorMinimap?.render({ ...view, screenWidth: this.app.renderer.width, screenHeight: this.app.renderer.height });
 
     if (transition && this.mapEditor && !this.editorTransitioning) {
       this.editorTransitioning = true;
@@ -256,13 +289,7 @@ export class GameApp {
     if (!this.runtimeCellTransitionController.isTransitioning) {
       this.applyLocalMovement(dt);
       this.runtimeCellTransitionController.tryStart(this.findMe());
-      this.inputSendSystem.update(
-        {
-          input: this.input.state,
-          player: this.findMe(),
-        },
-        dt,
-      );
+      this.inputSendSystem.update({ input: this.input.state, player: this.findMe() }, dt);
       this.handleGatherInput();
     }
 
@@ -270,151 +297,114 @@ export class GameApp {
     this.monsterRenderer.update(dt);
 
     const me = this.findMe();
-
-    this.cameraSystem.update({
-      player: me,
-      world: this.worldInfo,
-      screenWidth: this.app.renderer.width,
-      screenHeight: this.app.renderer.height,
-    });
-
-    this.hudSystem.update({
-      status: this.status,
-      tick: this.snapshotSystem.snapshot.tick,
-      player: me,
-      latencyMs: this.network.latencyMs,
-      buildingMode: this.buildingModeState.getSnapshot(),
-    });
+    this.cameraSystem.update({ player: me, world: this.worldInfo, screenWidth: this.app.renderer.width, screenHeight: this.app.renderer.height });
+    this.hudSystem.update({ status: this.status, tick: this.snapshotSystem.snapshot.tick, player: me, latencyMs: this.network.latencyMs, buildingMode: this.buildingModeState.getSnapshot() });
+    this.syncBuildingControlsPosition();
   }
 
   private applyLocalMovement(dt: number): void {
     const me = this.findMe();
     if (!me) return;
-
     this.snapshotSystem.setLocalPlayer(me);
-
-    this.movementSystem.update(
-      {
-        player: me,
-        keys: this.input.state.keys,
-        facing: this.input.state.facing,
-        monsters: this.snapshotSystem.snapshot.monsters,
-        world: this.worldInfo,
-        gameplay: this.gameplayConfig,
-      },
-      dt,
-    );
-
+    this.movementSystem.update({ player: me, keys: this.input.state.keys, facing: this.input.state.facing, monsters: this.snapshotSystem.snapshot.monsters, world: this.worldInfo, gameplay: this.gameplayConfig }, dt);
     this.playerRenderer.sync(this.snapshotSystem.snapshot.players, this.myPlayerId);
   }
 
   private handleCanvasPointerMove(event: PointerEvent): void {
+    if (this.buildingDragState) return;
     const mode = this.buildingModeState.getSnapshot();
     if (!mode.enabled || mode.toolMode === 'remove' || !mode.selectedPartId) {
-      this.buildingGhostPreviewRenderer.hide();
+      if (!this.buildingEditDraft) this.buildingGhostPreviewRenderer.hide();
       return;
     }
 
+    if (this.buildingEditDraft) return;
+
     const grid = this.pointerToBuildingGrid(event, mode.currentZ);
     const definition = BUILD_PARTS[mode.selectedPartId];
-    const canPlace = definition
-      ? this.buildingOccupancy.canPlace(definition, grid.x, grid.y, grid.z, mode.rotation).ok
-      : false;
-
-    this.buildingGhostPreviewRenderer.show({
-      partId: mode.selectedPartId,
-      x: grid.x,
-      y: grid.y,
-      z: grid.z,
-      rotation: mode.rotation,
-      canPlace,
-    });
+    const canPlace = definition ? this.buildingOccupancy.canPlace(definition, grid.x, grid.y, grid.z, mode.rotation).ok : false;
+    this.buildingGhostPreviewRenderer.show({ partId: mode.selectedPartId, x: grid.x, y: grid.y, z: grid.z, rotation: mode.rotation, canPlace });
   }
 
   private handleCanvasPointerDown(event: PointerEvent): void {
     if (event.button !== 0) return;
+    if (this.buildingEditControls.root.contains(event.target as Node)) return;
 
     const mode = this.buildingModeState.getSnapshot();
-    if (!mode.enabled) return;
-
     const grid = this.pointerToBuildingGrid(event, mode.currentZ);
 
-    if (mode.toolMode === 'remove') {
+    if (mode.enabled && mode.toolMode === 'remove') {
       const target = this.buildingOccupancy.findTopAtCell(grid.x, grid.y, grid.z, mode.rotation);
       if (!target) return;
-
-      this.network.send({
-        type: 'BUILD_REMOVE_REQUEST',
-        requestId: crypto.randomUUID(),
-        entityId: target.entityId,
-      });
+      this.network.send({ type: 'BUILD_REMOVE_REQUEST', requestId: crypto.randomUUID(), entityId: target.entityId });
       return;
     }
 
-    if (!mode.selectedPartId) return;
-
-    const door = this.buildingOccupancy.findDoorAtCell(grid.x, grid.y, grid.z, mode.rotation);
-    if (door && mode.selectedPartId === 'door') {
-      this.network.send({
-        type: 'BUILD_DOOR_TOGGLE_REQUEST',
-        requestId: crypto.randomUUID(),
-        entityId: door.entityId,
-      });
+    if (this.buildingEditDraft) {
+      this.updateBuildingDraft({ ...this.buildingEditDraft, ...grid });
       return;
     }
 
-    const definition = BUILD_PARTS[mode.selectedPartId];
-    if (!definition) return;
-
-    const canPlace = this.buildingOccupancy.canPlace(definition, grid.x, grid.y, grid.z, mode.rotation);
-    if (!canPlace.ok) {
-      console.warn('[Building] client placement prediction rejected:', canPlace.reason);
+    const target = this.buildingOccupancy.findTopAtCell(grid.x, grid.y, grid.z, mode.rotation);
+    if (target) {
+      this.beginExistingBuildingDraft(target);
       return;
     }
 
-    this.network.send({
-      type: 'BUILD_PLACE_REQUEST',
-      requestId: crypto.randomUUID(),
-      partId: mode.selectedPartId,
-      x: grid.x,
-      y: grid.y,
-      z: grid.z,
-      rotation: mode.rotation,
-    });
+    if (!mode.enabled || !mode.selectedPartId) return;
+    this.updateBuildingDraft({ source: 'new', partId: mode.selectedPartId, x: grid.x, y: grid.y, z: grid.z, rotation: mode.rotation });
+  }
+
+  private handleGlobalPointerMove(event: PointerEvent): void {
+    if (!this.buildingDragState || !this.buildingEditDraft) return;
+    const grid = this.pointerToBuildingGrid(event, this.buildingDragState.z);
+    this.updateBuildingDraft({ ...this.buildingEditDraft, x: grid.x, y: grid.y, z: grid.z });
+  }
+
+  private handleGlobalPointerUp(event: PointerEvent): void {
+    if (this.buildingDragState?.pointerId === event.pointerId) {
+      this.buildingDragState = null;
+    }
   }
 
   private handleBuildingHotkey(event: KeyboardEvent): void {
     const mode = this.buildingModeState.getSnapshot();
-    if (!mode.enabled) return;
+    if (!mode.enabled && !this.buildingEditDraft) return;
 
     if (event.key === 'Escape') {
+      this.cancelBuildingDraft();
       this.buildingModeState.exit();
-      this.buildingGhostPreviewRenderer.hide();
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      this.confirmBuildingDraft();
       event.preventDefault();
       return;
     }
 
     if (event.key === 'Delete' || event.key === 'Backspace') {
+      this.cancelBuildingDraft();
       this.buildingModeState.enterRemoveMode();
-      this.buildingGhostPreviewRenderer.hide();
       event.preventDefault();
       return;
     }
 
     if (event.key === 'r' || event.key === 'R') {
-      this.buildingModeState.rotateNext();
+      this.rotateBuildingDraftOrMode();
       event.preventDefault();
       return;
     }
 
     if (event.key === 'PageUp') {
-      this.buildingModeState.setCurrentZ(mode.currentZ + 1);
+      this.setBuildingDraftOrModeLayer((this.buildingEditDraft?.z ?? mode.currentZ) + 1);
       event.preventDefault();
       return;
     }
 
     if (event.key === 'PageDown') {
-      this.buildingModeState.setCurrentZ(Math.max(0, mode.currentZ - 1));
+      this.setBuildingDraftOrModeLayer(Math.max(0, (this.buildingEditDraft?.z ?? mode.currentZ) - 1));
       event.preventDefault();
     }
   }
@@ -428,10 +418,17 @@ export class GameApp {
       case 'BUILD_PLACED':
         this.buildingOccupancy.addOrUpdate(event.part);
         this.buildingPlacementRenderer.addOrUpdate(event.part);
+        this.clearBuildingDraftAfterServerAck();
+        return;
+      case 'BUILD_UPDATED':
+        this.buildingOccupancy.addOrUpdate(event.part);
+        this.buildingPlacementRenderer.addOrUpdate(event.part);
+        this.clearBuildingDraftAfterServerAck();
         return;
       case 'BUILD_REMOVED':
         this.buildingOccupancy.remove(event.entityId);
         this.buildingPlacementRenderer.remove(event.entityId);
+        if (this.buildingEditDraft?.entityId === event.entityId) this.cancelBuildingDraft();
         return;
       case 'BUILD_DOOR_UPDATED':
         this.buildingOccupancy.updateDoor(event.entityId, event.open);
@@ -445,38 +442,122 @@ export class GameApp {
     }
   }
 
+  private beginNewBuildingDraft(partId: BuildPartId): void {
+    const me = this.findMe();
+    const mode = this.buildingModeState.getSnapshot();
+    const center = me ? screenToGridApprox(me.x, me.y, mode.currentZ) : { x: 0, y: 0, z: mode.currentZ };
+    this.updateBuildingDraft({ source: 'new', partId, x: center.x, y: center.y, z: center.z, rotation: mode.rotation });
+  }
+
+  private beginExistingBuildingDraft(part: PlacedBuildPart): void {
+    this.buildingModeState.enter(part.partId);
+    this.buildingModeState.setCurrentZ(part.z);
+    this.updateBuildingDraft({ source: 'existing', entityId: part.entityId, partId: part.partId, x: part.x, y: part.y, z: part.z, rotation: part.rotation });
+  }
+
+  private updateBuildingDraft(draft: BuildingEditDraft): void {
+    this.buildingEditDraft = draft;
+    this.buildingModeState.setCurrentZ(draft.z);
+    const canPlace = this.canConfirmBuildingDraft(draft).ok;
+    this.buildingGhostPreviewRenderer.show({ partId: draft.partId, x: draft.x, y: draft.y, z: draft.z, rotation: draft.rotation, canPlace });
+    this.buildingEditControls.confirm.disabled = !canPlace;
+    this.buildingEditControls.root.classList.toggle('is-invalid', !canPlace);
+    this.syncBuildingControlsPosition();
+  }
+
+  private rotateBuildingDraftOrMode(): void {
+    if (this.buildingEditDraft) {
+      this.updateBuildingDraft({ ...this.buildingEditDraft, rotation: ((this.buildingEditDraft.rotation + 1) % 4) as BuildRotation });
+      return;
+    }
+    this.buildingModeState.rotateNext();
+  }
+
+  private setBuildingDraftOrModeLayer(z: number): void {
+    const nextZ = Math.max(0, Math.floor(z));
+    if (this.buildingEditDraft) {
+      this.updateBuildingDraft({ ...this.buildingEditDraft, z: nextZ });
+      return;
+    }
+    this.buildingModeState.setCurrentZ(nextZ);
+  }
+
+  private canConfirmBuildingDraft(draft: BuildingEditDraft): { ok: boolean; reason?: string } {
+    const definition = BUILD_PARTS[draft.partId];
+    if (!definition) return { ok: false, reason: '부품 정의 없음' };
+    const check = this.buildingOccupancy.canPlaceIgnoring(definition, draft.x, draft.y, draft.z, draft.rotation, draft.entityId ?? null);
+    return check.ok ? { ok: true } : { ok: false, reason: check.reason };
+  }
+
+  private confirmBuildingDraft(): void {
+    const draft = this.buildingEditDraft;
+    if (!draft || !this.canConfirmBuildingDraft(draft).ok) return;
+
+    if (draft.source === 'existing' && draft.entityId) {
+      this.network.send({ type: 'BUILD_UPDATE_REQUEST', requestId: crypto.randomUUID(), entityId: draft.entityId, x: draft.x, y: draft.y, z: draft.z, rotation: draft.rotation });
+      return;
+    }
+
+    this.network.send({ type: 'BUILD_PLACE_REQUEST', requestId: crypto.randomUUID(), partId: draft.partId, x: draft.x, y: draft.y, z: draft.z, rotation: draft.rotation });
+  }
+
+  private cancelBuildingDraft(): void {
+    this.buildingEditDraft = null;
+    this.buildingDragState = null;
+    this.buildingGhostPreviewRenderer.hide();
+    this.buildingEditControls.root.hidden = true;
+  }
+
+  private clearBuildingDraftAfterServerAck(): void {
+    this.buildingEditDraft = null;
+    this.buildingDragState = null;
+    this.buildingGhostPreviewRenderer.hide();
+    this.buildingEditControls.root.hidden = true;
+  }
+
+  private syncBuildingControlsPosition(): void {
+    const draft = this.buildingEditDraft;
+    if (!draft || this.editorMode) {
+      this.buildingEditControls.root.hidden = true;
+      return;
+    }
+
+    const screen = gridToScreen(draft.x, draft.y, draft.z);
+    const global = this.world.toGlobal({ x: screen.x, y: screen.y });
+    this.buildingEditControls.root.hidden = false;
+    this.buildingEditControls.root.style.left = `${Math.round(global.x - 56)}px`;
+    this.buildingEditControls.root.style.top = `${Math.round(global.y + 38)}px`;
+  }
+
+  private installBuildingEditControls(): void {
+    this.buildingEditControls.move.addEventListener('pointerdown', (event) => {
+      if (!this.buildingEditDraft) return;
+      this.buildingDragState = { pointerId: event.pointerId, z: this.buildingEditDraft.z };
+      this.buildingEditControls.move.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    });
+    this.buildingEditControls.rotate.addEventListener('click', () => this.rotateBuildingDraftOrMode());
+    this.buildingEditControls.confirm.addEventListener('click', () => this.confirmBuildingDraft());
+    this.buildingEditControls.cancel.addEventListener('click', () => this.cancelBuildingDraft());
+  }
+
   private pointerToBuildingGrid(event: PointerEvent, z: number): { x: number; y: number; z: number } {
     const rect = this.app.canvas.getBoundingClientRect();
-    const local = this.world.toLocal({
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    });
-
+    const local = this.world.toLocal({ x: event.clientX - rect.left, y: event.clientY - rect.top });
     return screenToGridApprox(local.x, local.y, z);
   }
 
   private handleGatherInput(): void {
     if (!this.input.consumeGather()) return;
-
     const me = this.findMe();
     if (!me) return;
-
-    const target = this.resourceRenderer.getClosestAlive(
-      this.getCurrentCellResources(),
-      me.x,
-      me.y,
-      this.gameplayConfig.gatherRange,
-    );
-
+    const target = this.resourceRenderer.getClosestAlive(this.getCurrentCellResources(), me.x, me.y, this.gameplayConfig.gatherRange);
     this.inputSendSystem.sendGather(target?.id);
   }
 
   private getCurrentCellResources(): ResourceSnapshot[] {
     const active = getActiveCell();
-    return this.snapshotSystem.snapshot.resources.filter((resource) => (
-      resource.cellX === active.gridX &&
-      resource.cellY === active.gridY
-    ));
+    return this.snapshotSystem.snapshot.resources.filter((resource) => resource.cellX === active.gridX && resource.cellY === active.gridY);
   }
 
   private async loadWorldMap(): Promise<void> {
@@ -487,6 +568,30 @@ export class GameApp {
   private findMe(): PlayerSnapshot | null {
     return this.snapshotSystem.findMe(this.myPlayerId);
   }
+}
+
+function createBuildingEditControls(): {
+  root: HTMLDivElement;
+  move: HTMLButtonElement;
+  rotate: HTMLButtonElement;
+  confirm: HTMLButtonElement;
+  cancel: HTMLButtonElement;
+} {
+  const root = document.createElement('div');
+  root.className = 'building-edit-controls';
+  root.hidden = true;
+  root.innerHTML = `
+    <button type="button" class="building-edit-control" data-building-edit-move title="드래그해서 이동">↔</button>
+    <button type="button" class="building-edit-control" data-building-edit-rotate title="회전 / 슬롯 변경">⟳</button>
+    <button type="button" class="building-edit-control is-confirm" data-building-edit-confirm title="건설 확정">✓</button>
+    <button type="button" class="building-edit-control is-cancel" data-building-edit-cancel title="취소">×</button>
+  `;
+  const move = root.querySelector<HTMLButtonElement>('[data-building-edit-move]');
+  const rotate = root.querySelector<HTMLButtonElement>('[data-building-edit-rotate]');
+  const confirm = root.querySelector<HTMLButtonElement>('[data-building-edit-confirm]');
+  const cancel = root.querySelector<HTMLButtonElement>('[data-building-edit-cancel]');
+  if (!move || !rotate || !confirm || !cancel) throw new Error('Missing building edit controls');
+  return { root, move, rotate, confirm, cancel };
 }
 
 function isEditorEnabled(): boolean {
