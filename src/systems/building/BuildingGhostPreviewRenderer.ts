@@ -1,6 +1,6 @@
 import { Container } from 'pixi.js';
 import { BUILD_PARTS } from './BuildingParts';
-import { getIsoZIndex, gridToScreen } from './IsoBuildingMath';
+import { getIsoZIndex } from './IsoBuildingMath';
 import { BuildingPlacementRenderer } from './BuildingPlacementRenderer';
 import type { BuildPartId, BuildRotation, PlacedBuildPart } from './BuildingTypes';
 
@@ -47,17 +47,9 @@ export class BuildingGhostPreviewRenderer {
 
     this.visiblePartId = preview.partId;
     this.partRenderer.addOrUpdate(ghostPart);
-    this.partRenderer.container.alpha = 0.62;
-    this.partRenderer.container.tint = preview.canPlace ? 0x74ff8f : 0xff5a5a;
+    this.partRenderer.container.alpha = preview.canPlace ? 0.62 : 0.36;
     this.partRenderer.container.visible = true;
-
-    const screen = gridToScreen(preview.x, preview.y, preview.z);
-    this.container.x = 0;
-    this.container.y = 0;
     this.container.zIndex = getIsoZIndex(preview.x, preview.y, preview.z, 900);
-
-    // Keep the explicit access so future anchor debugging is straightforward.
-    void screen;
   }
 
   hide(): void {
