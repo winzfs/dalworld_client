@@ -29,7 +29,7 @@ export type ServerMessageRouterContext = {
   setMyPlayerId: (playerId: string) => void;
   setWorldInfo: (world: WorldInfo) => void;
   setGameplayConfig: (gameplay: PublicGameplayConfig | undefined) => void;
-  setTimeOfDay: (state: TimeOfDayState | undefined) => void;
+  setTimeOfDay?: (state: TimeOfDayState | undefined) => void;
   redrawWorld: () => void;
   reloadWorldMap: () => void;
   onBuildingEvent?: (event: BuildingServerEvent) => void;
@@ -80,7 +80,7 @@ export class ServerMessageRouter {
     this.context.setMyPlayerId(message.playerId);
     this.context.setWorldInfo(message.world);
     this.context.setGameplayConfig(message.gameplay);
-    this.context.setTimeOfDay(message.timeOfDay);
+    this.context.setTimeOfDay?.(message.timeOfDay);
     setRuntimeWorldMap(message.map);
     this.context.cameraSystem.setWorldSize(message.world);
     this.context.redrawWorld();
@@ -103,7 +103,7 @@ export class ServerMessageRouter {
   }
 
   private handleSnapshot(message: Extract<ServerToClientMessage, { type: 'snapshot' }>): void {
-    this.context.setTimeOfDay(message.timeOfDay);
+    this.context.setTimeOfDay?.(message.timeOfDay);
 
     const snapshot = this.context.snapshotSystem.apply({
       myPlayerId: this.context.getMyPlayerId(),
