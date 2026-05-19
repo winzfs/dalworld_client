@@ -1,5 +1,6 @@
-import { Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import type { ResourceSnapshot } from '../protocol/messages';
+import type { WorldMapSourceRect } from '../worldMap/types';
 
 const ASSET_BASE = '/assets/tilesets/fantasy/Art';
 
@@ -28,8 +29,11 @@ type ResourceView = {
   fallback: Graphics;
   hpBar: Graphics;
   sprite: Sprite | null;
+  ownedTexture: Texture | null;
   type: ResourceSnapshot['type'];
   assetUrl?: string;
+  assetScale?: number;
+  sourceRect?: WorldMapSourceRect;
 };
 
 type ResourceTextures = Record<ResourceSnapshot['type'], Texture[]>;
@@ -60,7 +64,7 @@ export class ResourceRenderer {
       view.container.position.set(resource.x, resource.y);
       view.container.zIndex = Math.round(resource.y);
 
-      if (!view.sprite || view.assetUrl !== resource.assetUrl || view.type !== resource.type) {
+      if (shouldReapplySprite(view, resource)) {
         this.applySprite(view, resource);
       }
 
@@ -88,8 +92,7 @@ export class ResourceRenderer {
 
     for (const [id, view] of this.views) {
       if (!seen.has(id)) {
-        this.layer.removeChild(view.container);
-        view.container.destroy({ children: true });
+        this.destroyView(view);
         this.views.delete(id);
       }
     }
@@ -127,7 +130,13 @@ export class ResourceRenderer {
     };
 
     for (const [id, view] of this.views) {
-      this.applySprite(view, { id, type: view.type, assetUrl: view.assetUrl });
+      this.applySprite(view, {
+        id,
+        type: view.type,
+        assetUrl: view.assetUrl,
+        assetScale: view.assetScale,
+        sourceRect: view.sourceRect,
+      });
     }
   }
 
@@ -149,22 +158,36 @@ export class ResourceRenderer {
       fallback,
       hpBar,
       sprite: null,
+      ownedTexture: null,
       type: resource.type,
       assetUrl: resource.assetUrl,
+      assetScale: resource.assetScale,
+      sourceRect: cloneSourceRect(resource.sourceRect),
     };
 
     this.applySprite(view, resource);
     return view;
   }
 
-  private applySprite(view: ResourceView, resource: Pick<ResourceSnapshot, 'id' | 'type' | 'assetUrl'>): void {
+  private applySprite(
+    view: ResourceView,
+    resource: Pick<ResourceSnapshot, 'id' | 'type' | 'assetUrl' | 'assetScale' | 'sourceRect'>,
+  ): void {
     view.type = resource.type;
     view.assetUrl = resource.assetUrl;
+    view.assetScale = resource.assetScale;
+    view.sourceRect = cloneSourceRect(resource.sourceRect);
 
     if (resource.assetUrl) {
       void this.loadAssetTexture(resource.assetUrl).then((texture) => {
         if (!texture || this.views.get(resource.id) !== view) return;
-        this.setSpriteTexture(view, texture, resource.type, false);
+        const displayTexture = resource.sourceRect
+          ? this.createSlicedTexture(view, texture, resource.sourceRect)
+          : texture;
+        this.setSpriteTexture(view, displayTexture, resource.type, {
+          useDefaultResourceScale: false,
+          scale: normalizeScale(resource.assetScale),
+        });
       });
       return;
     }
@@ -173,26 +196,43 @@ export class ResourceRenderer {
     if (!list || list.length === 0) return;
 
     const texture = list[pickStableIndex(resource.id, list.length)];
-    this.setSpriteTexture(view, texture, resource.type, true);
+    this.setSpriteTexture(view, texture, resource.type, {
+      useDefaultResourceScale: true,
+      scale: resource.type === 'tree' ? 1.55 : 1.8,
+    });
   }
 
   private setSpriteTexture(
     view: ResourceView,
     texture: Texture,
     type: ResourceSnapshot['type'],
-    useDefaultResourceScale: boolean,
+    options: { useDefaultResourceScale: boolean; scale: number },
   ): void {
     if (!view.sprite) {
       view.sprite = new Sprite(texture);
-      view.sprite.anchor.set(useDefaultResourceScale ? 0.5 : 0, useDefaultResourceScale ? 1 : 0);
       view.container.addChildAt(view.sprite, 0);
     } else {
       view.sprite.texture = texture;
-      view.sprite.anchor.set(useDefaultResourceScale ? 0.5 : 0, useDefaultResourceScale ? 1 : 0);
     }
 
-    view.sprite.scale.set(useDefaultResourceScale ? (type === 'tree' ? 1.55 : 1.8) : 1);
+    view.sprite.anchor.set(options.useDefaultResourceScale ? 0.5 : 0, options.useDefaultResourceScale ? 1 : 0);
+    view.sprite.scale.set(options.scale);
     view.fallback.visible = false;
+  }
+
+  private createSlicedTexture(view: ResourceView, texture: Texture, sourceRect: WorldMapSourceRect): Texture {
+    if (view.ownedTexture && !view.ownedTexture.destroyed) {
+      view.ownedTexture.destroy(false);
+      view.ownedTexture = null;
+    }
+
+    const safeRect = shrinkSourceRect(sourceRect, texture);
+    const sliced = new Texture({
+      source: texture.source,
+      frame: new Rectangle(safeRect.x, safeRect.y, safeRect.width, safeRect.height),
+    });
+    view.ownedTexture = sliced;
+    return sliced;
   }
 
   private loadAssetTexture(url: string): Promise<Texture | null> {
@@ -205,6 +245,14 @@ export class ResourceRenderer {
       this.assetTextureCache.set(url, promise);
     }
     return promise;
+  }
+
+  private destroyView(view: ResourceView): void {
+    if (view.ownedTexture && !view.ownedTexture.destroyed) {
+      view.ownedTexture.destroy(false);
+    }
+    this.layer.removeChild(view.container);
+    view.container.destroy({ children: true });
   }
 
   private drawFallback(g: Graphics, type: ResourceSnapshot['type']): void {
@@ -254,6 +302,40 @@ function loadTexture(src: string): Promise<Texture> {
   });
 }
 
+function shouldReapplySprite(view: ResourceView, resource: ResourceSnapshot): boolean {
+  return (
+    !view.sprite ||
+    view.assetUrl !== resource.assetUrl ||
+    view.type !== resource.type ||
+    view.assetScale !== resource.assetScale ||
+    !sameSourceRect(view.sourceRect, resource.sourceRect)
+  );
+}
+
+function normalizeScale(scale: number | undefined): number {
+  return Number.isFinite(scale) && (scale as number) > 0 ? (scale as number) : 1;
+}
+
+function cloneSourceRect(sourceRect: WorldMapSourceRect | undefined): WorldMapSourceRect | undefined {
+  return sourceRect ? { ...sourceRect } : undefined;
+}
+
+function sameSourceRect(a: WorldMapSourceRect | undefined, b: WorldMapSourceRect | undefined): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
+function shrinkSourceRect(sourceRect: WorldMapSourceRect, texture: Texture): WorldMapSourceRect {
+  const maxWidth = Math.max(1, Math.floor(texture.width));
+  const maxHeight = Math.max(1, Math.floor(texture.height));
+  const x = clamp(Math.floor(sourceRect.x), 0, maxWidth - 1);
+  const y = clamp(Math.floor(sourceRect.y), 0, maxHeight - 1);
+  const width = clamp(Math.floor(sourceRect.width), 1, maxWidth - x);
+  const height = clamp(Math.floor(sourceRect.height), 1, maxHeight - y);
+  return { x, y, width, height };
+}
+
 function pickStableIndex(id: string, length: number): number {
   let hash = 2166136261;
 
@@ -263,4 +345,8 @@ function pickStableIndex(id: string, length: number): number {
   }
 
   return Math.abs(hash) % length;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
