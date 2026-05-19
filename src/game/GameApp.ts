@@ -309,7 +309,15 @@ export class GameApp {
     const me = this.findMe();
     if (!me) return;
     this.snapshotSystem.setLocalPlayer(me);
-    this.movementSystem.update({ player: me, keys: this.input.state.keys, facing: this.input.state.facing, monsters: this.snapshotSystem.snapshot.monsters, world: this.worldInfo, gameplay: this.gameplayConfig }, dt);
+    this.movementSystem.update({
+      player: me,
+      keys: this.input.state.keys,
+      facing: this.input.state.facing,
+      monsters: this.snapshotSystem.snapshot.monsters,
+      world: this.worldInfo,
+      gameplay: this.gameplayConfig,
+      buildingOccupancy: this.buildingOccupancy,
+    }, dt);
     this.playerRenderer.sync(this.snapshotSystem.snapshot.players, this.myPlayerId);
   }
 
