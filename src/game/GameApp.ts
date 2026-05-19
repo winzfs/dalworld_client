@@ -298,6 +298,7 @@ export class GameApp {
     this.monsterRenderer.update(dt);
 
     const me = this.findMe();
+    this.buildingPlacementRenderer.applyOcclusionFocus(me ? { worldX: me.x, worldY: me.y } : null);
     this.cameraSystem.update({ player: me, world: this.worldInfo, screenWidth: this.app.renderer.width, screenHeight: this.app.renderer.height });
     this.hudSystem.update({ status: this.status, tick: this.snapshotSystem.snapshot.tick, player: me, latencyMs: this.network.latencyMs, buildingMode: this.buildingModeState.getSnapshot() });
     this.syncBuildingControlsPosition();
