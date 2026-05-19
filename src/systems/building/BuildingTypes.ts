@@ -21,6 +21,9 @@ export type BuildEdge = "north" | "east" | "south" | "west";
 export type BuildCorner = "nw" | "ne" | "se" | "sw";
 export type BuildRotation = 0 | 1 | 2 | 3;
 
+const BUILD_EDGES: readonly BuildEdge[] = ["north", "east", "south", "west"];
+const BUILD_CORNERS: readonly BuildCorner[] = ["nw", "ne", "se", "sw"];
+
 export type BuildPartDefinition = {
   id: BuildPartId;
   label: string;
@@ -131,9 +134,9 @@ export type BuildingServerEvent =
   | InventorySnapshotEvent;
 
 export function rotationToEdge(rotation: BuildRotation): BuildEdge {
-  return ["north", "east", "south", "west"][rotation];
+  return BUILD_EDGES[rotation];
 }
 
 export function rotationToCorner(rotation: BuildRotation): BuildCorner {
-  return ["nw", "ne", "se", "sw"][rotation];
+  return BUILD_CORNERS[rotation];
 }
