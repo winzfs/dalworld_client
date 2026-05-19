@@ -44,6 +44,8 @@ export type ResourceSnapshot = {
   y: number;
   cellX: number;
   cellY: number;
+  /** Original map editor sprite URL, when this resource was created from a map placement. */
+  assetUrl?: string;
   hp: number;
   maxHp: number;
   /** 0 if alive, otherwise epoch ms when it will respawn */
