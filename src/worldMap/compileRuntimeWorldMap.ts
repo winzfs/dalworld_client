@@ -40,7 +40,9 @@ function compilePlacement(placement: EditorTilePlacement): WorldMapPlacement {
   const sourceRect = compileSourceRect(placement.sourceRect);
   if (sourceRect) compiled.sourceRect = sourceRect;
 
-  const gameplay = compileGameplay(placement.gameplay);
+  const gameplay = placement.layer === 'collision'
+    ? undefined
+    : compileGameplay(placement.gameplay) ?? inferGameplayFromAssetUrl(placement.assetUrl);
   if (gameplay) compiled.gameplay = gameplay;
 
   if (Number.isFinite(placement.solidColor)) {
@@ -68,6 +70,37 @@ function compileGameplay(gameplay: EditorPlacementGameplay | undefined): WorldMa
   }
 
   return undefined;
+}
+
+function inferGameplayFromAssetUrl(assetUrl: string): WorldMapPlacementGameplay | undefined {
+  const filename = getFilename(assetUrl).toLowerCase();
+
+  if (filename.startsWith('rock')) {
+    return {
+      kind: 'resource',
+      resourceType: 'stone',
+      blocksMovement: true,
+      maxHp: 100,
+      respawnMs: 35_000,
+    };
+  }
+
+  if (filename.startsWith('tree')) {
+    return {
+      kind: 'resource',
+      resourceType: 'tree',
+      blocksMovement: true,
+      maxHp: 75,
+      respawnMs: 25_000,
+    };
+  }
+
+  return undefined;
+}
+
+function getFilename(url: string): string {
+  const cleanUrl = url.split('?')[0]?.split('#')[0] ?? url;
+  return cleanUrl.split('/').pop() ?? '';
 }
 
 function compileSourceRect(sourceRect: EditorTilePlacement['sourceRect']): WorldMapSourceRect | undefined {
