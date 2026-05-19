@@ -9,8 +9,10 @@ export async function uploadWorldMap(world: EditorWorldSave): Promise<void> {
 
   const response = await fetch(url, {
     method: 'PUT',
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
     },
     body: JSON.stringify(payload),
   });
@@ -33,7 +35,14 @@ export async function uploadWorldMap(world: EditorWorldSave): Promise<void> {
 }
 
 async function fetchWorldMap(url: string): Promise<GameWorldMap | null> {
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(withCacheBuster(url), {
+    method: 'GET',
+    cache: 'no-store',
+    headers: {
+      'Cache-Control': 'no-store',
+    },
+  });
+
   if (!response.ok) {
     throw new Error(`Failed to verify uploaded world map: ${response.status}`);
   }
@@ -50,4 +59,9 @@ function createMapSignature(map: GameWorldMap | null | undefined): string {
     .join('|');
 
   return `${map.version}:${map.name}:${map.tileSize}:${map.cellSize}:${cells}`;
+}
+
+function withCacheBuster(url: string): string {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}t=${Date.now()}`;
 }
