@@ -6,6 +6,7 @@ import type {
   PublicGameplayConfig,
   WorldInfo,
 } from '../../protocol/messages';
+import type { ClientBuildingOccupancy } from '../../systems/building/ClientBuildingOccupancy';
 import { getRuntimeWorldMap, getCollisionPlacements } from '../../worldMap/runtimeMapStore';
 
 export type ClientMovementContext = {
@@ -15,6 +16,7 @@ export type ClientMovementContext = {
   monsters: MonsterSnapshot[];
   world: WorldInfo;
   gameplay: PublicGameplayConfig;
+  buildingOccupancy?: ClientBuildingOccupancy;
 };
 
 type MoveDelta = { x: number; y: number };
@@ -51,17 +53,17 @@ export class ClientMovementSystem {
     const nextX = clamp(player.x + delta.x, bounds.minX, bounds.maxX);
     const nextY = clamp(player.y + delta.y, bounds.minY, bounds.maxY);
 
-    if (canPlayerMoveFromTo(player.x, player.y, nextX, nextY, radius, context.monsters)) {
+    if (canPlayerMoveFromTo(player.x, player.y, nextX, nextY, radius, context.monsters, context.buildingOccupancy)) {
       player.x = nextX;
       player.y = nextY;
     } else {
       const axisX = clamp(player.x + delta.x, bounds.minX, bounds.maxX);
-      if (canPlayerMoveFromTo(player.x, player.y, axisX, player.y, radius, context.monsters)) {
+      if (canPlayerMoveFromTo(player.x, player.y, axisX, player.y, radius, context.monsters, context.buildingOccupancy)) {
         player.x = axisX;
       }
 
       const axisY = clamp(player.y + delta.y, bounds.minY, bounds.maxY);
-      if (canPlayerMoveFromTo(player.x, player.y, player.x, axisY, radius, context.monsters)) {
+      if (canPlayerMoveFromTo(player.x, player.y, player.x, axisY, radius, context.monsters, context.buildingOccupancy)) {
         player.y = axisY;
       }
     }
@@ -151,7 +153,12 @@ function canPlayerMoveFromTo(
   nextY: number,
   playerRadius: number,
   monsters: MonsterSnapshot[],
+  buildingOccupancy?: ClientBuildingOccupancy,
 ): boolean {
+  if (buildingOccupancy && !buildingOccupancy.canOccupyWorldCircle(nextX, nextY, playerRadius)) {
+    return false;
+  }
+
   for (const placement of getCollisionPlacements()) {
     const width = placement.sourceRect?.width ?? 32;
     const height = placement.sourceRect?.height ?? 32;
