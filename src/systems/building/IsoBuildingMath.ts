@@ -27,3 +27,14 @@ export function screenToGridApprox(screenX: number, screenY: number, z = 0): { x
 export function getIsoZIndex(x: number, y: number, z: number, offset = 0): number {
   return (x + y) * 10000 + z * 1000 + offset;
 }
+
+/**
+ * Depth value for regular world entities that use world pixel coordinates.
+ *
+ * Building parts are sorted by isometric grid coordinates. Characters and
+ * monsters still move in world-pixel coordinates, so this helper maps their
+ * foot position to the same broad depth range without requiring grid ownership.
+ */
+export function getWorldEntityZIndex(worldY: number, offset = 0): number {
+  return Math.round(worldY * 100) + offset;
+}
