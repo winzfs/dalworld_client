@@ -54,6 +54,10 @@ export type EditorTilePlacement = {
   layer: EditorLayerId;
   /** Scale captured when this object was placed. Existing placements do not change when brush scale changes. */
   scale: number;
+  /** Display width before scale. Captured so server can derive center interaction points. */
+  displayWidth?: number;
+  /** Display height before scale. Captured so server can derive center interaction points. */
+  displayHeight?: number;
   /** Optional source rectangle used when placing one tile cut from a larger tileset image. */
   sourceRect?: EditorSourceRect;
   /** Optional solid fill color. When present, renderer does not load an external texture. */
