@@ -61,7 +61,7 @@ export class BuildingPlacementRenderer {
       case 'floor': node.addChild(renderFloor(part.partId, part.rotation)); return;
       case 'wall': node.addChild(renderWallVariant(part.partId, part.rotation)); return;
       case 'roof': node.addChild(renderRoof(part.partId, part.rotation)); return;
-      case 'support': node.addChild(renderPillar(part.partId, part.rotation)); return;
+      case 'support': node.addChild(renderSupport(part.partId, part.rotation)); return;
       case 'door': node.addChild(renderDoor(part.partId, part.rotation, Boolean(part.state?.open))); return;
       case 'window': node.addChild(renderWindow(part.partId, part.rotation)); return;
     }
@@ -119,6 +119,8 @@ export class BuildingPlacementRenderer {
 
 function renderFloor(partId: BuildPartId, rotation: BuildRotation): Container {
   if (partId === 'wood_stairs' || partId === 'stone_stairs') return renderStairs(partId, rotation);
+  if (partId === 'wood_corner_stairs' || partId === 'stone_corner_stairs') return renderCornerStairs(partId, rotation);
+  if (partId === 'wood_stair_landing' || partId === 'stone_stair_landing') return renderStairLanding(partId, rotation);
   if (partId === 'wood_round_floor' || partId === 'stone_round_floor') return renderRoundFloor(partId, rotation);
   if (partId === 'wood_half_floor' || partId === 'stone_half_floor') return renderHalfFloor(partId, rotation);
 
@@ -135,6 +137,41 @@ function renderFloor(partId: BuildPartId, rotation: BuildRotation): Container {
   top.stroke({ width: 1, color: palette.accent, alpha: 0.55 });
   if (isStoneLike(partId)) drawStoneFloorDetail(detail, polygon, palette);
   else drawWoodFloorDetail(detail, polygon, palette, partId === 'deck_floor_1x1');
+  node.addChild(side, top, detail);
+  return node;
+}
+
+function renderStairLanding(partId: BuildPartId, rotation: BuildRotation): Container {
+  const node = renderFloorBase(partId, isStoneLike(partId) ? FLOOR_THICKNESS_STONE + 3 : FLOOR_THICKNESS_WOOD + 3);
+  const palette = getPalette(partId);
+  const accent = new Graphics();
+  const edge = getEdgeSegment(rotation);
+  const inner = getDiamondPoints().map((p) => ({ x: p.x * 0.72, y: p.y * 0.72 }));
+
+  drawPolygon(accent, inner, palette.highlight, 0.08);
+  accent.stroke({ width: 1, color: palette.highlight, alpha: 0.34 });
+  accent.moveTo(edge.a.x * 0.82, edge.a.y * 0.82).lineTo(edge.b.x * 0.82, edge.b.y * 0.82).stroke({ width: 3, color: palette.secondary, alpha: 0.72 });
+  for (let i = 1; i < 4; i += 1) {
+    const p = interpolate(edge.a, edge.b, i / 4);
+    accent.circle(p.x * 0.78, p.y * 0.78, 1.4).fill({ color: palette.highlight, alpha: 0.44 });
+  }
+  node.addChild(accent);
+  return node;
+}
+
+function renderFloorBase(partId: BuildPartId, thickness: number): Container {
+  const node = new Container();
+  const palette = getPalette(partId);
+  const polygon = getDiamondPoints();
+  const side = new Graphics();
+  const top = new Graphics();
+  const detail = new Graphics();
+
+  drawPolygon(side, polygon.map((p) => ({ x: p.x, y: p.y + thickness })), palette.secondary, 1);
+  drawPolygon(top, polygon, palette.primary, 1);
+  top.stroke({ width: 1, color: palette.accent, alpha: 0.58 });
+  if (isStoneLike(partId)) drawStoneFloorDetail(detail, polygon, palette);
+  else drawWoodFloorDetail(detail, polygon, palette, true);
   node.addChild(side, top, detail);
   return node;
 }
@@ -192,62 +229,83 @@ function renderStairs(partId: BuildPartId, rotation: BuildRotation): Container {
     const frontB = interpolate3d(lowEdge.b, highEdge.b, t0, rise * t0);
     const backA = interpolate3d(lowEdge.a, highEdge.a, t1, rise * t1);
     const backB = interpolate3d(lowEdge.b, highEdge.b, t1, rise * t1);
-    const tread = new Graphics();
-    const riser = new Graphics();
-    const side = new Graphics();
-
-    tread
-      .moveTo(frontA.x, frontA.y)
-      .lineTo(frontB.x, frontB.y)
-      .lineTo(backB.x, backB.y)
-      .lineTo(backA.x, backA.y)
-      .lineTo(frontA.x, frontA.y)
-      .fill({ color: shadeStep(palette.primary, i), alpha: 1 })
-      .stroke({ width: 1, color: palette.accent, alpha: 0.48 });
-
-    if (i > 0) {
-      const lowerA = interpolate3d(lowEdge.a, highEdge.a, t0, rise * (t0 - 1 / steps));
-      const lowerB = interpolate3d(lowEdge.b, highEdge.b, t0, rise * (t0 - 1 / steps));
-      riser
-        .moveTo(lowerA.x, lowerA.y)
-        .lineTo(lowerB.x, lowerB.y)
-        .lineTo(frontB.x, frontB.y)
-        .lineTo(frontA.x, frontA.y)
-        .lineTo(lowerA.x, lowerA.y)
-        .fill({ color: palette.secondary, alpha: 0.92 })
-        .stroke({ width: 1, color: palette.shadow, alpha: 0.24 });
-    }
-
-    side
-      .moveTo(frontB.x, frontB.y)
-      .lineTo(backB.x, backB.y)
-      .lineTo(backB.x, backB.y + 3)
-      .lineTo(frontB.x, frontB.y + 3)
-      .lineTo(frontB.x, frontB.y)
-      .fill({ color: palette.shadow, alpha: 0.45 });
-
-    if (isStoneLike(partId)) {
-      const mid = interpolate(frontA, frontB, 0.5);
-      tread.moveTo(mid.x, mid.y).lineTo(mid.x, mid.y + 5).stroke({ width: 1, color: palette.shadow, alpha: 0.36 });
-    } else {
-      const grainA = interpolate(frontA, frontB, 0.25);
-      const grainB = interpolate(backA, backB, 0.25);
-      tread.moveTo(grainA.x, grainA.y).lineTo(grainB.x, grainB.y).stroke({ width: 1, color: palette.shadow, alpha: 0.22 });
-      const grainC = interpolate(frontA, frontB, 0.7);
-      const grainD = interpolate(backA, backB, 0.7);
-      tread.moveTo(grainC.x, grainC.y).lineTo(grainD.x, grainD.y).stroke({ width: 1, color: palette.highlight, alpha: 0.18 });
-    }
-
-    node.addChild(riser, side, tread);
+    drawStep(node, palette, frontA, frontB, backA, backB, i, steps, isStoneLike(partId));
   }
 
   const railShadow = new Graphics();
-  railShadow
-    .moveTo(highEdge.a.x, highEdge.a.y - rise)
-    .lineTo(highEdge.b.x, highEdge.b.y - rise)
-    .stroke({ width: 2, color: palette.highlight, alpha: 0.42 });
+  railShadow.moveTo(highEdge.a.x, highEdge.a.y - rise).lineTo(highEdge.b.x, highEdge.b.y - rise).stroke({ width: 2, color: palette.highlight, alpha: 0.42 });
   node.addChild(railShadow);
   return node;
+}
+
+function renderCornerStairs(partId: BuildPartId, rotation: BuildRotation): Container {
+  const node = new Container();
+  const palette = getPalette(partId);
+  const center = { x: 0, y: 0 };
+  const outer = getCornerPoint(rotation);
+  const first = getCornerPoint(((rotation + 1) % 4) as BuildRotation);
+  const second = getCornerPoint(((rotation + 2) % 4) as BuildRotation);
+  const steps = 6;
+  const halfRise = ISO_LAYER_HEIGHT * 0.36;
+  const fullRise = ISO_LAYER_HEIGHT * 0.74;
+
+  for (let i = 0; i < 3; i += 1) {
+    const t0 = i / 3;
+    const t1 = (i + 1) / 3;
+    const frontA = interpolate3d(first, center, t0, halfRise * t0);
+    const frontB = interpolate3d(outer, center, t0, halfRise * t0);
+    const backA = interpolate3d(first, center, t1, halfRise * t1);
+    const backB = interpolate3d(outer, center, t1, halfRise * t1);
+    drawStep(node, palette, frontA, frontB, backA, backB, i, steps, isStoneLike(partId));
+  }
+
+  const landing = new Graphics();
+  const landingA = interpolate3d(first, center, 1, halfRise);
+  const landingB = interpolate3d(outer, center, 1, halfRise);
+  const landingC = interpolate3d(second, center, 1, halfRise);
+  landing.moveTo(landingA.x, landingA.y).lineTo(landingB.x, landingB.y).lineTo(landingC.x, landingC.y).lineTo(landingA.x, landingA.y).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.5 });
+  node.addChild(landing);
+
+  for (let i = 0; i < 3; i += 1) {
+    const t0 = i / 3;
+    const t1 = (i + 1) / 3;
+    const frontA = interpolate3d(outer, second, t0, halfRise + (fullRise - halfRise) * t0);
+    const frontB = interpolate3d(center, second, t0, halfRise + (fullRise - halfRise) * t0);
+    const backA = interpolate3d(outer, second, t1, halfRise + (fullRise - halfRise) * t1);
+    const backB = interpolate3d(center, second, t1, halfRise + (fullRise - halfRise) * t1);
+    drawStep(node, palette, frontA, frontB, backA, backB, i + 3, steps, isStoneLike(partId));
+  }
+
+  const trim = new Graphics();
+  trim.moveTo(second.x, second.y - fullRise).lineTo(center.x, center.y - fullRise).stroke({ width: 2, color: palette.highlight, alpha: 0.42 });
+  node.addChild(trim);
+  return node;
+}
+
+function drawStep(node: Container, palette: Palette, frontA: Point, frontB: Point, backA: Point, backB: Point, index: number, total: number, stone: boolean): void {
+  const tread = new Graphics();
+  const riser = new Graphics();
+  const side = new Graphics();
+
+  tread.moveTo(frontA.x, frontA.y).lineTo(frontB.x, frontB.y).lineTo(backB.x, backB.y).lineTo(backA.x, backA.y).lineTo(frontA.x, frontA.y).fill({ color: shadeStep(palette.primary, index), alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.48 });
+  if (index > 0) {
+    riser.moveTo(frontA.x, frontA.y + 5).lineTo(frontB.x, frontB.y + 5).lineTo(frontB.x, frontB.y).lineTo(frontA.x, frontA.y).lineTo(frontA.x, frontA.y + 5).fill({ color: palette.secondary, alpha: 0.88 }).stroke({ width: 1, color: palette.shadow, alpha: 0.22 });
+  }
+  side.moveTo(frontB.x, frontB.y).lineTo(backB.x, backB.y).lineTo(backB.x, backB.y + 3).lineTo(frontB.x, frontB.y + 3).lineTo(frontB.x, frontB.y).fill({ color: palette.shadow, alpha: 0.38 });
+
+  if (stone) {
+    const mid = interpolate(frontA, frontB, 0.5);
+    tread.moveTo(mid.x, mid.y).lineTo(mid.x, mid.y + 5).stroke({ width: 1, color: palette.shadow, alpha: 0.34 });
+  } else {
+    const grainA = interpolate(frontA, frontB, 0.25);
+    const grainB = interpolate(backA, backB, 0.25);
+    const grainC = interpolate(frontA, frontB, 0.7);
+    const grainD = interpolate(backA, backB, 0.7);
+    tread.moveTo(grainA.x, grainA.y).lineTo(grainB.x, grainB.y).stroke({ width: 1, color: palette.shadow, alpha: 0.22 });
+    tread.moveTo(grainC.x, grainC.y).lineTo(grainD.x, grainD.y).stroke({ width: 1, color: palette.highlight, alpha: 0.18 });
+  }
+  if (index === total - 1) tread.stroke({ width: 1, color: palette.highlight, alpha: 0.24 });
+  node.addChild(riser, side, tread);
 }
 
 function renderWallVariant(partId: BuildPartId, rotation: BuildRotation): Container {
@@ -279,10 +337,7 @@ function renderWallEnd(partId: BuildPartId, rotation: BuildRotation): Container 
   const palette = getPalette(partId);
   const end = getEdgeSegment(rotation).b;
   const cap = new Graphics();
-  cap
-    .roundRect(end.x - 5, end.y - WALL_RENDER_HEIGHT - 3, 10, WALL_RENDER_HEIGHT + 6, 2)
-    .fill({ color: palette.secondary, alpha: 1 })
-    .stroke({ width: 1, color: palette.highlight, alpha: 0.48 });
+  cap.roundRect(end.x - 5, end.y - WALL_RENDER_HEIGHT - 3, 10, WALL_RENDER_HEIGHT + 6, 2).fill({ color: palette.secondary, alpha: 1 }).stroke({ width: 1, color: palette.highlight, alpha: 0.48 });
   cap.ellipse(end.x, end.y - WALL_RENDER_HEIGHT - 3, 6, 3).fill({ color: palette.highlight, alpha: 0.65 });
   node.addChild(cap);
   return node;
@@ -329,6 +384,8 @@ function renderRoundWall(partId: BuildPartId, rotation: BuildRotation): Containe
 
 function renderRoof(partId: BuildPartId, rotation: BuildRotation): Container {
   if (partId === 'wood_roof_slope' || partId === 'stone_roof_slope' || partId === 'thatch_roof_slope') return renderSlopedRoof(partId, rotation);
+  if (partId === 'wood_roof_corner' || partId === 'stone_roof_corner' || partId === 'thatch_roof_corner') return renderRoofCorner(partId, rotation);
+  if (partId === 'wood_roof_ridge' || partId === 'stone_roof_ridge' || partId === 'thatch_roof_ridge') return renderRoofRidge(partId, rotation);
   if (partId === 'wood_eave' || partId === 'stone_eave' || partId === 'thatch_eave') return renderEave(partId, rotation);
 
   const node = new Container();
@@ -374,6 +431,63 @@ function renderSlopedRoof(partId: BuildPartId, rotation: BuildRotation): Contain
   return node;
 }
 
+function renderRoofCorner(partId: BuildPartId, rotation: BuildRotation): Container {
+  const node = new Container();
+  const palette = getPalette(partId);
+  const corner = getCornerPoint(rotation);
+  const left = getCornerPoint(((rotation + 1) % 4) as BuildRotation);
+  const right = getCornerPoint(((rotation + 3) % 4) as BuildRotation);
+  const center = { x: 0, y: -ISO_LAYER_HEIGHT * 0.48 };
+  const lift = ISO_LAYER_HEIGHT * 0.82;
+  const skirt = new Graphics();
+  const faceA = new Graphics();
+  const faceB = new Graphics();
+  const detail = new Graphics();
+
+  const peak = { x: center.x, y: center.y - lift * 0.32 };
+  const c = { x: corner.x * 1.08, y: corner.y + 4 };
+  const l = { x: left.x * 1.06, y: left.y + 2 };
+  const r = { x: right.x * 1.06, y: right.y + 2 };
+
+  skirt.moveTo(l.x, l.y).lineTo(c.x, c.y).lineTo(r.x, r.y).lineTo(r.x, r.y + 7).lineTo(c.x, c.y + 9).lineTo(l.x, l.y + 7).lineTo(l.x, l.y).fill({ color: palette.shadow, alpha: 0.72 });
+  faceA.moveTo(peak.x, peak.y).lineTo(l.x, l.y).lineTo(c.x, c.y).lineTo(peak.x, peak.y).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.54 });
+  faceB.moveTo(peak.x, peak.y).lineTo(c.x, c.y).lineTo(r.x, r.y).lineTo(peak.x, peak.y).fill({ color: palette.secondary, alpha: 0.96 }).stroke({ width: 1, color: palette.accent, alpha: 0.42 });
+  detail.moveTo(peak.x, peak.y).lineTo(c.x, c.y).stroke({ width: 3, color: palette.highlight, alpha: 0.42 });
+  for (let i = 1; i < 4; i += 1) {
+    detail.moveTo(interpolate(peak, l, i / 4).x, interpolate(peak, l, i / 4).y).lineTo(interpolate(peak, c, i / 4).x, interpolate(peak, c, i / 4).y).stroke({ width: 1, color: palette.shadow, alpha: 0.22 });
+    detail.moveTo(interpolate(peak, c, i / 4).x, interpolate(peak, c, i / 4).y).lineTo(interpolate(peak, r, i / 4).x, interpolate(peak, r, i / 4).y).stroke({ width: 1, color: palette.shadow, alpha: 0.2 });
+  }
+  if (partId === 'thatch_roof_corner') drawThatchStrokes(detail, [peak, l, c, r], palette);
+  node.addChild(skirt, faceA, faceB, detail);
+  return node;
+}
+
+function renderRoofRidge(partId: BuildPartId, rotation: BuildRotation): Container {
+  const node = new Container();
+  const palette = getPalette(partId);
+  const segment = getEdgeSegment(rotation);
+  const lift = ISO_LAYER_HEIGHT * 0.86;
+  const a = { x: segment.a.x * 0.88, y: segment.a.y - lift };
+  const b = { x: segment.b.x * 0.88, y: segment.b.y - lift };
+  const cap = new Graphics();
+  const detail = new Graphics();
+
+  cap.moveTo(a.x, a.y - 3).lineTo(b.x, b.y - 3).lineTo(b.x + 4, b.y + 3).lineTo(a.x + 4, a.y + 3).lineTo(a.x, a.y - 3).fill({ color: palette.secondary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.62 });
+  detail.moveTo(a.x, a.y - 4).lineTo(b.x, b.y - 4).stroke({ width: 2, color: palette.highlight, alpha: 0.42 });
+  for (let i = 1; i < 5; i += 1) {
+    const p = interpolate(a, b, i / 5);
+    detail.moveTo(p.x, p.y - 4).lineTo(p.x + 3, p.y + 3).stroke({ width: 1, color: palette.shadow, alpha: 0.34 });
+  }
+  if (partId === 'thatch_roof_ridge') {
+    for (let i = -3; i <= 3; i += 1) {
+      const p = interpolate(a, b, (i + 4) / 8);
+      detail.moveTo(p.x, p.y - 6).lineTo(p.x + i, p.y + 5).stroke({ width: 1, color: palette.highlight, alpha: 0.28 });
+    }
+  }
+  node.addChild(cap, detail);
+  return node;
+}
+
 function renderEave(partId: BuildPartId, rotation: BuildRotation): Container {
   const node = new Container();
   const palette = getPalette(partId);
@@ -390,6 +504,60 @@ function renderEave(partId: BuildPartId, rotation: BuildRotation): Container {
     detail.moveTo(p.x, p.y).lineTo(p.x, p.y + down).stroke({ width: 1, color: palette.highlight, alpha: 0.35 });
   }
   node.addChild(trim, detail);
+  return node;
+}
+
+function renderSupport(partId: BuildPartId, rotation: BuildRotation): Container {
+  if (partId === 'wood_beam_horizontal' || partId === 'stone_beam_horizontal') return renderHorizontalBeam(partId, rotation);
+  if (partId === 'wood_diagonal_support' || partId === 'stone_diagonal_support') return renderDiagonalSupport(partId, rotation);
+  return renderPillar(partId, rotation);
+}
+
+function renderHorizontalBeam(partId: BuildPartId, rotation: BuildRotation): Container {
+  const node = new Container();
+  const palette = getPalette(partId);
+  const segment = getEdgeSegment(rotation);
+  const a = trimToward(segment.a, segment.b, 0.08);
+  const b = trimToward(segment.b, segment.a, 0.08);
+  const yLift = WALL_RENDER_HEIGHT + 4;
+  const body = new Graphics();
+  const top = new Graphics();
+  const detail = new Graphics();
+  const depth = 8;
+
+  body.moveTo(a.x, a.y - yLift).lineTo(b.x, b.y - yLift).lineTo(b.x, b.y - yLift + depth).lineTo(a.x, a.y - yLift + depth).lineTo(a.x, a.y - yLift).fill({ color: palette.primary, alpha: 1 }).stroke({ width: 1, color: palette.accent, alpha: 0.54 });
+  top.moveTo(a.x + 3, a.y - yLift - 5).lineTo(b.x + 3, b.y - yLift - 5).lineTo(b.x, b.y - yLift).lineTo(a.x, a.y - yLift).lineTo(a.x + 3, a.y - yLift - 5).fill({ color: palette.highlight, alpha: 0.38 });
+  for (let i = 1; i < 5; i += 1) {
+    const p = interpolate(a, b, i / 5);
+    detail.moveTo(p.x, p.y - yLift - 2).lineTo(p.x, p.y - yLift + depth).stroke({ width: 1, color: palette.shadow, alpha: 0.26 });
+  }
+  if (!isStoneLike(partId)) detail.moveTo(a.x + 4, a.y - yLift + 2).lineTo(b.x - 4, b.y - yLift + 4).stroke({ width: 1, color: palette.highlight, alpha: 0.18 });
+  node.addChild(body, top, detail);
+  return node;
+}
+
+function renderDiagonalSupport(partId: BuildPartId, rotation: BuildRotation): Container {
+  const node = new Container();
+  const palette = getPalette(partId);
+  const segment = getEdgeSegment(rotation);
+  const a = trimToward(segment.a, segment.b, 0.18);
+  const b = trimToward(segment.b, segment.a, 0.18);
+  const bottom = rotation % 2 === 0 ? a : b;
+  const top = rotation % 2 === 0 ? b : a;
+  const brace = new Graphics();
+  const shadow = new Graphics();
+  const width = isStoneLike(partId) ? 8 : 6;
+
+  shadow.moveTo(bottom.x + 2, bottom.y - 4).lineTo(top.x + 2, top.y - WALL_RENDER_HEIGHT + 5).stroke({ width: width + 3, color: palette.shadow, alpha: 0.28 });
+  brace.moveTo(bottom.x, bottom.y - 6).lineTo(top.x, top.y - WALL_RENDER_HEIGHT + 6).stroke({ width, color: palette.primary, alpha: 1 });
+  brace.moveTo(bottom.x, bottom.y - 6).lineTo(top.x, top.y - WALL_RENDER_HEIGHT + 6).stroke({ width: 1, color: palette.highlight, alpha: 0.5 });
+  if (isStoneLike(partId)) {
+    for (let i = 1; i < 4; i += 1) {
+      const p = interpolate({ x: bottom.x, y: bottom.y - 6 }, { x: top.x, y: top.y - WALL_RENDER_HEIGHT + 6 }, i / 4);
+      brace.circle(p.x, p.y, 1.4).fill({ color: palette.shadow, alpha: 0.45 });
+    }
+  }
+  node.addChild(shadow, brace);
   return node;
 }
 
@@ -485,8 +653,8 @@ function renderPillar(partId: BuildPartId, rotation: BuildRotation): Container {
 function getPartLayerOffset(part: PlacedBuildPart): number {
   const definition = BUILD_PARTS[part.partId];
   switch (definition?.category) {
-    case 'floor': return part.partId === 'wood_stairs' || part.partId === 'stone_stairs' ? 95 + part.rotation : 10;
-    case 'support': return 180 + part.rotation;
+    case 'floor': return part.partId.includes('stairs') ? 95 + part.rotation : 10;
+    case 'support': return part.partId.includes('beam') || part.partId.includes('diagonal') ? 260 + part.rotation : 180 + part.rotation;
     case 'wall':
     case 'door':
     case 'window': return 220 + part.rotation;
@@ -551,6 +719,8 @@ function getPalette(partId: BuildPartId): Palette {
     case 'stone_pillar':
     case 'stone_door':
     case 'stone_stairs':
+    case 'stone_corner_stairs':
+    case 'stone_stair_landing':
     case 'stone_round_floor':
     case 'stone_round_wall':
     case 'stone_half_floor':
@@ -558,14 +728,22 @@ function getPalette(partId: BuildPartId): Palette {
     case 'stone_wall_end':
     case 'stone_gable_wall':
     case 'stone_roof_slope':
+    case 'stone_roof_corner':
+    case 'stone_roof_ridge':
     case 'stone_eave':
+    case 'stone_beam_horizontal':
+    case 'stone_diagonal_support':
       return { primary: 0x7c8185, secondary: 0x5f666b, accent: 0xd7dde2, shadow: 0x41484d, highlight: 0xe9eef2 };
     case 'roof_1x1':
       return { primary: 0xb84e43, secondary: 0x7f2d2a, accent: 0xffc1a8, shadow: 0x5f211f, highlight: 0xffd3bf };
     case 'wood_roof_slope':
+    case 'wood_roof_corner':
+    case 'wood_roof_ridge':
       return { primary: 0xa65245, secondary: 0x74332d, accent: 0xf0a58f, shadow: 0x51231f, highlight: 0xffc5ad };
     case 'thatch_roof_1x1':
     case 'thatch_roof_slope':
+    case 'thatch_roof_corner':
+    case 'thatch_roof_ridge':
     case 'thatch_eave':
       return { primary: 0xcaa85b, secondary: 0x8d6d32, accent: 0xffe4a3, shadow: 0x6d5024, highlight: 0xffefb9 };
     case 'flat_roof_1x1':
