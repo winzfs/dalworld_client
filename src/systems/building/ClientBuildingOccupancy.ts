@@ -4,6 +4,7 @@ import type {
   BuildEdge,
   BuildPartDefinition,
   BuildRotation,
+  BuildSlotKind,
   BuildingSnapshot,
   PlacedBuildPart,
 } from './BuildingTypes';
@@ -132,14 +133,7 @@ export class ClientBuildingOccupancy {
       return { ok: false, reason: '지지대 없음' };
     }
 
-    const supportParts = [
-      supportCell.tile,
-      ...Object.values(supportCell.edges),
-      ...Object.values(supportCell.corners),
-    ]
-      .filter((entityId): entityId is string => typeof entityId === 'string')
-      .map((entityId) => this.parts.get(entityId))
-      .filter((part): part is PlacedBuildPart => Boolean(part));
+    const supportParts = this.getPartsFromCell(supportCell);
 
     if (definition.allowedOn === 'any') {
       return supportParts.length > 0 ? { ok: true } : { ok: false, reason: '지지대 없음' };
@@ -148,6 +142,65 @@ export class ClientBuildingOccupancy {
     return supportParts.some((part) => definition.allowedOn.includes(part.partId))
       ? { ok: true }
       : { ok: false, reason: '부적합한 지지대' };
+  }
+
+  findAtSlot(
+    x: number,
+    y: number,
+    z: number,
+    slotKind: BuildSlotKind,
+    rotation: BuildRotation,
+  ): PlacedBuildPart | null {
+    const cell = this.cells.get(this.toKey(x, y, z));
+    if (!cell) return null;
+
+    if (slotKind === 'tile') {
+      return cell.tile ? this.parts.get(cell.tile) ?? null : null;
+    }
+
+    if (slotKind === 'edge') {
+      const entityId = cell.edges[rotationToEdge(rotation)];
+      return entityId ? this.parts.get(entityId) ?? null : null;
+    }
+
+    const entityId = cell.corners[rotationToCorner(rotation)];
+    return entityId ? this.parts.get(entityId) ?? null : null;
+  }
+
+  findTopAtCell(x: number, y: number, z: number, preferredRotation: BuildRotation): PlacedBuildPart | null {
+    const cell = this.cells.get(this.toKey(x, y, z));
+    if (!cell) return null;
+
+    const preferredEdge = cell.edges[rotationToEdge(preferredRotation)];
+    if (preferredEdge) return this.parts.get(preferredEdge) ?? null;
+
+    const preferredCorner = cell.corners[rotationToCorner(preferredRotation)];
+    if (preferredCorner) return this.parts.get(preferredCorner) ?? null;
+
+    const edgePart = Object.values(cell.edges)
+      .map((entityId) => entityId ? this.parts.get(entityId) : null)
+      .find((part): part is PlacedBuildPart => Boolean(part));
+    if (edgePart) return edgePart;
+
+    const cornerPart = Object.values(cell.corners)
+      .map((entityId) => entityId ? this.parts.get(entityId) : null)
+      .find((part): part is PlacedBuildPart => Boolean(part));
+    if (cornerPart) return cornerPart;
+
+    return cell.tile ? this.parts.get(cell.tile) ?? null : null;
+  }
+
+  findDoorAtCell(x: number, y: number, z: number, preferredRotation: BuildRotation): PlacedBuildPart | null {
+    const cell = this.cells.get(this.toKey(x, y, z));
+    if (!cell) return null;
+
+    const preferred = cell.edges[rotationToEdge(preferredRotation)];
+    const preferredPart = preferred ? this.parts.get(preferred) ?? null : null;
+    if (preferredPart?.partId === 'door') return preferredPart;
+
+    return Object.values(cell.edges)
+      .map((entityId) => entityId ? this.parts.get(entityId) : null)
+      .find((part): part is PlacedBuildPart => part?.partId === 'door') ?? null;
   }
 
   clear(): void {
@@ -165,6 +218,17 @@ export class ClientBuildingOccupancy {
     }
 
     return cell;
+  }
+
+  private getPartsFromCell(cell: CellSlots): PlacedBuildPart[] {
+    return [
+      cell.tile,
+      ...Object.values(cell.edges),
+      ...Object.values(cell.corners),
+    ]
+      .filter((entityId): entityId is string => typeof entityId === 'string')
+      .map((entityId) => this.parts.get(entityId))
+      .filter((part): part is PlacedBuildPart => Boolean(part));
   }
 
   private toKey(x: number, y: number, z: number): string {
