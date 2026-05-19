@@ -15,6 +15,8 @@ import { MobileControls } from '../render/MobileControls';
 import { GameWorldMapRenderer } from '../render/GameWorldMapRenderer';
 import { GameHud } from '../ui/GameHud';
 import { GameWindows } from '../ui/GameWindows';
+import { BuildingGridOverlay } from '../systems/building/BuildingGridOverlay';
+import { BuildingModeState } from '../systems/building/BuildingModeState';
 import { ClientMovementSystem } from './systems/ClientMovementSystem';
 import { InputSendSystem } from './systems/InputSendSystem';
 import { SnapshotSystem } from './systems/SnapshotSystem';
@@ -51,6 +53,12 @@ export class GameApp {
   private readonly monsterRenderer: MonsterRenderer;
   private readonly worldMapRenderer: GameWorldMapRenderer;
   private readonly runtimeWorldSystem: RuntimeWorldSystem;
+  private readonly buildingModeState = new BuildingModeState();
+  private readonly buildingGridOverlay = new BuildingGridOverlay({
+    buildingModeState: this.buildingModeState,
+    width: 32,
+    height: 32,
+  });
   private readonly movementSystem = new ClientMovementSystem();
   private readonly cellTransitionSystem = new CellTransitionSystem({
     triggerPadding: CELL_TRANSFER_TRIGGER_PADDING,
@@ -78,9 +86,19 @@ export class GameApp {
     this.camera = new Camera(this.world);
     this.cameraSystem = new CameraSystem(this.camera);
     this.editorCameraSystem = new EditorCameraSystem(this.camera);
-    this.hudSystem = new HudSystem(new GameHud(), new GameWindows());
+    this.hudSystem = new HudSystem(
+      new GameHud(),
+      new GameWindows({
+        onSelectBuildPart: (partId) => this.buildingModeState.enter(partId),
+        onExitBuildingMode: () => this.buildingModeState.exit(),
+        onRotateBuildingPart: () => this.buildingModeState.rotateNext(),
+        onSetBuildingLayer: (z) => this.buildingModeState.setCurrentZ(z),
+      }),
+    );
 
+    this.world.sortableChildren = true;
     this.world.addChild(this.background);
+    this.world.addChild(this.buildingGridOverlay.container);
     this.worldMapRenderer = new GameWorldMapRenderer(this.world);
     this.resourceRenderer = new ResourceRenderer(this.world);
     this.monsterRenderer = new MonsterRenderer(this.world);
@@ -247,6 +265,7 @@ export class GameApp {
       tick: this.snapshotSystem.snapshot.tick,
       player: me,
       latencyMs: this.network.latencyMs,
+      buildingMode: this.buildingModeState.getSnapshot(),
     });
   }
 
