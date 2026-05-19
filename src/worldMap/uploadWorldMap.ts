@@ -1,7 +1,7 @@
 import type { EditorWorldSave } from '../editor/types';
 import { getServerHttpPath } from '../net/serverHttp';
 import { compileRuntimeWorldMap } from './compileRuntimeWorldMap';
-import type { GameWorldMap, WorldMapCell } from './types';
+import type { GameWorldMap, WorldMapCell, WorldMapPlacement } from './types';
 
 export type UploadedWorldMapReport = {
   cells: number;
@@ -19,6 +19,25 @@ type WorldMapManifest = {
   tileSize: number;
   cellSize: number;
   cells: Array<{ gridX: number; gridY: number }>;
+};
+
+type CompactWorldMapAsset = Omit<WorldMapPlacement, 'id' | 'x' | 'y' | 'layer' | 'scale'>;
+
+type CompactWorldMapPlacement = {
+  a: number;
+  id: string;
+  x: number;
+  y: number;
+  l: WorldMapPlacement['layer'];
+  s?: number;
+};
+
+type CompactWorldMapCell = {
+  format: 'compact-v1';
+  gridX: number;
+  gridY: number;
+  assets: CompactWorldMapAsset[];
+  placements: CompactWorldMapPlacement[];
 };
 
 const MAX_UPLOAD_ATTEMPTS = 3;
@@ -59,9 +78,10 @@ export async function uploadWorldMap(world: EditorWorldSave): Promise<UploadedWo
 
 async function uploadWorldMapByCell(map: GameWorldMap): Promise<void> {
   for (const cell of map.cells) {
+    const compactCell = compactWorldMapCell(cell);
     await putJsonWithRetry(
       getServerHttpPath(`/maps/default/cell?gridX=${cell.gridX}&gridY=${cell.gridY}`),
-      cell,
+      compactCell,
       `cell ${cell.gridX}:${cell.gridY}`,
     );
   }
@@ -75,6 +95,66 @@ async function uploadWorldMapByCell(map: GameWorldMap): Promise<void> {
   };
 
   await putJsonWithRetry(getServerHttpPath('/maps/default/manifest'), manifest, 'manifest');
+}
+
+function compactWorldMapCell(cell: WorldMapCell): CompactWorldMapCell {
+  const assetKeys = new Map<string, number>();
+  const assets: CompactWorldMapAsset[] = [];
+  const placements: CompactWorldMapPlacement[] = [];
+
+  for (const placement of cell.placements) {
+    const asset: CompactWorldMapAsset = {
+      assetId: placement.assetId,
+      assetUrl: placement.assetUrl,
+      categoryId: placement.categoryId,
+      displayWidth: placement.displayWidth,
+      displayHeight: placement.displayHeight,
+      sourceRect: placement.sourceRect,
+      solidColor: placement.solidColor,
+      transparentBlack: placement.transparentBlack,
+      gameplay: placement.gameplay,
+    };
+    const key = stableStringify(asset);
+    let assetIndex = assetKeys.get(key);
+
+    if (assetIndex === undefined) {
+      assetIndex = assets.length;
+      assetKeys.set(key, assetIndex);
+      assets.push(removeUndefinedFields(asset));
+    }
+
+    placements.push(removeUndefinedFields({
+      a: assetIndex,
+      id: placement.id,
+      x: placement.x,
+      y: placement.y,
+      l: placement.layer,
+      s: placement.scale === 1 ? undefined : placement.scale,
+    }));
+  }
+
+  const compactCell: CompactWorldMapCell = {
+    format: 'compact-v1',
+    gridX: cell.gridX,
+    gridY: cell.gridY,
+    assets,
+    placements,
+  };
+
+  const rawBytes = estimateJsonBytes(cell);
+  const compactBytes = estimateJsonBytes(compactCell);
+  if (compactBytes > 0 && rawBytes > 0) {
+    console.info('[WorldMap] Compacted cell upload payload.', {
+      cell: `${cell.gridX}:${cell.gridY}`,
+      placements: cell.placements.length,
+      assets: assets.length,
+      rawBytes,
+      compactBytes,
+      savedBytes: rawBytes - compactBytes,
+    });
+  }
+
+  return compactCell;
 }
 
 async function putJsonWithRetry(url: string, value: unknown, label: string): Promise<void> {
@@ -183,6 +263,22 @@ function createUploadReport(map: GameWorldMap): UploadedWorldMapReport {
       total: tree + stone,
     },
   };
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .filter(([, entry]) => entry !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+    .join(',')}}`;
+}
+
+function removeUndefinedFields<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as T;
 }
 
 function estimateJsonBytes(value: unknown): number {
