@@ -17,6 +17,9 @@ import { GameHud } from '../ui/GameHud';
 import { GameWindows } from '../ui/GameWindows';
 import { BuildingGridOverlay } from '../systems/building/BuildingGridOverlay';
 import { BuildingModeState } from '../systems/building/BuildingModeState';
+import { BuildingPlacementRenderer } from '../systems/building/BuildingPlacementRenderer';
+import { screenToGridApprox } from '../systems/building/IsoBuildingMath';
+import type { BuildingServerEvent } from '../systems/building/BuildingTypes';
 import { ClientMovementSystem } from './systems/ClientMovementSystem';
 import { InputSendSystem } from './systems/InputSendSystem';
 import { SnapshotSystem } from './systems/SnapshotSystem';
@@ -59,6 +62,7 @@ export class GameApp {
     width: 32,
     height: 32,
   });
+  private readonly buildingPlacementRenderer = new BuildingPlacementRenderer();
   private readonly movementSystem = new ClientMovementSystem();
   private readonly cellTransitionSystem = new CellTransitionSystem({
     triggerPadding: CELL_TRANSFER_TRIGGER_PADDING,
@@ -99,6 +103,7 @@ export class GameApp {
     this.world.sortableChildren = true;
     this.world.addChild(this.background);
     this.world.addChild(this.buildingGridOverlay.container);
+    this.world.addChild(this.buildingPlacementRenderer.container);
     this.worldMapRenderer = new GameWorldMapRenderer(this.world);
     this.resourceRenderer = new ResourceRenderer(this.world);
     this.monsterRenderer = new MonsterRenderer(this.world);
@@ -147,6 +152,7 @@ export class GameApp {
       reloadWorldMap: () => {
         void this.loadWorldMap();
       },
+      onBuildingEvent: (event) => this.handleBuildingEvent(event),
     });
 
     this.mapEditor = this.editorMode
@@ -195,6 +201,9 @@ export class GameApp {
       this.app.ticker.add((ticker) => this.updateEditor(ticker.deltaMS / 1000));
       return;
     }
+
+    this.app.canvas.addEventListener('pointerdown', (event) => this.handleCanvasPointerDown(event));
+    window.addEventListener('keydown', (event) => this.handleBuildingHotkey(event));
 
     this.network.onStatus((status) => {
       this.status = status;
@@ -288,6 +297,77 @@ export class GameApp {
     );
 
     this.playerRenderer.sync(this.snapshotSystem.snapshot.players, this.myPlayerId);
+  }
+
+  private handleCanvasPointerDown(event: PointerEvent): void {
+    if (event.button !== 0) return;
+
+    const mode = this.buildingModeState.getSnapshot();
+    if (!mode.enabled || !mode.selectedPartId) return;
+
+    const rect = this.app.canvas.getBoundingClientRect();
+    const local = this.world.toLocal({
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    });
+    const grid = screenToGridApprox(local.x, local.y, mode.currentZ);
+
+    this.network.send({
+      type: 'BUILD_PLACE_REQUEST',
+      requestId: crypto.randomUUID(),
+      partId: mode.selectedPartId,
+      x: grid.x,
+      y: grid.y,
+      z: grid.z,
+      rotation: mode.rotation,
+    });
+  }
+
+  private handleBuildingHotkey(event: KeyboardEvent): void {
+    const mode = this.buildingModeState.getSnapshot();
+    if (!mode.enabled) return;
+
+    if (event.key === 'Escape') {
+      this.buildingModeState.exit();
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key === 'r' || event.key === 'R') {
+      this.buildingModeState.rotateNext();
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key === 'PageUp') {
+      this.buildingModeState.setCurrentZ(mode.currentZ + 1);
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key === 'PageDown') {
+      this.buildingModeState.setCurrentZ(Math.max(0, mode.currentZ - 1));
+      event.preventDefault();
+    }
+  }
+
+  private handleBuildingEvent(event: BuildingServerEvent): void {
+    switch (event.type) {
+      case 'BUILD_SNAPSHOT':
+        this.buildingPlacementRenderer.applySnapshot(event.snapshot);
+        return;
+      case 'BUILD_PLACED':
+        this.buildingPlacementRenderer.addOrUpdate(event.part);
+        return;
+      case 'BUILD_REMOVED':
+        this.buildingPlacementRenderer.remove(event.entityId);
+        return;
+      case 'BUILD_REJECTED':
+        console.warn('[Building] request rejected:', event.reason);
+        return;
+      case 'INVENTORY_SNAPSHOT':
+        return;
+    }
   }
 
   private handleGatherInput(): void {
