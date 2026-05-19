@@ -48,6 +48,10 @@ export type ResourceSnapshot = {
   assetUrl?: string;
   /** Original map editor placement scale, when this resource was created from a map placement. */
   assetScale?: number;
+  /** Original display width before scale, when this resource was created from a map placement. */
+  displayWidth?: number;
+  /** Original display height before scale, when this resource was created from a map placement. */
+  displayHeight?: number;
   /** Original source rectangle, when this resource was sliced from a larger tileset. */
   sourceRect?: WorldMapSourceRect;
   hp: number;
