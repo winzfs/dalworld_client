@@ -1,13 +1,14 @@
-import type { Inventory, ItemType } from '../../protocol/messages';
-import { BUILD_PART_ITEM_ENTRIES } from '../building/BuildPartInventoryCatalog';
+import type { Inventory, ItemType, PlayerSnapshot } from '../../protocol/messages';
+import { BUILD_PART_ITEM_ENTRIES, getBuildPartIdFromItemId } from '../building/BuildPartInventoryCatalog';
 import type { BuildPartId } from '../building/BuildingTypes';
 import { BASE_ITEM_DEFINITIONS, type ItemDefinition } from './ItemDefinitions';
+import type { InventoryItemStack } from './InventoryTypes';
 
 export type InventoryTabId = 'general' | 'consumable' | 'equipment' | 'crafting' | 'building' | 'pet';
 
 export type InventoryResourceSlotView = {
   kind: 'resource';
-  itemId: ItemType;
+  itemId: string;
   definition: ItemDefinition;
   amount: number;
 };
@@ -27,6 +28,8 @@ export type InventoryTabView = {
   emptyText: string;
 };
 
+export type InventorySource = Inventory | PlayerSnapshot | InventoryItemStack[] | null;
+
 export const INVENTORY_TABS: InventoryTabView[] = [
   { id: 'general', label: '일반', emptyText: '채집한 자원이 이곳에 표시됩니다.' },
   { id: 'consumable', label: '사용', emptyText: '아직 사용 아이템이 없습니다.' },
@@ -40,18 +43,16 @@ export function getInventoryTabByLabel(label: string): InventoryTabView {
   return INVENTORY_TABS.find((tab) => tab.label === label) ?? INVENTORY_TABS[0];
 }
 
-export function getInventorySlotsForTab(tab: InventoryTabId, inventory: Inventory | null): InventorySlotView[] {
+export function getInventorySlotsForTab(tab: InventoryTabId, source: InventorySource): InventorySlotView[] {
+  const stacks = normalizeInventoryStacks(source);
+
   switch (tab) {
     case 'general':
-      return getGeneralResourceSlots(inventory);
+      return getGeneralResourceSlots(stacks);
     case 'building':
-      return BUILD_PART_ITEM_ENTRIES.map((entry) => ({
-        kind: 'building_part',
-        buildPartId: entry.buildPartId,
-        definition: entry.definition,
-        amount: null,
-      }));
+      return getBuildingPartSlots(stacks);
     case 'crafting':
+      return getCraftingMaterialSlots(stacks);
     case 'consumable':
     case 'equipment':
     case 'pet':
@@ -59,20 +60,69 @@ export function getInventorySlotsForTab(tab: InventoryTabId, inventory: Inventor
   }
 }
 
-function getGeneralResourceSlots(inventory: Inventory | null): InventoryResourceSlotView[] {
-  if (!inventory) return [];
+export function normalizeInventoryStacks(source: InventorySource): InventoryItemStack[] {
+  if (!source) return [];
+  if (Array.isArray(source)) return source.filter((stack) => stack.quantity > 0);
+  if ('inventoryItems' in source && source.inventoryItems) return source.inventoryItems.filter((stack) => stack.quantity > 0);
 
+  const legacy = source as Inventory;
   return (['wood', 'stone'] as ItemType[])
-    .map((itemId) => {
-      const definition = BASE_ITEM_DEFINITIONS[itemId];
-      const amount = inventory[itemId] ?? 0;
-      if (!definition || amount <= 0) return null;
+    .map((itemId) => ({ itemId, quantity: legacy[itemId] ?? 0 }))
+    .filter((stack) => stack.quantity > 0);
+}
+
+function getGeneralResourceSlots(stacks: InventoryItemStack[]): InventoryResourceSlotView[] {
+  return stacks
+    .map((stack) => {
+      const definition = BASE_ITEM_DEFINITIONS[stack.itemId];
+      if (!definition || definition.category !== 'resource' || stack.quantity <= 0) return null;
       return {
         kind: 'resource' as const,
-        itemId,
+        itemId: stack.itemId,
         definition,
-        amount,
+        amount: stack.quantity,
       };
     })
     .filter((slot): slot is InventoryResourceSlotView => slot !== null);
+}
+
+function getCraftingMaterialSlots(stacks: InventoryItemStack[]): InventoryResourceSlotView[] {
+  return stacks
+    .map((stack) => {
+      const definition = BASE_ITEM_DEFINITIONS[stack.itemId];
+      if (!definition || definition.category !== 'crafting_material' || stack.quantity <= 0) return null;
+      return {
+        kind: 'resource' as const,
+        itemId: stack.itemId,
+        definition,
+        amount: stack.quantity,
+      };
+    })
+    .filter((slot): slot is InventoryResourceSlotView => slot !== null);
+}
+
+function getBuildingPartSlots(stacks: InventoryItemStack[]): InventoryBuildPartSlotView[] {
+  const quantities = new Map(stacks.map((stack) => [stack.itemId, stack.quantity]));
+  const owned = stacks
+    .map((stack) => {
+      const buildPartId = getBuildPartIdFromItemId(stack.itemId);
+      const entry = buildPartId ? BUILD_PART_ITEM_ENTRIES.find((candidate) => candidate.buildPartId === buildPartId) : null;
+      if (!entry || stack.quantity <= 0) return null;
+      return {
+        kind: 'building_part' as const,
+        buildPartId: entry.buildPartId,
+        definition: entry.definition,
+        amount: stack.quantity,
+      };
+    })
+    .filter((slot): slot is InventoryBuildPartSlotView => slot !== null);
+
+  if (owned.length > 0) return owned;
+
+  return BUILD_PART_ITEM_ENTRIES.map((entry) => ({
+    kind: 'building_part',
+    buildPartId: entry.buildPartId,
+    definition: entry.definition,
+    amount: quantities.get(entry.itemId) ?? null,
+  }));
 }
