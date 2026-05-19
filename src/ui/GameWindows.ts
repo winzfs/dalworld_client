@@ -48,7 +48,14 @@ export type GameWindowsOptions = {
 const WINDOW_ROOT_ID = 'dalworld-windows';
 const INVENTORY_SLOT_COUNT = 36;
 const CRAFTING_RECIPE_VIEWS = getCraftingCategories().flatMap((category) => category.recipes);
-const STAIR_PART_IDS = new Set<BuildPartId>(['wood_stairs', 'stone_stairs']);
+const STAIR_PART_IDS = new Set<BuildPartId>([
+  'wood_stair_landing',
+  'stone_stair_landing',
+  'wood_stairs',
+  'stone_stairs',
+  'wood_corner_stairs',
+  'stone_corner_stairs',
+]);
 const DOOR_WINDOW_CATEGORIES = new Set<BuildPartDefinition['category']>(['door', 'window']);
 
 const BUILDING_CATEGORIES: BuildingCategoryView[] = [
