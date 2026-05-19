@@ -35,6 +35,7 @@ export class GameWorldMapRenderer {
       })))
       .filter((placement) => placement.layer !== 'collision')
       .filter((placement) => placement.id !== 'editor-black-base')
+      .filter((placement) => placement.gameplay?.kind !== 'resource')
       .sort((a, b) => getLayerZ(a.layer) - getLayerZ(b.layer));
 
     for (const placement of placements) {
