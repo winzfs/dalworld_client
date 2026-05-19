@@ -1,5 +1,5 @@
 import type { EditorMapDraft, EditorWorldSave } from './types';
-import { uploadWorldMap } from '../worldMap/uploadWorldMap';
+import { uploadWorldMap, type UploadedWorldMapReport } from '../worldMap/uploadWorldMap';
 
 const STORAGE_PREFIX = 'dalworld:editor-map:';
 const WORLD_STORAGE_PREFIX = 'dalworld:editor-world:';
@@ -25,13 +25,13 @@ export class MapStorage {
     }
   }
 
-  async saveWorld(world: EditorWorldSave): Promise<boolean> {
+  async saveWorld(world: EditorWorldSave): Promise<UploadedWorldMapReport | null> {
     const saved = this.writeJson(this.worldKey, world);
-    if (!saved) return false;
+    if (!saved) return null;
 
-    await uploadWorldMap(world);
-    console.info('[MapStorage] Uploaded editor world map to server.');
-    return true;
+    const report = await uploadWorldMap(world);
+    console.info('[MapStorage] Uploaded editor world map to server.', report);
+    return report;
   }
 
   loadWorld(): EditorWorldSave | null {
