@@ -39,6 +39,8 @@ export class TilePlacementSystem {
   }
 
   get mapDraft(): EditorMapDraft {
+    this.refreshInferredGameplay();
+
     return cloneDraft({
       ...this.draft,
       tileSize: this.state.gridSize,
@@ -101,19 +103,10 @@ export class TilePlacementSystem {
     this.draft.tileSize = draft.tileSize || this.draft.tileSize;
     this.draft.worldMap = draft.worldMap;
     this.draft.placements.push(...normalizePlacements(draft.placements));
+    this.refreshInferredGameplay();
 
     for (const placement of this.draft.placements) {
-      const asset = placement.solidColor !== undefined
-        ? createSolidAsset(placement)
-        : findAssetById(placement.assetId) ?? {
-            id: placement.assetId,
-            name: placement.assetId,
-            categoryId: placement.categoryId,
-            url: placement.assetUrl,
-          };
-      if (!placement.gameplay) {
-        placement.gameplay = inferSpriteGameplay(asset);
-      }
+      const asset = this.getAssetForPlacement(placement);
       await this.createDisplay(placement, asset);
     }
   }
@@ -157,6 +150,33 @@ export class TilePlacementSystem {
       solidColor: isCollision ? undefined : asset.solidColor,
       transparentBlack: !isCollision && asset.solidColor === undefined && this.state.transparentBlack,
       gameplay,
+    };
+  }
+
+  private refreshInferredGameplay(): void {
+    for (const placement of this.draft.placements) {
+      if (placement.layer === 'collision') {
+        placement.gameplay = undefined;
+        continue;
+      }
+
+      const inferred = inferSpriteGameplay(this.getAssetForPlacement(placement));
+      if (inferred) {
+        placement.gameplay = inferred;
+      }
+    }
+  }
+
+  private getAssetForPlacement(placement: EditorTilePlacement): EditorTilesetAsset {
+    if (placement.solidColor !== undefined) {
+      return createSolidAsset(placement);
+    }
+
+    return findAssetById(placement.assetId) ?? {
+      id: placement.assetId,
+      name: placement.assetId,
+      categoryId: placement.categoryId,
+      url: placement.assetUrl,
     };
   }
 
