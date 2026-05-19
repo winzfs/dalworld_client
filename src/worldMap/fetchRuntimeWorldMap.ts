@@ -10,5 +10,5 @@ export async function fetchRuntimeWorldMap(): Promise<GameWorldMap | null> {
     throw new Error(`Failed to fetch runtime world map: ${response.status}`);
   }
 
-  return await response.json<GameWorldMap | null>();
+  return await response.json() as GameWorldMap | null;
 }
