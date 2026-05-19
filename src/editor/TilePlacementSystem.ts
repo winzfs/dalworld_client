@@ -107,6 +107,7 @@ export class TilePlacementSystem {
 
     for (const placement of this.draft.placements) {
       const asset = this.getAssetForPlacement(placement);
+      this.refreshPlacementDimensions(placement, asset);
       await this.createDisplay(placement, asset);
     }
   }
@@ -135,6 +136,12 @@ export class TilePlacementSystem {
     const asset = brush.asset;
     const isCollision = this.state.activeLayer === 'collision';
     const gameplay = isCollision ? undefined : inferSpriteGameplay(asset);
+    const sourceRect = isCollision
+      ? { x: 0, y: 0, width: this.state.gridSize, height: this.state.gridSize }
+      : brush.sourceRect ? { ...brush.sourceRect } : undefined;
+    const displayWidth = sourceRect?.width ?? asset.tileWidth;
+    const displayHeight = sourceRect?.height ?? asset.tileHeight;
+
     return {
       id: crypto.randomUUID(),
       assetId: isCollision ? 'editor-collision-cell' : asset.id,
@@ -144,9 +151,9 @@ export class TilePlacementSystem {
       y: snap(worldY, this.state.gridSize),
       layer: this.state.activeLayer,
       scale: isCollision ? 1 : this.state.brushScale,
-      sourceRect: isCollision
-        ? { x: 0, y: 0, width: this.state.gridSize, height: this.state.gridSize }
-        : brush.sourceRect ? { ...brush.sourceRect } : undefined,
+      displayWidth,
+      displayHeight,
+      sourceRect,
       solidColor: isCollision ? undefined : asset.solidColor,
       transparentBlack: !isCollision && asset.solidColor === undefined && this.state.transparentBlack,
       gameplay,
@@ -155,16 +162,24 @@ export class TilePlacementSystem {
 
   private refreshInferredGameplay(): void {
     for (const placement of this.draft.placements) {
+      const asset = this.getAssetForPlacement(placement);
+      this.refreshPlacementDimensions(placement, asset);
+
       if (placement.layer === 'collision') {
         placement.gameplay = undefined;
         continue;
       }
 
-      const inferred = inferSpriteGameplay(this.getAssetForPlacement(placement));
+      const inferred = inferSpriteGameplay(asset);
       if (inferred) {
         placement.gameplay = inferred;
       }
     }
+  }
+
+  private refreshPlacementDimensions(placement: EditorTilePlacement, asset: EditorTilesetAsset): void {
+    placement.displayWidth = placement.displayWidth ?? placement.sourceRect?.width ?? asset.tileWidth;
+    placement.displayHeight = placement.displayHeight ?? placement.sourceRect?.height ?? asset.tileHeight;
   }
 
   private getAssetForPlacement(placement: EditorTilePlacement): EditorTilesetAsset {
@@ -177,6 +192,8 @@ export class TilePlacementSystem {
       name: placement.assetId,
       categoryId: placement.categoryId,
       url: placement.assetUrl,
+      tileWidth: placement.displayWidth,
+      tileHeight: placement.displayHeight,
     };
   }
 
@@ -250,8 +267,8 @@ export class TilePlacementSystem {
   private createSolidTile(placement: EditorTilePlacement, asset: EditorTilesetAsset): Graphics {
     const tile = new Graphics();
     const scale = normalizePlacementScale(placement.scale);
-    const width = (placement.sourceRect?.width ?? asset.tileWidth ?? this.state.gridSize) * scale;
-    const height = (placement.sourceRect?.height ?? asset.tileHeight ?? this.state.gridSize) * scale;
+    const width = getDisplayWidth(placement, asset, this.state.gridSize) * scale;
+    const height = getDisplayHeight(placement, asset, this.state.gridSize) * scale;
 
     tile.label = `editor-solid-tile:${placement.id}`;
     tile.x = placement.x;
@@ -266,8 +283,8 @@ export class TilePlacementSystem {
 
   private createCollisionOverlay(placement: EditorTilePlacement): Graphics {
     const overlay = new Graphics();
-    const width = placement.sourceRect?.width ?? this.state.gridSize;
-    const height = placement.sourceRect?.height ?? this.state.gridSize;
+    const width = placement.displayWidth ?? placement.sourceRect?.width ?? this.state.gridSize;
+    const height = placement.displayHeight ?? placement.sourceRect?.height ?? this.state.gridSize;
 
     overlay.label = `editor-collision:${placement.id}`;
     overlay.x = placement.x;
@@ -304,8 +321,11 @@ export class TilePlacementSystem {
     sprite.roundPixels = true;
     sprite.alpha = 1;
 
-    const baseWidth = placement.sourceRect?.width ?? asset.tileWidth ?? normalTexture.width;
-    const baseHeight = placement.sourceRect?.height ?? asset.tileHeight ?? normalTexture.height;
+    const baseWidth = getDisplayWidth(placement, asset, normalTexture.width);
+    const baseHeight = getDisplayHeight(placement, asset, normalTexture.height);
+    placement.displayWidth = placement.displayWidth ?? baseWidth;
+    placement.displayHeight = placement.displayHeight ?? baseHeight;
+
     sprite.scale.set(
       (baseWidth / normalTexture.width) * scale,
       (baseHeight / normalTexture.height) * scale,
@@ -333,8 +353,8 @@ export class TilePlacementSystem {
     tile.y = placement.y;
     tile.zIndex = layerZIndex(placement.layer);
 
-    const width = (placement.sourceRect?.width ?? asset.tileWidth ?? this.state.gridSize) * scale;
-    const height = (placement.sourceRect?.height ?? asset.tileHeight ?? this.state.gridSize) * scale;
+    const width = getDisplayWidth(placement, asset, this.state.gridSize) * scale;
+    const height = getDisplayHeight(placement, asset, this.state.gridSize) * scale;
 
     tile
       .rect(0, 0, width, height)
@@ -461,6 +481,8 @@ function normalizePlacements(placements: EditorTilePlacement[]): EditorTilePlace
   return placements.map((placement) => ({
     ...placement,
     scale: normalizePlacementScale(placement.scale),
+    displayWidth: normalizeOptionalPositiveNumber(placement.displayWidth),
+    displayHeight: normalizeOptionalPositiveNumber(placement.displayHeight),
     sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
     gameplay: placement.gameplay ? cloneGameplay(placement.gameplay) : undefined,
   }));
@@ -476,8 +498,8 @@ function snap(value: number, size: number): number {
 
 function containsPoint(placement: EditorTilePlacement, worldX: number, worldY: number, fallbackSize: number): boolean {
   const scale = normalizePlacementScale(placement.scale);
-  const width = (placement.sourceRect?.width ?? fallbackSize) * scale;
-  const height = (placement.sourceRect?.height ?? fallbackSize) * scale;
+  const width = (placement.displayWidth ?? placement.sourceRect?.width ?? fallbackSize) * scale;
+  const height = (placement.displayHeight ?? placement.sourceRect?.height ?? fallbackSize) * scale;
 
   return (
     worldX >= placement.x &&
@@ -494,6 +516,18 @@ function placementZIndex(placement: EditorTilePlacement): number {
 function normalizePlacementScale(scale: number | undefined): number {
   if (!Number.isFinite(scale)) return 1;
   return Math.max(0.1, scale ?? 1);
+}
+
+function normalizeOptionalPositiveNumber(value: number | undefined): number | undefined {
+  return Number.isFinite(value) && (value as number) > 0 ? value : undefined;
+}
+
+function getDisplayWidth(placement: EditorTilePlacement, asset: EditorTilesetAsset, fallback: number): number {
+  return placement.displayWidth ?? placement.sourceRect?.width ?? asset.tileWidth ?? fallback;
+}
+
+function getDisplayHeight(placement: EditorTilePlacement, asset: EditorTilesetAsset, fallback: number): number {
+  return placement.displayHeight ?? placement.sourceRect?.height ?? asset.tileHeight ?? fallback;
 }
 
 function shrinkSourceRect(sourceRect: EditorSourceRect, texture: PixiTexture): EditorSourceRect {
@@ -564,6 +598,8 @@ function createSolidAsset(placement: EditorTilePlacement): EditorTilesetAsset {
     name: placement.assetId,
     categoryId: placement.categoryId,
     url: placement.assetUrl,
+    tileWidth: placement.displayWidth,
+    tileHeight: placement.displayHeight,
     solidColor: placement.solidColor,
   };
 }
