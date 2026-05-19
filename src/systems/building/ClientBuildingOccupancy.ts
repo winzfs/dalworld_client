@@ -1,5 +1,6 @@
 import { BUILD_PARTS } from './BuildingParts';
 import type {
+  BuildCategory,
   BuildCorner,
   BuildEdge,
   BuildPartDefinition,
@@ -19,6 +20,9 @@ type CellSlots = {
 export type ClientPlacementCheck =
   | { ok: true }
   | { ok: false; reason: string };
+
+const STACKABLE_EDGE_CATEGORIES: BuildCategory[] = ['wall', 'door', 'window'];
+const UPPER_TILE_SUPPORT_CATEGORIES: BuildCategory[] = ['floor', 'wall', 'door', 'window', 'support'];
 
 export class ClientBuildingOccupancy {
   private readonly cells = new Map<string, CellSlots>();
@@ -89,7 +93,12 @@ export class ClientBuildingOccupancy {
       return { ok: false, reason: '코너 슬롯 점유됨' };
     }
 
-    if (definition.allowedOn === 'ground') return z === 0 ? { ok: true } : { ok: false, reason: '지면 전용' };
+    if (definition.allowedOn === 'ground') {
+      if (z === 0) return { ok: true };
+      if (definition.category === 'floor') return this.canPlaceUpperTile(x, y, z, ignoredEntityId);
+      return { ok: false, reason: '지면 전용' };
+    }
+
     if (!definition.requiresSupport) return { ok: true };
 
     const supportCell = z === 0 ? cell : this.cells.get(this.toKey(x, y, z - 1));
@@ -97,6 +106,14 @@ export class ClientBuildingOccupancy {
 
     const supportParts = this.getPartsFromCell(supportCell)
       .filter((part) => part.entityId !== ignoredEntityId);
+
+    if (z > 0 && definition.slotKind === 'edge' && STACKABLE_EDGE_CATEGORIES.includes(definition.category)) {
+      const sameEdgeSupport = this.getEdgePartFromCell(supportCell, rotation);
+      if (sameEdgeSupport && sameEdgeSupport.entityId !== ignoredEntityId) {
+        const supportDefinition = BUILD_PARTS[sameEdgeSupport.partId];
+        if (supportDefinition && STACKABLE_EDGE_CATEGORIES.includes(supportDefinition.category)) return { ok: true };
+      }
+    }
 
     if (definition.allowedOn === 'any') return supportParts.length > 0 ? { ok: true } : { ok: false, reason: '지지대 없음' };
     return supportParts.some((part) => definition.allowedOn.includes(part.partId))
@@ -112,17 +129,26 @@ export class ClientBuildingOccupancy {
   }
 
   findTopAtCell(x: number, y: number, z: number, preferredRotation: BuildRotation): PlacedBuildPart | null {
-    const cell = this.cells.get(this.toKey(x, y, z));
-    if (!cell) return null;
-    const preferredEdge = cell.edges[rotationToEdge(preferredRotation)];
-    if (preferredEdge) return this.parts.get(preferredEdge) ?? null;
-    const preferredCorner = cell.corners[rotationToCorner(preferredRotation)];
-    if (preferredCorner) return this.parts.get(preferredCorner) ?? null;
-    const edgePart = Object.values(cell.edges).map((id) => id ? this.parts.get(id) : null).find((part): part is PlacedBuildPart => Boolean(part));
-    if (edgePart) return edgePart;
-    const cornerPart = Object.values(cell.corners).map((id) => id ? this.parts.get(id) : null).find((part): part is PlacedBuildPart => Boolean(part));
-    if (cornerPart) return cornerPart;
-    return cell.tile ? this.parts.get(cell.tile) ?? null : null;
+    return this.findBestAtCell(x, y, z, preferredRotation, 1);
+  }
+
+  findBestAtCell(x: number, y: number, z: number, preferredRotation: BuildRotation, layerRadius = 2): PlacedBuildPart | null {
+    const candidates: PlacedBuildPart[] = [];
+
+    for (let dz = layerRadius; dz >= -layerRadius; dz -= 1) {
+      const nextZ = z + dz;
+      if (nextZ < 0) continue;
+      const cell = this.cells.get(this.toKey(x, y, nextZ));
+      if (!cell) continue;
+      candidates.push(...this.getOrderedPartsFromCell(cell, preferredRotation));
+    }
+
+    return candidates
+      .sort((a, b) => {
+        const byLayer = b.z - a.z;
+        if (byLayer !== 0) return byLayer;
+        return getInteractionPriority(b) - getInteractionPriority(a);
+      })[0] ?? null;
   }
 
   findDoorAtCell(x: number, y: number, z: number, preferredRotation: BuildRotation): PlacedBuildPart | null {
@@ -139,6 +165,21 @@ export class ClientBuildingOccupancy {
   clear(): void {
     this.cells.clear();
     this.parts.clear();
+  }
+
+  private canPlaceUpperTile(x: number, y: number, z: number, ignoredEntityId: string | null): ClientPlacementCheck {
+    if (z <= 0) return { ok: true };
+    const supportCell = this.cells.get(this.toKey(x, y, z - 1));
+    if (!supportCell) return { ok: false, reason: '2층 바닥을 받칠 벽/기둥이 없습니다.' };
+
+    const supported = this.getPartsFromCell(supportCell)
+      .filter((part) => part.entityId !== ignoredEntityId)
+      .some((part) => {
+        const definition = BUILD_PARTS[part.partId];
+        return Boolean(definition && UPPER_TILE_SUPPORT_CATEGORIES.includes(definition.category));
+      });
+
+    return supported ? { ok: true } : { ok: false, reason: '2층 바닥을 받칠 벽/기둥이 없습니다.' };
   }
 
   private getOccupiedSlotEntityId(cell: CellSlots | undefined, slotKind: BuildSlotKind, rotation: BuildRotation): string | undefined {
@@ -158,6 +199,11 @@ export class ClientBuildingOccupancy {
     return cell;
   }
 
+  private getEdgePartFromCell(cell: CellSlots, rotation: BuildRotation): PlacedBuildPart | null {
+    const entityId = cell.edges[rotationToEdge(rotation)];
+    return entityId ? this.parts.get(entityId) ?? null : null;
+  }
+
   private getPartsFromCell(cell: CellSlots): PlacedBuildPart[] {
     return [cell.tile, ...Object.values(cell.edges), ...Object.values(cell.corners)]
       .filter((entityId): entityId is string => typeof entityId === 'string')
@@ -165,7 +211,45 @@ export class ClientBuildingOccupancy {
       .filter((part): part is PlacedBuildPart => Boolean(part));
   }
 
+  private getOrderedPartsFromCell(cell: CellSlots, preferredRotation: BuildRotation): PlacedBuildPart[] {
+    const preferredEdge = cell.edges[rotationToEdge(preferredRotation)];
+    const preferredCorner = cell.corners[rotationToCorner(preferredRotation)];
+    const ids = [
+      preferredEdge,
+      preferredCorner,
+      ...Object.values(cell.edges),
+      ...Object.values(cell.corners),
+      cell.tile,
+    ];
+
+    const seen = new Set<string>();
+    return ids
+      .filter((entityId): entityId is string => typeof entityId === 'string' && !seen.has(entityId) && seen.add(entityId))
+      .map((entityId) => this.parts.get(entityId))
+      .filter((part): part is PlacedBuildPart => Boolean(part));
+  }
+
   private toKey(x: number, y: number, z: number): string {
     return `${x}:${y}:${z}`;
+  }
+}
+
+function getInteractionPriority(part: PlacedBuildPart): number {
+  const definition = BUILD_PARTS[part.partId];
+  switch (definition?.category) {
+    case 'roof':
+      return 60;
+    case 'door':
+      return 55;
+    case 'window':
+      return 50;
+    case 'wall':
+      return 45;
+    case 'support':
+      return 35;
+    case 'floor':
+      return 10;
+    default:
+      return 0;
   }
 }
