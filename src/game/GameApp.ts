@@ -333,9 +333,11 @@ export class GameApp {
 
     const mode = this.buildingModeState.getSnapshot();
     const grid = this.pointerToBuildingGrid(event, mode.currentZ);
+    const worldPoint = this.pointerToWorld(event);
 
     if (mode.enabled && mode.toolMode === 'remove') {
-      const target = this.buildingOccupancy.findTopAtCell(grid.x, grid.y, grid.z, mode.rotation);
+      const target = this.buildingOccupancy.findNearestAtWorld(worldPoint.x, worldPoint.y, mode.currentZ, mode.rotation)
+        ?? this.buildingOccupancy.findTopAtCell(grid.x, grid.y, grid.z, mode.rotation);
       if (!target) return;
       this.network.send({ type: 'BUILD_REMOVE_REQUEST', requestId: crypto.randomUUID(), entityId: target.entityId });
       return;
@@ -586,9 +588,13 @@ export class GameApp {
   }
 
   private pointerToBuildingGrid(event: PointerEvent, z: number): { x: number; y: number; z: number } {
-    const rect = this.app.canvas.getBoundingClientRect();
-    const local = this.world.toLocal({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+    const local = this.pointerToWorld(event);
     return screenToGridApprox(local.x, local.y, z);
+  }
+
+  private pointerToWorld(event: PointerEvent): { x: number; y: number } {
+    const rect = this.app.canvas.getBoundingClientRect();
+    return this.world.toLocal({ x: event.clientX - rect.left, y: event.clientY - rect.top });
   }
 
   private handleGatherInput(): void {
