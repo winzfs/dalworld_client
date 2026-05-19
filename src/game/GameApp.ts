@@ -472,6 +472,7 @@ export class GameApp {
         wood: event.inventory.items.find((item) => item.itemId === 'wood')?.quantity ?? 0,
         stone: event.inventory.items.find((item) => item.itemId === 'stone')?.quantity ?? 0,
       },
+      inventoryItems: event.inventory.items.map((item) => ({ ...item })),
     };
 
     this.snapshotSystem.setLocalPlayer(next);
