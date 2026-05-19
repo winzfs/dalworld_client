@@ -3,6 +3,7 @@ import { BUILD_PART_LIST } from '../systems/building/BuildingParts';
 import { getBuildPartItemDefinition } from '../systems/building/BuildPartInventoryCatalog';
 import type { BuildingModeSnapshot } from '../systems/building/BuildingModeState';
 import type { BuildPartId } from '../systems/building/BuildingTypes';
+import type { CraftingRecipeId } from '../systems/crafting/CraftingTypes';
 import { getCraftingCategories } from '../systems/crafting/CraftingViewModel';
 import { BASE_ITEM_DEFINITIONS, type ItemDefinition } from '../systems/inventory/ItemDefinitions';
 import {
@@ -10,7 +11,6 @@ import {
   INVENTORY_TABS,
   type InventoryBuildPartSlotView,
   type InventoryResourceSlotView,
-  type InventorySlotView,
   type InventoryTabId,
 } from '../systems/inventory/InventoryViewModel';
 
@@ -33,6 +33,7 @@ export type GameWindowsOptions = {
   onExitBuildingMode?: () => void;
   onRotateBuildingPart?: () => void;
   onSetBuildingLayer?: (z: number) => void;
+  onCraftRecipe?: (recipeId: CraftingRecipeId) => void;
 };
 
 const WINDOW_ROOT_ID = 'dalworld-windows';
@@ -67,6 +68,7 @@ export class GameWindows {
     this.installFloatingButtons();
     this.installWindows();
     this.installInventoryInteractions();
+    this.installCraftingInteractions();
     this.installBuildingInteractions();
     this.renderBuildingMode(this.buildingMode);
   }
@@ -246,6 +248,19 @@ export class GameWindows {
     }
   }
 
+  private installCraftingInteractions(): void {
+    const crafting = query<HTMLDivElement>(this.root, '[data-window="crafting"]');
+    const buttons = [...crafting.querySelectorAll<HTMLButtonElement>('[data-craft-recipe]')];
+
+    for (const button of buttons) {
+      button.addEventListener('click', () => {
+        const recipeId = button.dataset.craftRecipe;
+        if (!recipeId) return;
+        this.options.onCraftRecipe?.(recipeId);
+      });
+    }
+  }
+
   private installBuildingInteractions(): void {
     const building = query<HTMLDivElement>(this.root, '[data-window="building"]');
     const partButtons = [...building.querySelectorAll<HTMLButtonElement>('[data-build-part]')];
@@ -379,15 +394,19 @@ function getInventoryWindowMarkup(): string {
 }
 
 function getCraftingWindowMarkup(): string {
-  const categories = getCraftingCategories();
+  const recipes = getCraftingCategories().flatMap((category) => category.recipes).slice(0, 12);
   return `
     <section class="game-window simple-system-window crafting-window" data-window="crafting" hidden>
       ${getWindowHeaderMarkup('제작')}
       <div class="system-window-body">
         <h3>제작 시스템</h3>
-        <p>제작 레시피 정의가 분리되었습니다. 서버 제작 검증 연결 전까지는 목록 미리보기만 표시합니다.</p>
+        <p>레시피를 누르면 서버가 재료를 검증한 뒤 제작합니다.</p>
         <div class="placeholder-grid">
-          ${categories.flatMap((category) => category.recipes).slice(0, 8).map((view) => `<button class="placeholder-card" type="button" title="${view.recipe.label}">${view.outputDefinition?.icon ?? '▣'}</button>`).join('')}
+          ${recipes.map((view) => `
+            <button class="placeholder-card" type="button" data-craft-recipe="${view.recipe.id}" title="${getRecipeTooltip(view.inputDefinitions)}">
+              ${view.outputDefinition?.icon ?? '▣'}
+            </button>
+          `).join('')}
         </div>
       </div>
     </section>
@@ -504,4 +523,8 @@ function getBuildCostLabel(itemId: string): string {
   const definition = BASE_ITEM_DEFINITIONS[itemId];
   if (definition) return definition.label;
   return itemId;
+}
+
+function getRecipeTooltip(inputs: Array<{ itemId: string; quantity: number; definition: ItemDefinition | null }>): string {
+  return inputs.map((input) => `${input.definition?.label ?? input.itemId} ${input.quantity}`).join(' · ');
 }
