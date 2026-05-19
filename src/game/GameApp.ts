@@ -453,6 +453,7 @@ export class GameApp {
         console.warn('[Building] request rejected:', event.reason);
         return;
       case 'INVENTORY_SNAPSHOT':
+        this.applyInventoryItems(event.items);
         return;
     }
   }
@@ -463,16 +464,20 @@ export class GameApp {
       return;
     }
 
+    this.applyInventoryItems(event.inventory.items);
+  }
+
+  private applyInventoryItems(items: NonNullable<PlayerSnapshot['inventoryItems']>): void {
     const me = this.findMe();
     if (!me) return;
 
     const next: PlayerSnapshot = {
       ...me,
       inventory: {
-        wood: event.inventory.items.find((item) => item.itemId === 'wood')?.quantity ?? 0,
-        stone: event.inventory.items.find((item) => item.itemId === 'stone')?.quantity ?? 0,
+        wood: items.find((item) => item.itemId === 'wood')?.quantity ?? 0,
+        stone: items.find((item) => item.itemId === 'stone')?.quantity ?? 0,
       },
-      inventoryItems: event.inventory.items.map((item) => ({ ...item })),
+      inventoryItems: items.map((item) => ({ ...item })),
     };
 
     this.snapshotSystem.setLocalPlayer(next);
