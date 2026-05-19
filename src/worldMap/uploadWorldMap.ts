@@ -21,6 +21,9 @@ type WorldMapManifest = {
   cells: Array<{ gridX: number; gridY: number }>;
 };
 
+const MAX_UPLOAD_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 350;
+
 export async function uploadWorldMap(world: EditorWorldSave): Promise<UploadedWorldMapReport> {
   const payload = compileRuntimeWorldMap(world);
   await uploadWorldMapByCell(payload);
@@ -56,7 +59,11 @@ export async function uploadWorldMap(world: EditorWorldSave): Promise<UploadedWo
 
 async function uploadWorldMapByCell(map: GameWorldMap): Promise<void> {
   for (const cell of map.cells) {
-    await putJson(getServerHttpPath(`/maps/default/cell?gridX=${cell.gridX}&gridY=${cell.gridY}`), cell);
+    await putJsonWithRetry(
+      getServerHttpPath(`/maps/default/cell?gridX=${cell.gridX}&gridY=${cell.gridY}`),
+      cell,
+      `cell ${cell.gridX}:${cell.gridY}`,
+    );
   }
 
   const manifest: WorldMapManifest = {
@@ -67,7 +74,37 @@ async function uploadWorldMapByCell(map: GameWorldMap): Promise<void> {
     cells: map.cells.map((cell) => ({ gridX: cell.gridX, gridY: cell.gridY })),
   };
 
-  await putJson(getServerHttpPath('/maps/default/manifest'), manifest);
+  await putJsonWithRetry(getServerHttpPath('/maps/default/manifest'), manifest, 'manifest');
+}
+
+async function putJsonWithRetry(url: string, value: unknown, label: string): Promise<void> {
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= MAX_UPLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      await putJson(url, value);
+      if (attempt > 1) {
+        console.info(`[WorldMap] Upload chunk recovered after retry: ${label}`, { attempt });
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      console.warn(`[WorldMap] Upload chunk failed: ${label}`, {
+        attempt,
+        maxAttempts: MAX_UPLOAD_ATTEMPTS,
+        error,
+        approxBytes: estimateJsonBytes(value),
+      });
+
+      if (attempt < MAX_UPLOAD_ATTEMPTS) {
+        await delay(RETRY_BASE_DELAY_MS * attempt);
+      }
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Failed to upload world map chunk: ${label}`);
 }
 
 async function putJson(url: string, value: unknown): Promise<void> {
@@ -159,4 +196,8 @@ function estimateJsonBytes(value: unknown): number {
 function withCacheBuster(url: string): string {
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}t=${Date.now()}`;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
