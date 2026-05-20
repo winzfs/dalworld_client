@@ -455,7 +455,7 @@ export class MapEditor {
     const size = await loadImageSize(asset.url);
     if (!size) return false;
 
-    return size.width > DIRECT_SELECT_MAX_SIZE || size.height > DIRECT_SELECT_MAX_SIZE;
+    return size.width > DIRECT_SELECT_MAX_SIZE;
   }
 
   private async fillAll(): Promise<void> {
@@ -491,10 +491,13 @@ export class MapEditor {
     try {
       const report = await this.storage.saveWorld(worldSave);
       const resources = report.resources;
+      const markerSpawns = report.monsterSpawns;
+      const globalSpawns = report.monsterSpawnRules;
+      const summary = `셀 ${report.cells}개 · 자원 ${resources.total}개 · 지역스폰 ${markerSpawns.total}개 · 전체맵스폰 ${globalSpawns.enabled}/${globalSpawns.total}개(${globalSpawns.spawnsPerHour}/h)`;
       this.showToast(
         mapSaved
-          ? `저장 완료 · 셀 ${report.cells}개 · 자원 ${resources.total}개(나무 ${resources.tree}, 돌 ${resources.stone})`
-          : `서버 저장 완료 · 로컬 백업은 용량 부족으로 생략 · 셀 ${report.cells}개 · 자원 ${resources.total}개`,
+          ? `저장 완료 · ${summary}`
+          : `서버 저장 완료 · 로컬 백업은 용량 부족으로 생략 · ${summary}`,
         'success',
         4_500,
       );
