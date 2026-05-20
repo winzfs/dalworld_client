@@ -11,6 +11,11 @@ export type UploadedWorldMapReport = {
     stone: number;
     total: number;
   };
+  monsterSpawns: {
+    wild_slime: number;
+    sheep: number;
+    total: number;
+  };
 };
 
 type WorldMapManifest = {
@@ -244,13 +249,21 @@ function createUploadReport(map: GameWorldMap): UploadedWorldMapReport {
   let placements = 0;
   let tree = 0;
   let stone = 0;
+  let wildSlime = 0;
+  let sheep = 0;
 
   for (const cell of map.cells) {
     placements += cell.placements.length;
     for (const placement of cell.placements) {
-      if (placement.gameplay?.kind !== 'resource') continue;
-      if (placement.gameplay.resourceType === 'tree') tree += 1;
-      if (placement.gameplay.resourceType === 'stone') stone += 1;
+      if (placement.gameplay?.kind === 'resource') {
+        if (placement.gameplay.resourceType === 'tree') tree += 1;
+        if (placement.gameplay.resourceType === 'stone') stone += 1;
+      }
+
+      if (placement.gameplay?.kind === 'monsterSpawn') {
+        if (placement.gameplay.monsterType === 'wild_slime') wildSlime += 1;
+        if (placement.gameplay.monsterType === 'sheep') sheep += 1;
+      }
     }
   }
 
@@ -261,6 +274,11 @@ function createUploadReport(map: GameWorldMap): UploadedWorldMapReport {
       tree,
       stone,
       total: tree + stone,
+    },
+    monsterSpawns: {
+      wild_slime: wildSlime,
+      sheep,
+      total: wildSlime + sheep,
     },
   };
 }
