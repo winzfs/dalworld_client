@@ -1,7 +1,6 @@
 import type { GameNetwork } from '../../net/network';
 import { getActiveCell } from '../../worldMap/activeCellStore';
-import type { InputState } from '../InputController';
-import type { PlayerSnapshot } from '../../protocol/messages';
+import type { Facing, InputState, PlayerSnapshot } from '../../protocol/messages';
 
 export type InputSendContext = {
   input: InputState;
@@ -50,6 +49,16 @@ export class InputSendSystem {
       type: 'gather',
       seq: this.nextSeq(),
       resourceId,
+    });
+  }
+
+  sendAttack(input: { requestId: string; facing: Facing; targetId?: string }): void {
+    this.network.send({
+      type: 'COMBAT_ATTACK_REQUEST',
+      requestId: input.requestId,
+      seq: this.nextSeq(),
+      facing: input.facing,
+      targetId: input.targetId,
     });
   }
 
