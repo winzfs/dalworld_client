@@ -1,10 +1,9 @@
 // 서버 src/protocol/messages.ts 와 동일한 프로토콜.
 // 모노레포 의존을 피하기 위해 클라이언트 측에 복사해 둔다.
 
-import type { BuildingClientMessage, BuildingServerEvent } from '../systems/building/BuildingTypes';
+import type { BuildingClientMessage as BuildingClientMessageDefinition, BuildingServerEvent } from '../systems/building/BuildingTypes';
 import type { CraftingRecipeId } from '../systems/crafting/CraftingTypes';
 import type { InventoryItemId, InventoryItemStack, InventorySnapshot } from '../systems/inventory/InventoryTypes';
-import type { TimeOfDayState } from '../systems/timeOfDay/TimeOfDayTypes';
 import type { GameWorldMap, WorldMapSourceRect } from '../worldMap/types';
 
 export type MovementKeys = {
@@ -20,6 +19,12 @@ export type ResourceType = 'tree' | 'stone';
 export type MonsterType = 'wild_slime' | 'sheep';
 export type MonsterStateName = 'idle' | 'chase' | 'attack';
 export type ItemType = 'wood' | 'stone';
+
+export type TimeOfDayMode = 'day' | 'night';
+
+export type TimeOfDayState = {
+  mode: TimeOfDayMode;
+};
 
 export type Inventory = {
   wood: number;
@@ -89,6 +94,8 @@ export type PublicGameConfig = {
   world: WorldInfo;
   gameplay: PublicGameplayConfig;
 };
+
+export type BuildingClientMessage = BuildingClientMessageDefinition;
 
 export type CraftingClientMessage = {
   type: 'CRAFT_REQUEST';
