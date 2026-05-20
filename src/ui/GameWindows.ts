@@ -3,7 +3,7 @@ import { BUILD_PART_LIST } from '../systems/building/BuildingParts';
 import { getBuildPartItemDefinition } from '../systems/building/BuildPartInventoryCatalog';
 import type { BuildingModeSnapshot } from '../systems/building/BuildingModeState';
 import type { BuildPartDefinition, BuildPartId } from '../systems/building/BuildingTypes';
-import type { CraftingRecipeId } from '../systems/crafting/CraftingTypes';
+import type { CraftingRecipeCategory, CraftingRecipeId, CraftingTier } from '../systems/crafting/CraftingTypes';
 import { getCraftingCategories } from '../systems/crafting/CraftingViewModel';
 import { BASE_ITEM_DEFINITIONS, type ItemDefinition } from '../systems/inventory/ItemDefinitions';
 import {
@@ -18,6 +18,8 @@ import {
 
 type WindowId = 'character' | 'inventory' | 'crafting' | 'building';
 type CraftingRecipeView = ReturnType<typeof getCraftingCategories>[number]['recipes'][number];
+type CraftingTierFilter = 'all' | CraftingTier;
+type CraftingCategoryFilter = 'all' | CraftingRecipeCategory;
 type BuildingCategoryId = 'all' | 'floor' | 'stairs' | 'wall' | 'support' | 'roof' | 'door-window';
 
 type FloatingButtonConfig = {
@@ -37,6 +39,14 @@ type BuildingCategoryView = {
   matches: (part: BuildPartDefinition) => boolean;
 };
 
+type CraftingStatus = {
+  canCraft: boolean;
+  missingStation: boolean;
+  missingMaterials: boolean;
+  label: string;
+  detail: string;
+};
+
 export type GameWindowsOptions = {
   onSelectBuildPart?: (partId: BuildPartId) => void;
   onEnterRemoveMode?: () => void;
@@ -48,7 +58,14 @@ export type GameWindowsOptions = {
 
 const WINDOW_ROOT_ID = 'dalworld-windows';
 const INVENTORY_SLOT_COUNT = 36;
-const CRAFTING_RECIPE_VIEWS = getCraftingCategories().flatMap((category) => category.recipes);
+const CRAFTING_CATEGORIES = getCraftingCategories();
+const CRAFTING_RECIPE_VIEWS = CRAFTING_CATEGORIES.flatMap((category) => category.recipes);
+const CRAFTING_TIER_FILTERS: Array<{ id: CraftingTierFilter; label: string }> = [
+  { id: 'all', label: '전체' },
+  { id: 'early', label: '초반' },
+  { id: 'mid', label: '중반' },
+  { id: 'late', label: '후반' },
+];
 const STAIR_PART_IDS = new Set<BuildPartId>([
   'wood_stair_landing',
   'stone_stair_landing',
@@ -72,7 +89,7 @@ const BUILDING_CATEGORIES: BuildingCategoryView[] = [
 const BUTTONS: FloatingButtonConfig[] = [
   { id: 'character', label: '캐릭터', icon: '🧍', title: '캐릭터', defaultButtonX: 18, defaultButtonY: 108, defaultWindowX: 84, defaultWindowY: 96 },
   { id: 'inventory', label: '가방', icon: '🎒', title: '가방', defaultButtonX: 18, defaultButtonY: 180, defaultWindowX: 96, defaultWindowY: 120 },
-  { id: 'crafting', label: '제작', icon: '⚒️', title: '제작', defaultButtonX: 18, defaultButtonY: 252, defaultWindowX: 160, defaultWindowY: 150 },
+  { id: 'crafting', label: '제작', icon: '⚒️', title: '제작', defaultButtonX: 18, defaultButtonY: 252, defaultWindowX: 160, defaultWindowY: 120 },
   { id: 'building', label: '건설', icon: '🏠', title: '건설', defaultButtonX: 18, defaultButtonY: 324, defaultWindowX: 220, defaultWindowY: 180 },
 ];
 
@@ -83,6 +100,8 @@ export class GameWindows {
   private selectedItem: string | null = null;
   private selectedBuildPart: BuildPartId | null = null;
   private activeInventoryTab: InventoryTabId = 'general';
+  private activeCraftingTier: CraftingTierFilter = 'all';
+  private activeCraftingCategory: CraftingCategoryFilter = 'all';
   private activeBuildingCategory: BuildingCategoryId = 'all';
   private lastInventory: InventorySource = null;
   private lastPlayer: PlayerSnapshot | null = null;
@@ -255,18 +274,69 @@ export class GameWindows {
   }
 
   private renderCraftingAvailability(): void {
-    const buttons = [...this.root.querySelectorAll<HTMLButtonElement>('[data-craft-recipe]')];
+    const cards = [...this.root.querySelectorAll<HTMLButtonElement>('[data-craft-recipe]')];
+    let visibleCount = 0;
+    let craftableVisibleCount = 0;
 
-    for (const button of buttons) {
-      const recipe = getCraftingRecipeView(button.dataset.craftRecipe);
+    this.renderCraftingFilterTabs();
+
+    for (const card of cards) {
+      const recipe = getCraftingRecipeView(card.dataset.craftRecipe);
       if (!recipe) continue;
-      const canCraft = canCraftRecipe(this.lastInventory, recipe);
-      button.disabled = !canCraft;
-      button.classList.toggle('is-disabled-by-cost', !canCraft);
-      button.title = canCraft
-        ? `${recipe.recipe.label} 제작 가능 · ${getRecipeTooltip(recipe.inputDefinitions)}`
-        : `${recipe.recipe.label} 재료 부족 · 필요: ${getRecipeTooltip(recipe.inputDefinitions)}`;
+
+      const visible = this.isCraftingRecipeVisible(recipe);
+      card.hidden = !visible;
+      if (visible) visibleCount += 1;
+
+      const status = getCraftingStatus(this.lastInventory, recipe);
+      if (visible && status.canCraft) craftableVisibleCount += 1;
+
+      card.disabled = !status.canCraft;
+      card.classList.toggle('is-disabled-by-cost', !status.canCraft);
+      card.classList.toggle('is-missing-station', status.missingStation);
+      card.classList.toggle('is-missing-materials', status.missingMaterials);
+      card.title = `${recipe.recipe.label} · ${status.detail}`;
+
+      const statusText = card.querySelector<HTMLElement>('[data-craft-status]');
+      if (statusText) statusText.textContent = status.label;
+      const statusDetail = card.querySelector<HTMLElement>('[data-craft-status-detail]');
+      if (statusDetail) statusDetail.textContent = status.detail;
     }
+
+    const summary = this.root.querySelector<HTMLElement>('[data-crafting-summary]');
+    if (summary) {
+      summary.textContent = `표시 ${visibleCount}개 · 제작 가능 ${craftableVisibleCount}개 · 전체 ${CRAFTING_RECIPE_VIEWS.length}개`;
+    }
+  }
+
+  private renderCraftingFilterTabs(): void {
+    const tierButtons = [...this.root.querySelectorAll<HTMLButtonElement>('[data-crafting-tier]')];
+    for (const button of tierButtons) {
+      const tier = (button.dataset.craftingTier ?? 'all') as CraftingTierFilter;
+      const count = tier === 'all'
+        ? CRAFTING_RECIPE_VIEWS.length
+        : CRAFTING_RECIPE_VIEWS.filter((view) => view.recipe.tier === tier).length;
+      button.textContent = `${getTierFilterLabel(tier)} ${count}`;
+      setPillActive(button, tier === this.activeCraftingTier);
+    }
+
+    const categoryButtons = [...this.root.querySelectorAll<HTMLButtonElement>('[data-crafting-category]')];
+    for (const button of categoryButtons) {
+      const category = (button.dataset.craftingCategory ?? 'all') as CraftingCategoryFilter;
+      const count = category === 'all'
+        ? CRAFTING_RECIPE_VIEWS.length
+        : CRAFTING_RECIPE_VIEWS.filter((view) => view.recipe.category === category).length;
+      const label = category === 'all'
+        ? '전체'
+        : CRAFTING_CATEGORIES.find((candidate) => candidate.id === category)?.label ?? category;
+      button.textContent = `${label} ${count}`;
+      setPillActive(button, category === this.activeCraftingCategory);
+    }
+  }
+
+  private isCraftingRecipeVisible(recipe: CraftingRecipeView): boolean {
+    return (this.activeCraftingTier === 'all' || recipe.recipe.tier === this.activeCraftingTier) &&
+      (this.activeCraftingCategory === 'all' || recipe.recipe.category === this.activeCraftingCategory);
   }
 
   private renderBuildingCategoryTabs(): void {
@@ -276,10 +346,7 @@ export class GameWindows {
       const category = getBuildingCategory(categoryId);
       const count = BUILD_PART_LIST.filter((part) => category.matches(part)).length;
       tab.textContent = `${category.label} ${count}`;
-      tab.classList.toggle('is-active', categoryId === this.activeBuildingCategory);
-      tab.style.background = categoryId === this.activeBuildingCategory ? 'rgba(84, 220, 120, 0.2)' : 'rgba(255, 255, 255, 0.08)';
-      tab.style.borderColor = categoryId === this.activeBuildingCategory ? 'rgba(84, 220, 120, 0.95)' : 'rgba(255, 255, 255, 0.14)';
-      tab.style.color = categoryId === this.activeBuildingCategory ? '#f5fff7' : 'rgba(245, 247, 251, 0.76)';
+      setPillActive(tab, categoryId === this.activeBuildingCategory);
     }
   }
 
@@ -377,7 +444,23 @@ export class GameWindows {
 
   private installCraftingInteractions(): void {
     const crafting = query<HTMLDivElement>(this.root, '[data-window="crafting"]');
+    const tierButtons = [...crafting.querySelectorAll<HTMLButtonElement>('[data-crafting-tier]')];
+    const categoryButtons = [...crafting.querySelectorAll<HTMLButtonElement>('[data-crafting-category]')];
     const buttons = [...crafting.querySelectorAll<HTMLButtonElement>('[data-craft-recipe]')];
+
+    for (const button of tierButtons) {
+      button.addEventListener('click', () => {
+        this.activeCraftingTier = (button.dataset.craftingTier ?? 'all') as CraftingTierFilter;
+        this.renderCraftingAvailability();
+      });
+    }
+
+    for (const button of categoryButtons) {
+      button.addEventListener('click', () => {
+        this.activeCraftingCategory = (button.dataset.craftingCategory ?? 'all') as CraftingCategoryFilter;
+        this.renderCraftingAvailability();
+      });
+    }
 
     for (const button of buttons) {
       button.addEventListener('click', () => {
@@ -572,27 +655,61 @@ function getInventoryWindowMarkup(): string {
 }
 
 function getCraftingWindowMarkup(): string {
-  const recipes = CRAFTING_RECIPE_VIEWS.slice(0, 12);
   return `
-    <section class="game-window simple-system-window crafting-window" data-window="crafting" hidden>
+    <section class="game-window simple-system-window crafting-window" data-window="crafting" hidden style="width:min(760px, calc(100vw - 28px)); max-height:min(680px, calc(100vh - 28px));">
       ${getWindowHeaderMarkup('제작')}
-      <div class="system-window-body">
-        <h3>제작 시스템</h3>
-        <p>레시피를 누르면 서버가 재료를 검증한 뒤 제작합니다.</p>
-        <div class="placeholder-grid">
-          ${recipes.map((view) => `
-            <button class="placeholder-card" type="button" data-craft-recipe="${view.recipe.id}" title="${getRecipeTooltip(view.inputDefinitions)}" style="display:grid; grid-template-columns:28px 1fr; gap:8px; align-items:center; min-height:64px; text-align:left; padding:8px;">
-              <span style="font-size:22px; text-align:center;">${view.outputDefinition?.icon ?? '▣'}</span>
-              <span style="display:flex; min-width:0; flex-direction:column; gap:2px;">
-                <strong style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff1bf; font-size:11px;">${view.recipe.label}</strong>
-                <small style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:rgba(255,255,255,.62); font-size:10px;">${getRecipeTooltip(view.inputDefinitions)}</small>
-                <small style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:rgba(126,231,255,.88); font-size:10px;">→ ${getRecipeOutputText(view)}</small>
-              </span>
-            </button>
-          `).join('')}
+      <div class="system-window-body" style="display:flex; flex-direction:column; gap:10px; max-height:620px; overflow:hidden;">
+        <div style="display:grid; grid-template-columns:1fr auto; gap:10px; align-items:start; padding:10px; border:1px solid rgba(255,228,163,.2); border-radius:16px; background:linear-gradient(135deg, rgba(255,228,163,.1), rgba(126,231,255,.07));">
+          <div>
+            <h3 style="margin:0 0 4px; color:#ffe4a3; font-size:16px;">생존 제작대</h3>
+            <p style="margin:0; color:rgba(255,255,255,.7); font-size:12px; line-height:1.45;">초반 생존 장비부터 중후반 에너지 제작까지, 서버가 재료와 제작도구를 검증합니다.</p>
+          </div>
+          <span data-crafting-summary style="padding:6px 9px; border-radius:999px; background:rgba(0,0,0,.24); border:1px solid rgba(255,255,255,.12); color:#dff8ff; font-size:11px; font-weight:900; white-space:nowrap;">표시 0개</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:7px;">
+          <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:1px; scrollbar-width:thin;">
+            ${CRAFTING_TIER_FILTERS.map((tier) => `
+              <button class="building-category-tab" type="button" data-crafting-tier="${tier.id}" style="flex:0 0 auto; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.08); color:rgba(245,247,251,.76); font-size:12px; font-weight:800; white-space:nowrap; cursor:pointer;">${tier.label}</button>
+            `).join('')}
+          </div>
+          <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; scrollbar-width:thin;">
+            <button class="building-category-tab" type="button" data-crafting-category="all" style="flex:0 0 auto; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.08); color:rgba(245,247,251,.76); font-size:12px; font-weight:800; white-space:nowrap; cursor:pointer;">전체</button>
+            ${CRAFTING_CATEGORIES.map((category) => `
+              <button class="building-category-tab" type="button" data-crafting-category="${category.id}" style="flex:0 0 auto; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.08); color:rgba(245,247,251,.76); font-size:12px; font-weight:800; white-space:nowrap; cursor:pointer;">${category.label}</button>
+            `).join('')}
+          </div>
+        </div>
+        <div style="overflow-y:auto; padding-right:4px; scrollbar-width:thin; touch-action:pan-y; overscroll-behavior:contain;">
+          <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:9px;">
+            ${CRAFTING_RECIPE_VIEWS.map((view) => getCraftingRecipeCardMarkup(view)).join('')}
+          </div>
         </div>
       </div>
     </section>
+  `;
+}
+
+function getCraftingRecipeCardMarkup(view: CraftingRecipeView): string {
+  const outputIcon = view.outputDefinition?.icon ?? '▣';
+  const station = view.requiredStationDefinition
+    ? `${view.requiredStationDefinition.icon} ${view.requiredStationDefinition.label}`
+    : '손 제작';
+  return `
+    <button class="placeholder-card crafting-recipe-card" type="button" data-craft-recipe="${view.recipe.id}" data-craft-tier-value="${view.recipe.tier}" data-craft-category-value="${view.recipe.category}" style="display:grid; grid-template-columns:42px 1fr; gap:9px; align-items:start; min-height:134px; text-align:left; padding:10px; border-radius:16px; position:relative; overflow:hidden;">
+      <span style="display:grid; place-items:center; width:42px; height:42px; border-radius:13px; background:rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.12); font-size:24px;">${outputIcon}</span>
+      <span style="display:flex; min-width:0; flex-direction:column; gap:5px;">
+        <span style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
+          <small style="padding:2px 6px; border-radius:999px; background:${getTierBadgeBackground(view.recipe.tier)}; color:#fff; font-size:10px; font-weight:950;">${view.tierLabel}</small>
+          <small style="padding:2px 6px; border-radius:999px; background:rgba(126,231,255,.12); color:#dff8ff; font-size:10px; font-weight:850;">${view.categoryLabel}</small>
+        </span>
+        <strong style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff1bf; font-size:12px;">${view.recipe.label}</strong>
+        <small style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:rgba(255,255,255,.65); font-size:10px;">도구: ${station}</small>
+        <small style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:rgba(255,255,255,.66); font-size:10px;">재료: ${getRecipeTooltip(view.inputDefinitions)}</small>
+        <small style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:rgba(126,231,255,.9); font-size:10px; font-weight:800;">결과: ${getRecipeOutputText(view)} · ${view.recipe.craftSeconds ?? 1}s</small>
+        <span data-craft-status style="margin-top:2px; align-self:flex-start; padding:3px 7px; border-radius:999px; background:rgba(255,255,255,.08); color:#fff; font-size:10px; font-weight:950;">확인 중</span>
+        <span data-craft-status-detail style="font-size:10px; color:rgba(255,255,255,.52); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">서버 검증 대기</span>
+      </span>
+    </button>
   `;
 }
 
@@ -702,11 +819,41 @@ function canAffordBuildPart(inventory: InventorySource, costs: { itemId: string;
   return costs.every((cost) => (stacks.find((stack) => stack.itemId === cost.itemId)?.quantity ?? 0) >= cost.quantity);
 }
 
-function canCraftRecipe(inventory: InventorySource, recipe: CraftingRecipeView): boolean {
+function getCraftingStatus(inventory: InventorySource, recipe: CraftingRecipeView): CraftingStatus {
   const stacks = normalizeInventoryStacks(inventory);
-  return recipe.recipe.inputs.every((input) => (
-    (stacks.find((stack) => stack.itemId === input.itemId)?.quantity ?? 0) >= input.quantity
+  const missingInputs = recipe.recipe.inputs.filter((input) => (
+    (stacks.find((stack) => stack.itemId === input.itemId)?.quantity ?? 0) < input.quantity
   ));
+  const missingStation = recipe.recipe.requiredStation
+    ? (stacks.find((stack) => stack.itemId === recipe.recipe.requiredStation)?.quantity ?? 0) < 1
+    : false;
+  const canCraft = missingInputs.length === 0 && !missingStation;
+
+  if (canCraft) {
+    return { canCraft, missingStation: false, missingMaterials: false, label: '제작 가능', detail: '클릭하면 서버 검증 후 제작합니다.' };
+  }
+
+  if (missingStation) {
+    return {
+      canCraft,
+      missingStation: true,
+      missingMaterials: missingInputs.length > 0,
+      label: '제작도구 필요',
+      detail: `필요 도구: ${recipe.requiredStationDefinition?.label ?? recipe.recipe.requiredStation}`,
+    };
+  }
+
+  return {
+    canCraft,
+    missingStation: false,
+    missingMaterials: true,
+    label: '재료 부족',
+    detail: `부족: ${missingInputs.map((input) => `${getItemLabel(input.itemId)} ${input.quantity}`).join(' · ')}`,
+  };
+}
+
+function canCraftRecipe(inventory: InventorySource, recipe: CraftingRecipeView): boolean {
+  return getCraftingStatus(inventory, recipe).canCraft;
 }
 
 function getCraftingRecipeView(recipeId: string | undefined): CraftingRecipeView | null {
@@ -725,6 +872,10 @@ function getBuildPartLabel(partId: BuildPartId): string {
 }
 
 function getBuildCostLabel(itemId: string): string {
+  return getItemLabel(itemId);
+}
+
+function getItemLabel(itemId: string): string {
   const definition = BASE_ITEM_DEFINITIONS[itemId];
   if (definition) return definition.label;
   return itemId;
@@ -736,8 +887,33 @@ function getRecipeTooltip(inputs: Array<{ itemId: string; quantity: number; defi
 
 function getRecipeOutputText(view: CraftingRecipeView): string {
   return view.recipe.outputs
-    .map((output) => `${view.outputDefinition?.label ?? output.itemId} ${output.quantity}`)
+    .map((output, index) => {
+      if (index === 0 && view.outputDefinition) return `${view.outputDefinition.label} ${output.quantity}`;
+      return `${getItemLabel(output.itemId)} ${output.quantity}`;
+    })
     .join(' · ');
+}
+
+function getTierFilterLabel(tier: CraftingTierFilter): string {
+  return CRAFTING_TIER_FILTERS.find((candidate) => candidate.id === tier)?.label ?? tier;
+}
+
+function getTierBadgeBackground(tier: CraftingTier): string {
+  switch (tier) {
+    case 'early':
+      return 'rgba(84,220,120,.45)';
+    case 'mid':
+      return 'rgba(126,231,255,.36)';
+    case 'late':
+      return 'rgba(191,126,255,.42)';
+  }
+}
+
+function setPillActive(button: HTMLElement, active: boolean): void {
+  button.classList.toggle('is-active', active);
+  button.style.background = active ? 'rgba(84, 220, 120, 0.2)' : 'rgba(255, 255, 255, 0.08)';
+  button.style.borderColor = active ? 'rgba(84, 220, 120, 0.95)' : 'rgba(255, 255, 255, 0.14)';
+  button.style.color = active ? '#f5fff7' : 'rgba(245, 247, 251, 0.76)';
 }
 
 function isPlayerSnapshot(value: InventorySource): value is PlayerSnapshot {
