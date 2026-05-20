@@ -1,5 +1,5 @@
 import { TILESET_CATEGORIES } from './tilesetManifest';
-import type { EditorLayerId, EditorTilesetAsset } from './types';
+import type { EditorLayerId, EditorMonsterSpawnRule, EditorTilesetAsset } from './types';
 import { EditorState, BLACK_SOLID_ASSET } from './EditorState';
 import { MonsterSpawnControls } from './MonsterSpawnControls';
 
@@ -12,6 +12,8 @@ export type TilesetPanelActions = {
   onFillAll: () => void;
   onRandomFill: (chancePercent: number) => void;
   onToggleWorldMap: () => void;
+  getMonsterSpawnRules: () => EditorMonsterSpawnRule[];
+  setMonsterSpawnRules: (rules: EditorMonsterSpawnRule[]) => void;
 };
 
 const EDITOR_LAYERS: Array<{ id: EditorLayerId; label: string }> = [
@@ -21,11 +23,14 @@ const EDITOR_LAYERS: Array<{ id: EditorLayerId; label: string }> = [
 ];
 
 const GRID_SIZE_OPTIONS = [16, 32, 64];
+const MONSTER_CATEGORY_ID = 'monsters';
+type PanelTab = 'tiles' | 'monsters';
 
 export class TilesetPanel {
   readonly element: HTMLDivElement;
 
   private readonly header: HTMLDivElement;
+  private readonly tabContainer: HTMLDivElement;
   private readonly scaleContainer: HTMLDivElement;
   private readonly gridContainer: HTMLDivElement;
   private readonly layerContainer: HTMLDivElement;
@@ -33,9 +38,11 @@ export class TilesetPanel {
   private readonly fillContainer: HTMLDivElement;
   private readonly actionContainer: HTMLDivElement;
   private readonly categoryContainer: HTMLDivElement;
+  private readonly monsterRuleContainer: HTMLDivElement;
   private readonly assetContainer: HTMLDivElement;
   private readonly monsterSpawnControls: MonsterSpawnControls;
 
+  private activeTab: PanelTab = 'tiles';
   private dragging = false;
   private dragOffsetX = 0;
   private dragOffsetY = 0;
@@ -53,6 +60,9 @@ export class TilesetPanel {
     this.header = document.createElement('div');
     this.header.className = 'map-editor-header';
     this.header.textContent = 'Map Editor';
+
+    this.tabContainer = document.createElement('div');
+    this.tabContainer.className = 'map-editor-tabs';
 
     this.scaleContainer = document.createElement('div');
     this.scaleContainer.className = 'map-editor-scale';
@@ -75,6 +85,9 @@ export class TilesetPanel {
     this.categoryContainer = document.createElement('div');
     this.categoryContainer.className = 'map-editor-categories';
 
+    this.monsterRuleContainer = document.createElement('div');
+    this.monsterRuleContainer.className = 'map-editor-monster-rules';
+
     this.assetContainer = document.createElement('div');
     this.assetContainer.className = 'map-editor-assets';
 
@@ -82,6 +95,7 @@ export class TilesetPanel {
 
     this.element.append(
       this.header,
+      this.tabContainer,
       this.scaleContainer,
       this.gridContainer,
       this.layerContainer,
@@ -89,6 +103,7 @@ export class TilesetPanel {
       this.fillContainer,
       this.actionContainer,
       this.categoryContainer,
+      this.monsterRuleContainer,
       this.assetContainer,
       this.monsterSpawnControls.element,
     );
@@ -103,6 +118,7 @@ export class TilesetPanel {
   }
 
   private render(): void {
+    this.renderTabs();
     this.renderScaleControls();
     this.renderGridControls();
     this.renderLayerControls();
@@ -110,8 +126,41 @@ export class TilesetPanel {
     this.renderFillControls();
     this.renderActions();
     this.renderCategories();
+    this.renderMonsterRules();
     this.renderAssets();
     this.monsterSpawnControls.render();
+    this.applyTabVisibility();
+  }
+
+  private renderTabs(): void {
+    this.tabContainer.innerHTML = '';
+    this.tabContainer.append(
+      this.createTabButton('Tiles', 'tiles'),
+      this.createTabButton('Monsters', 'monsters'),
+    );
+  }
+
+  private createTabButton(label: string, tab: PanelTab): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.className = 'map-editor-tab';
+    if (this.activeTab === tab) button.classList.add('is-active');
+    button.textContent = label;
+    button.onclick = () => {
+      this.activeTab = tab;
+      if (tab === 'monsters') this.state.setActiveCategory(MONSTER_CATEGORY_ID);
+      this.render();
+    };
+    return button;
+  }
+
+  private applyTabVisibility(): void {
+    const isMonsters = this.activeTab === 'monsters';
+    this.categoryContainer.hidden = isMonsters;
+    this.monsterRuleContainer.hidden = !isMonsters;
+
+    if (!isMonsters) {
+      this.monsterSpawnControls.element.hidden = true;
+    }
   }
 
   private renderScaleControls(): void {
@@ -135,9 +184,7 @@ export class TilesetPanel {
     value.value = this.state.brushScale.toFixed(1);
     value.onchange = () => this.state.setBrushScale(Number(value.value));
     value.onkeydown = (event) => {
-      if (event.key === 'Enter') {
-        value.blur();
-      }
+      if (event.key === 'Enter') value.blur();
     };
 
     const suffix = document.createElement('span');
@@ -199,15 +246,11 @@ export class TilesetPanel {
     const eraseButton = this.createModeButton('삭제', 'erase');
     const blackButton = this.createActionButton('Black', () => this.state.selectBlackBrush());
     blackButton.classList.add('map-editor-black-brush');
-    if (this.state.selectedAsset?.id === BLACK_SOLID_ASSET.id) {
-      blackButton.classList.add('is-active');
-    }
+    if (this.state.selectedAsset?.id === BLACK_SOLID_ASSET.id) blackButton.classList.add('is-active');
 
     const transparentBlackButton = this.createActionButton('검정투명', () => this.state.toggleTransparentBlack());
     transparentBlackButton.classList.add('map-editor-transparent-black');
-    if (this.state.transparentBlack) {
-      transparentBlackButton.classList.add('is-active');
-    }
+    if (this.state.transparentBlack) transparentBlackButton.classList.add('is-active');
 
     const worldMapButton = this.createActionButton('월드맵', this.actions.onToggleWorldMap);
 
@@ -256,27 +299,102 @@ export class TilesetPanel {
   private renderCategories(): void {
     this.categoryContainer.innerHTML = '';
 
-    for (const category of TILESET_CATEGORIES) {
+    for (const category of TILESET_CATEGORIES.filter((category) => category.id !== MONSTER_CATEGORY_ID)) {
       const button = document.createElement('button');
       button.className = 'map-editor-category';
-
-      if (category.id === this.state.activeCategoryId) {
-        button.classList.add('is-active');
-      }
-
+      if (category.id === this.state.activeCategoryId) button.classList.add('is-active');
       button.textContent = category.name;
       button.onclick = () => this.state.setActiveCategory(category.id);
-
       this.categoryContainer.appendChild(button);
     }
+  }
+
+  private renderMonsterRules(): void {
+    this.monsterRuleContainer.innerHTML = '';
+
+    const title = document.createElement('div');
+    title.className = 'map-editor-section-title';
+    title.textContent = '전체맵 몬스터 스폰';
+
+    const note = document.createElement('div');
+    note.className = 'map-editor-monster-rule-note';
+    note.textContent = '지역 스폰 마커와 별도로, 전체맵에 몬스터를 시간당 보충합니다.';
+
+    this.monsterRuleContainer.append(title, note);
+
+    for (const rule of this.actions.getMonsterSpawnRules()) {
+      this.monsterRuleContainer.appendChild(this.createMonsterRuleCard(rule));
+    }
+  }
+
+  private createMonsterRuleCard(rule: EditorMonsterSpawnRule): HTMLElement {
+    const card = document.createElement('div');
+    card.className = 'map-editor-monster-rule-card';
+    if (!rule.enabled) card.classList.add('is-disabled');
+
+    const toggle = document.createElement('label');
+    toggle.className = 'map-editor-monster-rule-toggle';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = rule.enabled;
+    checkbox.onchange = () => this.patchMonsterRule(rule.id, { enabled: checkbox.checked });
+
+    const name = document.createElement('strong');
+    name.textContent = rule.monsterType === 'sheep' ? 'Sheep' : 'Wild Slime';
+    toggle.append(checkbox, name);
+
+    card.append(
+      toggle,
+      this.createMonsterRuleNumberField('최대 유지', rule.maxAlive, 0, 500, 1, (value) => {
+        this.patchMonsterRule(rule.id, { maxAlive: Math.round(value) });
+      }),
+      this.createMonsterRuleNumberField('시간당', rule.spawnsPerHour, 1, 36000, 1, (value) => {
+        this.patchMonsterRule(rule.id, { spawnsPerHour: Math.round(value) });
+      }),
+    );
+
+    return card;
+  }
+
+  private createMonsterRuleNumberField(
+    labelText: string,
+    value: number,
+    min: number,
+    max: number,
+    step: number,
+    onChange: (value: number) => void,
+  ): HTMLElement {
+    const label = document.createElement('label');
+    label.className = 'map-editor-monster-rule-field';
+
+    const span = document.createElement('span');
+    span.textContent = labelText;
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = String(min);
+    input.max = String(max);
+    input.step = String(step);
+    input.value = String(value);
+    input.onchange = () => onChange(clampNumber(Number(input.value), min, max, value));
+
+    label.append(span, input);
+    return label;
+  }
+
+  private patchMonsterRule(ruleId: string, patch: Partial<EditorMonsterSpawnRule>): void {
+    this.actions.setMonsterSpawnRules(this.actions.getMonsterSpawnRules().map((rule) => (
+      rule.id === ruleId ? { ...rule, ...patch } : rule
+    )));
+    this.render();
   }
 
   private renderAssets(): void {
     this.assetContainer.innerHTML = '';
 
-    const category = TILESET_CATEGORIES.find(
-      (item) => item.id === this.state.activeCategoryId,
-    );
+    const activeCategoryId = this.activeTab === 'monsters' ? MONSTER_CATEGORY_ID : this.state.activeCategoryId;
+    const category = TILESET_CATEGORIES.find((item) => item.id === activeCategoryId);
 
     for (const asset of category?.assets ?? []) {
       this.assetContainer.appendChild(this.createAssetCard(asset));
@@ -309,23 +427,26 @@ export class TilesetPanel {
     const button = document.createElement('button');
     button.className = 'map-editor-asset';
 
-    if (this.state.selectedAsset?.id === asset.id) {
-      button.classList.add('is-selected');
-    }
+    if (this.state.selectedAsset?.id === asset.id) button.classList.add('is-selected');
+    if (asset.gameplayDefaults?.kind === 'monsterSpawn') button.classList.add('is-monster-spawn');
 
-    if (asset.gameplayDefaults?.kind === 'monsterSpawn') {
-      button.classList.add('is-monster-spawn');
+    if (asset.solidColor !== undefined || asset.url.startsWith('solid://')) {
+      const swatch = document.createElement('span');
+      swatch.className = 'map-editor-asset-swatch';
+      swatch.style.background = `#${(asset.solidColor ?? 0x7bdff2).toString(16).padStart(6, '0')}`;
+      button.appendChild(swatch);
+    } else {
+      const image = document.createElement('img');
+      image.src = asset.url;
+      image.alt = asset.name;
+      image.draggable = false;
+      button.appendChild(image);
     }
-
-    const image = document.createElement('img');
-    image.src = asset.url;
-    image.alt = asset.name;
-    image.draggable = false;
 
     const label = document.createElement('span');
     label.textContent = asset.name;
 
-    button.append(image, label);
+    button.append(label);
     button.onclick = () => this.actions.onPickAsset(asset);
 
     return button;
@@ -337,13 +458,11 @@ export class TilesetPanel {
       const rect = this.element.getBoundingClientRect();
       this.dragOffsetX = event.clientX - rect.left;
       this.dragOffsetY = event.clientY - rect.top;
-
       this.header.setPointerCapture(event.pointerId);
     });
 
     this.header.addEventListener('pointermove', (event) => {
       if (!this.dragging) return;
-
       this.element.style.left = `${event.clientX - this.dragOffsetX}px`;
       this.element.style.top = `${event.clientY - this.dragOffsetY}px`;
     });
@@ -360,4 +479,9 @@ export class TilesetPanel {
 function normalizeChance(value: number): number {
   if (!Number.isFinite(value)) return 30;
   return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function clampNumber(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
 }
