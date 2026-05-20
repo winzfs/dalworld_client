@@ -29,7 +29,7 @@ type CollisionCircle = { x: number; y: number; radius: number };
 export class ClientMovementSystem {
   update(context: ClientMovementContext, dt: number): boolean {
     const player = context.player;
-    if (!player) return false;
+    if (!player || !player.alive) return false;
 
     const direction = getMoveDirection(context.keys);
     if (!direction) return false;
