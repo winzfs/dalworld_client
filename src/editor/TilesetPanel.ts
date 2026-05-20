@@ -1,6 +1,7 @@
 import { TILESET_CATEGORIES } from './tilesetManifest';
 import type { EditorLayerId, EditorTilesetAsset } from './types';
 import { EditorState, BLACK_SOLID_ASSET } from './EditorState';
+import { MonsterSpawnControls } from './MonsterSpawnControls';
 
 export type TilesetPanelActions = {
   onSave: () => void;
@@ -33,6 +34,7 @@ export class TilesetPanel {
   private readonly actionContainer: HTMLDivElement;
   private readonly categoryContainer: HTMLDivElement;
   private readonly assetContainer: HTMLDivElement;
+  private readonly monsterSpawnControls: MonsterSpawnControls;
 
   private dragging = false;
   private dragOffsetX = 0;
@@ -76,6 +78,8 @@ export class TilesetPanel {
     this.assetContainer = document.createElement('div');
     this.assetContainer.className = 'map-editor-assets';
 
+    this.monsterSpawnControls = new MonsterSpawnControls(this.state);
+
     this.element.append(
       this.header,
       this.scaleContainer,
@@ -86,6 +90,7 @@ export class TilesetPanel {
       this.actionContainer,
       this.categoryContainer,
       this.assetContainer,
+      this.monsterSpawnControls.element,
     );
 
     this.attachDragHandlers();
@@ -106,6 +111,7 @@ export class TilesetPanel {
     this.renderActions();
     this.renderCategories();
     this.renderAssets();
+    this.monsterSpawnControls.render();
   }
 
   private renderScaleControls(): void {
@@ -305,6 +311,10 @@ export class TilesetPanel {
 
     if (this.state.selectedAsset?.id === asset.id) {
       button.classList.add('is-selected');
+    }
+
+    if (asset.gameplayDefaults?.kind === 'monsterSpawn') {
+      button.classList.add('is-monster-spawn');
     }
 
     const image = document.createElement('img');
