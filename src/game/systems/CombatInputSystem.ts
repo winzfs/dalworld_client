@@ -23,7 +23,7 @@ export class CombatInputSystem {
   update(context: CombatInputSystemContext): void {
     if (!context.input.consumeAttack()) return;
     const player = context.player;
-    if (!player) return;
+    if (!player || !player.alive) return;
 
     const now = performance.now();
     if (now < this.nextLocalAttackAt) return;
