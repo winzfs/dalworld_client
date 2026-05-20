@@ -4,7 +4,7 @@ const JOYSTICK_RADIUS = 64;
 const KNOB_RADIUS = 28;
 
 /**
- * Touch-only virtual joystick + gather + fullscreen buttons.
+ * Touch-only virtual joystick + gather + attack + fullscreen buttons.
  * Hidden on devices without touch support.
  */
 export class MobileControls {
@@ -12,6 +12,7 @@ export class MobileControls {
   private readonly joystickEl: HTMLDivElement;
   private readonly knobEl: HTMLDivElement;
   private readonly gatherBtn: HTMLButtonElement;
+  private readonly attackBtn: HTMLButtonElement;
   private readonly fullscreenBtn: HTMLButtonElement;
 
   private activePointerId: number | null = null;
@@ -34,13 +35,19 @@ export class MobileControls {
     this.gatherBtn.textContent = 'E';
     this.gatherBtn.setAttribute('aria-label', 'gather');
 
+    this.attackBtn = document.createElement('button');
+    this.attackBtn.type = 'button';
+    this.attackBtn.className = 'action-btn attack-btn';
+    this.attackBtn.textContent = 'F';
+    this.attackBtn.setAttribute('aria-label', 'attack');
+
     this.fullscreenBtn = document.createElement('button');
     this.fullscreenBtn.type = 'button';
     this.fullscreenBtn.className = 'action-btn fullscreen-btn';
     this.fullscreenBtn.textContent = '⛶';
     this.fullscreenBtn.setAttribute('aria-label', 'fullscreen');
 
-    this.root.append(this.joystickEl, this.gatherBtn, this.fullscreenBtn);
+    this.root.append(this.joystickEl, this.gatherBtn, this.attackBtn, this.fullscreenBtn);
     document.body.appendChild(this.root);
 
     this.attach();
@@ -63,6 +70,11 @@ export class MobileControls {
     this.gatherBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.input.triggerGather();
+    });
+
+    this.attackBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.input.triggerAttack();
     });
 
     this.fullscreenBtn.addEventListener('click', () => {
