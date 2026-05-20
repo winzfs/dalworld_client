@@ -23,7 +23,7 @@
     "size": { "w": 1, "d": 0.12, "h": 1 },
     "blocksMovement": true,
     "requiresSupport": true,
-    "allowedOn": ["floor_1x1", "stone_floor_1x1", "deck_floor_1x1"],
+    "allowedOn": ["floor_1x1"],
     "placementCost": [
       { "itemId": "wood", "quantity": 3 }
     ],
