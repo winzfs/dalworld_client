@@ -3,7 +3,8 @@ import { ProceduralMeadowRenderer } from '../../render/ProceduralMeadowRenderer'
 import { GameWorldMapRenderer } from '../../render/GameWorldMapRenderer';
 import type { WorldInfo } from '../../protocol/messages';
 import { createActiveCellMapView } from '../../worldMap/activeCellMapView';
-import { getRuntimeWorldMap } from '../../worldMap/runtimeMapStore';
+import { fetchRuntimeWorldMap } from '../../worldMap/fetchRuntimeWorldMap';
+import { getRuntimeWorldMap, setRuntimeWorldMap } from '../../worldMap/runtimeMapStore';
 import type { CameraSystem } from './CameraSystem';
 
 export type RuntimeWorldSystemContext = {
@@ -24,7 +25,7 @@ export class RuntimeWorldSystem {
   constructor(private readonly context: RuntimeWorldSystemContext) {}
 
   async load(): Promise<RuntimeWorldLoadResult> {
-    const runtimeMap = getRuntimeWorldMap();
+    const runtimeMap = await this.resolveRuntimeWorldMap();
     this.destroyMeadowRenderer();
 
     if (runtimeMap) {
@@ -91,6 +92,23 @@ export class RuntimeWorldSystem {
         .moveTo(0, y)
         .lineTo(worldInfo.width, y)
         .stroke({ color: 0x2c4a55, width: 1 });
+    }
+  }
+
+  private async resolveRuntimeWorldMap() {
+    const cached = getRuntimeWorldMap();
+    if (cached) return cached;
+
+    try {
+      const fetched = await fetchRuntimeWorldMap();
+      setRuntimeWorldMap(fetched);
+      console.info('[RuntimeWorldSystem] Loaded runtime world map before welcome.', {
+        cells: fetched?.cells.map((cell) => `${cell.gridX}:${cell.gridY}`) ?? [],
+      });
+      return fetched;
+    } catch (error) {
+      console.warn('[RuntimeWorldSystem] Failed to fetch runtime world map before welcome.', error);
+      return null;
     }
   }
 
