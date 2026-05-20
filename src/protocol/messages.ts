@@ -238,12 +238,12 @@ export type ServerEvent =
 export type ServerToClientMessage =
   | {
       type: 'welcome';
-      protocolVersion?: number;
+      protocolVersion: number;
       playerId: string;
       world: WorldInfo;
-      gameplay?: PublicGameplayConfig;
+      gameplay: PublicGameplayConfig;
       map?: GameWorldMap | null;
-      timeOfDay?: TimeOfDayState;
+      timeOfDay: TimeOfDayState;
       serverTime: number;
     }
   | {
