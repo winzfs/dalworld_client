@@ -6,6 +6,7 @@ import type {
   CraftingServerEvent,
   CombatServerEvent,
   CombatHitEvent,
+  ServerEvent,
 } from '../../protocol/messages';
 import type { TimeOfDayState } from '../../systems/timeOfDay/TimeOfDayTypes';
 import type { BuildingServerEvent } from '../../systems/building/BuildingTypes';
@@ -19,6 +20,7 @@ import type { MonsterRenderer } from '../../render/MonsterRenderer';
 import { getActiveCell } from '../../worldMap/activeCellStore';
 import { fetchRuntimeWorldMap } from '../../worldMap/fetchRuntimeWorldMap';
 import { setRuntimeWorldMap } from '../../worldMap/runtimeMapStore';
+import { emitSystemLog } from '../../ui/SystemLogHud';
 
 export type ServerMessageRouterContext = {
   input: InputState;
@@ -64,15 +66,25 @@ export class ServerMessageRouter {
         this.context.onBuildingEvent?.(message);
         return;
       case 'CRAFT_COMPLETED':
+        emitSystemLog({ message: '제작 완료', kind: 'success' });
+        this.context.onCraftingEvent?.(message);
+        return;
       case 'CRAFT_REJECTED':
+        emitSystemLog({ message: `제작 실패: ${message.reason}`, kind: 'warning' });
         this.context.onCraftingEvent?.(message);
         return;
       case 'COMBAT_ATTACK_CONFIRMED':
       case 'COMBAT_HIT':
       case 'COMBAT_MISSED':
       case 'COMBAT_REJECTED':
+        this.context.onCombatEvent?.(message);
+        return;
       case 'MONSTER_KILLED':
+        emitSystemLog({ message: `${formatMonsterName(message.monsterType)} 처치`, kind: 'success' });
+        this.context.onCombatEvent?.(message);
+        return;
       case 'COMBAT_REWARD_GRANTED':
+        emitSystemLog({ message: `${formatItemName(message.itemId)} +${message.amount}`, kind: 'success' });
         this.context.onCombatEvent?.(message);
         return;
       case 'pong':
@@ -131,6 +143,9 @@ export class ServerMessageRouter {
   }
 
   private handleEvent(message: Extract<ServerToClientMessage, { type: 'event' }>): void {
+    const log = formatServerEventLog(message.event);
+    if (log) emitSystemLog(log);
+
     if (message.event.type === 'combat_hit') {
       this.context.onCombatEvent?.({
         type: 'COMBAT_HIT',
@@ -154,4 +169,48 @@ function filterActiveCellResources(resources: ResourceSnapshot[]): ResourceSnaps
     resource.cellX === active.gridX &&
     resource.cellY === active.gridY
   ));
+}
+
+function formatServerEventLog(event: ServerEvent): { message: string; kind?: 'info' | 'success' | 'warning' } | null {
+  switch (event.type) {
+    case 'item_gained':
+      return { message: `${formatItemName(event.item)} +${event.amount}`, kind: 'success' };
+    case 'resource_destroyed':
+      return { message: `${formatResourceName(event.resourceType)} 채집 완료`, kind: 'success' };
+    default:
+      return null;
+  }
+}
+
+function formatMonsterName(type: string): string {
+  switch (type) {
+    case 'wild_slime':
+      return '와일드 슬라임';
+    case 'sheep':
+      return '양';
+    default:
+      return type;
+  }
+}
+
+function formatResourceName(type: string): string {
+  switch (type) {
+    case 'tree':
+      return '나무';
+    case 'stone':
+      return '돌';
+    default:
+      return type;
+  }
+}
+
+function formatItemName(type: string): string {
+  switch (type) {
+    case 'wood':
+      return '나무';
+    case 'stone':
+      return '돌';
+    default:
+      return type;
+  }
 }
