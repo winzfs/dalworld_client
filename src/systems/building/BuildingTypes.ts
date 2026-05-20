@@ -15,6 +15,7 @@ export type BuildPartId =
   | "wood_round_floor"
   | "stone_round_floor"
   | "thin_wall"
+  | "wood_wall_sprite_test"
   | "stone_wall"
   | "half_wall"
   | "railing"
