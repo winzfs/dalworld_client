@@ -1,0 +1,34 @@
+name: Refactor
+about: 구조 개선 또는 책임 분리 작업
+labels: [refactor]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 리팩터링 대상과 이유
+      description: 어떤 책임이 커졌고 왜 분리가 필요한지 적어주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: 책임 경계
+      description: 기존 모듈과 새 모듈이 각각 무엇을 담당해야 하는지 적어주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: 기존 기능 영향/위험
+      description: 삭제되거나 약화될 수 있는 기능이 있는지 적어주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: 예상 수정 파일
+  - type: textarea
+    id: validation
+    attributes:
+      label: 검증 방법
+      placeholder: npm run check, 기존 조작/모바일/에디터 모드 회귀 확인 등
