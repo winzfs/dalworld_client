@@ -109,7 +109,7 @@ export class ResourceRenderer {
     maxDistance: number,
   ): ResourceSnapshot | null {
     let best: ResourceSnapshot | null = null;
-    let bestDist = maxDistance;
+    let bestScore = Number.POSITIVE_INFINITY;
 
     for (const resource of resources) {
       if (!resource.alive) continue;
@@ -117,9 +117,12 @@ export class ResourceRenderer {
       const dx = resource.x - x;
       const dy = resource.y - y;
       const d = Math.hypot(dx, dy);
+      const allowedDistance = getGatherReachForResource(resource, maxDistance);
+      if (d > allowedDistance) continue;
 
-      if (d <= bestDist) {
-        bestDist = d;
+      const score = d / allowedDistance;
+      if (score <= bestScore) {
+        bestScore = score;
         best = resource;
       }
     }
@@ -339,6 +342,12 @@ function getDisplayBounds(resource: ResourceSnapshot, texture: Texture | undefin
   const width = normalizeScale(resource.displayWidth ?? resource.sourceRect?.width ?? texture?.width ?? 32) * scale;
   const height = normalizeScale(resource.displayHeight ?? resource.sourceRect?.height ?? texture?.height ?? 32) * scale;
   return { width, height };
+}
+
+function getGatherReachForResource(resource: ResourceSnapshot, baseRange: number): number {
+  if (resource.type !== 'tree') return baseRange;
+  const bounds = getDisplayBounds(resource, undefined);
+  return baseRange + Math.min(64, Math.max(28, bounds.height * 0.35));
 }
 
 function normalizeScale(scale: number | undefined): number {
