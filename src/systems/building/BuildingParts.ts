@@ -14,6 +14,7 @@ const FLOOR_SUPPORTS: BuildPartId[] = [
 const STAIR_SUPPORTS: BuildPartId[] = [...FLOOR_SUPPORTS, "wood_stairs", "stone_stairs", "wood_corner_stairs", "stone_corner_stairs"];
 const WALL_SUPPORTS: BuildPartId[] = [
   "thin_wall",
+  "wood_wall_sprite_test",
   "stone_wall",
   "half_wall",
   "railing",
@@ -82,6 +83,7 @@ export const BUILD_PARTS: Record<BuildPartId, BuildPartDefinition> = {
   stone_round_floor: common("stone_round_floor", "돌 원형바닥", "floor", "tile", "◝", false, false, "ground", [{ itemId: "stone", quantity: 3 }]),
 
   thin_wall: common("thin_wall", "나무 벽", "wall", "edge", "▌", true, true, FLOOR_SUPPORTS, [{ itemId: "wood", quantity: 2 }]),
+  wood_wall_sprite_test: common("wood_wall_sprite_test", "나무 벽 스프라이트 테스트", "wall", "edge", "🪵", true, true, FLOOR_SUPPORTS, [{ itemId: "wood", quantity: 2 }]),
   stone_wall: common("stone_wall", "돌 벽", "wall", "edge", "▥", true, true, FLOOR_SUPPORTS, [{ itemId: "stone", quantity: 3 }]),
   half_wall: common("half_wall", "반벽", "wall", "edge", "▂", true, true, FLOOR_SUPPORTS, [{ itemId: "wood", quantity: 1 }]),
   railing: common("railing", "난간", "wall", "edge", "╫", true, true, FLOOR_SUPPORTS, [{ itemId: "wood", quantity: 1 }]),
