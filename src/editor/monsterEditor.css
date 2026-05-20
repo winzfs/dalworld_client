@@ -1,0 +1,59 @@
+.map-editor-monster-controls {
+  padding: 10px;
+  border-top: 1px solid rgba(255,255,255,.1);
+  border-bottom: 1px solid rgba(255,255,255,.1);
+  background: rgba(126, 223, 242, 0.06);
+}
+
+.map-editor-monster-controls[hidden] {
+  display: none !important;
+}
+
+.map-editor-section-title {
+  margin-bottom: 8px;
+  color: #9defff;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.map-editor-field {
+  display: grid;
+  grid-template-columns: 82px 1fr;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+  color: rgba(255,255,255,.78);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.map-editor-field input,
+.map-editor-field select {
+  min-width: 0;
+  height: 28px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 9px;
+  background: rgba(0,0,0,.28);
+  color: #ffe4a3;
+  font-weight: 850;
+}
+
+.map-editor-field input {
+  padding: 0 7px;
+  text-align: right;
+}
+
+.map-editor-field select {
+  padding: 0 6px;
+}
+
+.map-editor-asset.is-monster-spawn {
+  border-color: rgba(126, 223, 242, 0.38);
+  background: linear-gradient(180deg, rgba(126, 223, 242, 0.14), rgba(255,255,255,.045));
+}
+
+.map-editor-asset.is-monster-spawn.is-selected {
+  border-color: rgba(126, 223, 242, 0.95);
+  box-shadow: 0 0 0 2px rgba(126, 223, 242, .2) inset;
+}
