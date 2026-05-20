@@ -40,6 +40,8 @@ export type PlayerSnapshot = {
   lastInputSeq: number;
   inventory: Inventory;
   inventoryItems?: InventoryItemStack[];
+  alive: boolean;
+  respawnAt: number;
 };
 
 export type ResourceSnapshot = {
