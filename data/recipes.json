@@ -1,0 +1,14 @@
+[
+  {
+    "id": "wood_floor_1x1",
+    "displayName": "Wood Floor",
+    "category": "building",
+    "inputs": [
+      { "itemId": "wood", "quantity": 2 }
+    ],
+    "outputs": [
+      { "itemId": "wood", "quantity": 0 }
+    ],
+    "unlocksPartId": "floor_1x1"
+  }
+]
