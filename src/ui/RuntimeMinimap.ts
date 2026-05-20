@@ -24,7 +24,7 @@ const SIZE_LEVELS: Array<{ label: string; size: number }> = [
  * without making any gameplay decisions on the client.
  */
 export class RuntimeMinimap {
-  private readonly root: HTMLDivElement;
+  private readonly root: HTMLElement;
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
   private readonly title: HTMLSpanElement;
@@ -254,6 +254,6 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.arcTo(x + w, y, x + w, y + h, radius);
   ctx.arcTo(x + w, y + h, x, y + h, radius);
   ctx.arcTo(x, y + h, x, y, radius);
-  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.arcTo(x, y, x + radius, y, radius);
   ctx.closePath();
 }
