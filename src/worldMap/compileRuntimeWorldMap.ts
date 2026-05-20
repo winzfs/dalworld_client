@@ -9,6 +9,7 @@ const MAX_STRING_LENGTH = 512;
 const EDITOR_ONLY_PLACEMENT_IDS = new Set(['editor-black-base']);
 const VALID_LAYERS = new Set(['ground', 'object', 'collision']);
 const VALID_RESOURCE_TYPES = new Set(['tree', 'stone']);
+const VALID_MONSTER_TYPES = new Set(['wild_slime', 'sheep']);
 
 export function compileRuntimeWorldMap(world: EditorWorldSave): GameWorldMap {
   return {
@@ -93,7 +94,33 @@ function compileGameplay(gameplay: EditorPlacementGameplay | undefined): WorldMa
     };
   }
 
+  if (gameplay.kind === 'monsterSpawn' && VALID_MONSTER_TYPES.has(gameplay.monsterType)) {
+    const spec = compileMonsterSpec(gameplay.spec);
+    return {
+      kind: 'monsterSpawn',
+      monsterType: gameplay.monsterType,
+      spawnRadius: clamp(normalizePositiveNumber(gameplay.spawnRadius, 160), 16, 2000),
+      maxAlive: clamp(normalizeInteger(gameplay.maxAlive, 1), 1, 50),
+      respawnMs: clamp(normalizePositiveNumber(gameplay.respawnMs, 30_000), 1_000, 3_600_000),
+      spec: spec && Object.keys(spec).length > 0 ? spec : undefined,
+    };
+  }
+
   return undefined;
+}
+
+function compileMonsterSpec(spec: Extract<EditorPlacementGameplay, { kind: 'monsterSpawn' }>['spec']): NonNullable<Extract<WorldMapPlacementGameplay, { kind: 'monsterSpawn' }>['spec']> | undefined {
+  if (!spec) return undefined;
+
+  return removeUndefinedFields({
+    maxHp: normalizeOptionalPositiveNumber(spec.maxHp),
+    moveSpeed: normalizeOptionalPositiveNumber(spec.moveSpeed),
+    detectRange: normalizeOptionalPositiveNumber(spec.detectRange),
+    loseRange: normalizeOptionalPositiveNumber(spec.loseRange),
+    attackRange: normalizeOptionalPositiveNumber(spec.attackRange),
+    attackDamage: normalizeOptionalPositiveNumber(spec.attackDamage),
+    attackCooldownMs: normalizeOptionalPositiveNumber(spec.attackCooldownMs),
+  });
 }
 
 function inferGameplayFromAssetUrl(assetUrl: string): WorldMapPlacementGameplay | undefined {
@@ -187,6 +214,12 @@ function normalizeOptionalDisplayNumber(value: number | undefined): number | und
   const normalized = normalizeOptionalPositiveNumber(value);
   if (!normalized) return undefined;
   return Math.min(Math.floor(normalized), MAX_DISPLAY_SIZE);
+}
+
+function removeUndefinedFields<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as T;
 }
 
 function clamp(value: number, min: number, max: number): number {
