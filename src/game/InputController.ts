@@ -5,17 +5,20 @@ export type InputState = {
   facing: Facing;
   /** transient: true exactly once per gather press */
   gatherPressed: boolean;
+  /** transient: true exactly once per attack press */
+  attackPressed: boolean;
 };
 
 /**
- * Keyboard + touch joystick + gather button.
- * Owns transient gather edges; consumers must call `consumeGather()` per frame.
+ * Keyboard + touch joystick + gather/attack buttons.
+ * Owns transient action edges; consumers must call consume*() per frame.
  */
 export class InputController {
   readonly state: InputState = {
     keys: { up: false, down: false, left: false, right: false },
     facing: 'down',
     gatherPressed: false,
+    attackPressed: false,
   };
 
   private joystickKeys: MovementKeys = { up: false, down: false, left: false, right: false };
@@ -63,6 +66,16 @@ export class InputController {
     return true;
   }
 
+  triggerAttack(): void {
+    this.state.attackPressed = true;
+  }
+
+  consumeAttack(): boolean {
+    if (!this.state.attackPressed) return false;
+    this.state.attackPressed = false;
+    return true;
+  }
+
   private readonly resetKeyboard = (): void => {
     this.keyboardKeys = { up: false, down: false, left: false, right: false };
     this.merge();
@@ -90,6 +103,10 @@ export class InputController {
       case 'KeyE':
       case 'Space':
         if (pressed) this.triggerGather();
+        break;
+      case 'KeyF':
+      case 'KeyJ':
+        if (pressed) this.triggerAttack();
         break;
     }
     if (dirty) this.merge();
