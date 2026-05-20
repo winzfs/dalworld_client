@@ -1,4 +1,4 @@
-import type { EditorMonsterSpawnRule, EditorPlacementGameplay, EditorTilePlacement, EditorWorldSave } from '../editor/types';
+import type { EditorMonsterSpecOverrides, EditorMonsterSpawnRule, EditorPlacementGameplay, EditorTilePlacement, EditorWorldSave } from '../editor/types';
 import type { GameWorldMap, WorldMapMonsterSpawnRule, WorldMapPlacement, WorldMapPlacementGameplay, WorldMapSourceRect } from './types';
 
 const DEFAULT_CELL_SIZE = 3000;
@@ -117,7 +117,7 @@ function compileMonsterSpawnRules(rules: EditorMonsterSpawnRule[] | undefined): 
   const compiled = rules
     .map((rule) => {
       if (!VALID_MONSTER_TYPES.has(rule.monsterType)) return null;
-      const spec = compileMonsterSpec(rule.spec ? { kind: 'monsterSpawn', monsterType: rule.monsterType, spawnRadius: 1, maxAlive: 1, respawnMs: 1, spec: rule.spec }['spec'] : undefined);
+      const spec = compileMonsterSpec(rule.spec);
       return {
         id: sanitizeString(rule.id, crypto.randomUUID()),
         enabled: rule.enabled !== false,
@@ -133,7 +133,7 @@ function compileMonsterSpawnRules(rules: EditorMonsterSpawnRule[] | undefined): 
   return compiled.length > 0 ? compiled : undefined;
 }
 
-function compileMonsterSpec(spec: Extract<EditorPlacementGameplay, { kind: 'monsterSpawn' }>['spec']): NonNullable<Extract<WorldMapPlacementGameplay, { kind: 'monsterSpawn' }>['spec']> | undefined {
+function compileMonsterSpec(spec: EditorMonsterSpecOverrides | undefined): NonNullable<Extract<WorldMapPlacementGameplay, { kind: 'monsterSpawn' }>['spec']> | undefined {
   if (!spec) return undefined;
 
   return removeUndefinedFields({
