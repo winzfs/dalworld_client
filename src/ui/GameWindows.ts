@@ -1,3 +1,4 @@
+import type { PlayerSnapshot } from '../protocol/messages';
 import { BUILD_PART_LIST } from '../systems/building/BuildingParts';
 import { getBuildPartItemDefinition } from '../systems/building/BuildPartInventoryCatalog';
 import type { BuildingModeSnapshot } from '../systems/building/BuildingModeState';
@@ -15,7 +16,7 @@ import {
   type InventoryTabId,
 } from '../systems/inventory/InventoryViewModel';
 
-type WindowId = 'inventory' | 'crafting' | 'building';
+type WindowId = 'character' | 'inventory' | 'crafting' | 'building';
 type CraftingRecipeView = ReturnType<typeof getCraftingCategories>[number]['recipes'][number];
 type BuildingCategoryId = 'all' | 'floor' | 'stairs' | 'wall' | 'support' | 'roof' | 'door-window';
 
@@ -69,6 +70,7 @@ const BUILDING_CATEGORIES: BuildingCategoryView[] = [
 ];
 
 const BUTTONS: FloatingButtonConfig[] = [
+  { id: 'character', label: '캐릭터', icon: '🧍', title: '캐릭터', defaultButtonX: 18, defaultButtonY: 108, defaultWindowX: 84, defaultWindowY: 96 },
   { id: 'inventory', label: '가방', icon: '🎒', title: '가방', defaultButtonX: 18, defaultButtonY: 180, defaultWindowX: 96, defaultWindowY: 120 },
   { id: 'crafting', label: '제작', icon: '⚒️', title: '제작', defaultButtonX: 18, defaultButtonY: 252, defaultWindowX: 160, defaultWindowY: 150 },
   { id: 'building', label: '건설', icon: '🏠', title: '건설', defaultButtonX: 18, defaultButtonY: 324, defaultWindowX: 220, defaultWindowY: 180 },
@@ -83,6 +85,7 @@ export class GameWindows {
   private activeInventoryTab: InventoryTabId = 'general';
   private activeBuildingCategory: BuildingCategoryId = 'all';
   private lastInventory: InventorySource = null;
+  private lastPlayer: PlayerSnapshot | null = null;
   private buildingMode: BuildingModeSnapshot = {
     enabled: false,
     toolMode: 'place',
@@ -100,12 +103,14 @@ export class GameWindows {
     this.installInventoryInteractions();
     this.installCraftingInteractions();
     this.installBuildingInteractions();
+    this.renderCharacter(null);
     this.renderBuildingMode(this.buildingMode);
     this.renderCraftingAvailability();
   }
 
   renderInventory(inventory: InventorySource): void {
     this.lastInventory = inventory;
+    this.renderCharacter(isPlayerSnapshot(inventory) ? inventory : this.lastPlayer);
 
     const slots = [...this.root.querySelectorAll<HTMLButtonElement>('[data-inventory-slot]')];
     const slotViews = getInventorySlotsForTab(this.activeInventoryTab, inventory);
@@ -134,6 +139,53 @@ export class GameWindows {
 
     this.renderBuildingMode(this.buildingMode);
     this.renderCraftingAvailability();
+  }
+
+  renderCharacter(player: PlayerSnapshot | null): void {
+    this.lastPlayer = player;
+
+    const name = query<HTMLElement>(this.root, '[data-character-name]');
+    const level = query<HTMLElement>(this.root, '[data-character-level]');
+    const exp = query<HTMLElement>(this.root, '[data-character-exp]');
+    const hp = query<HTMLElement>(this.root, '[data-character-hp]');
+    const stamina = query<HTMLElement>(this.root, '[data-character-stamina]');
+    const status = query<HTMLElement>(this.root, '[data-character-status]');
+    const position = query<HTMLElement>(this.root, '[data-character-position]');
+    const facing = query<HTMLElement>(this.root, '[data-character-facing]');
+    const inventory = query<HTMLElement>(this.root, '[data-character-inventory]');
+    const expFill = query<HTMLDivElement>(this.root, '[data-character-exp-fill]');
+    const hpFill = query<HTMLDivElement>(this.root, '[data-character-hp-fill]');
+    const staminaFill = query<HTMLDivElement>(this.root, '[data-character-stamina-fill]');
+
+    if (!player) {
+      name.textContent = 'Dale';
+      level.textContent = 'Lv.—';
+      exp.textContent = '—';
+      hp.textContent = '—';
+      stamina.textContent = '—';
+      status.textContent = '접속 대기';
+      position.textContent = '—';
+      facing.textContent = '—';
+      inventory.textContent = '—';
+      setScaleX(expFill, 0);
+      setScaleX(hpFill, 0);
+      setScaleX(staminaFill, 0);
+      return;
+    }
+
+    const expToNextLevel = player.expToNextLevel ?? 0;
+    name.textContent = player.characterName ?? 'Dale';
+    level.textContent = `Lv.${player.level ?? 1}`;
+    exp.textContent = expToNextLevel > 0 ? `${player.exp ?? 0} / ${expToNextLevel}` : 'MAX';
+    hp.textContent = `${Math.ceil(player.hp)} / ${player.maxHp}`;
+    stamina.textContent = `${Math.ceil(player.stamina)} / ${player.maxStamina}`;
+    status.textContent = player.alive ? '생존' : getRespawnText(player.respawnAt);
+    position.textContent = `${Math.round(player.x)}, ${Math.round(player.y)} · Cell ${player.cellX}, ${player.cellY}`;
+    facing.textContent = formatFacing(player.facing);
+    inventory.textContent = `나무 ${player.inventory.wood} · 돌 ${player.inventory.stone}`;
+    setScaleX(expFill, expToNextLevel > 0 ? (player.exp ?? 0) / expToNextLevel : 1);
+    setScaleX(hpFill, player.maxHp > 0 ? player.hp / player.maxHp : 0);
+    setScaleX(staminaFill, player.maxStamina > 0 ? player.stamina / player.maxStamina : 0);
   }
 
   renderBuildingMode(mode: BuildingModeSnapshot): void {
@@ -431,6 +483,7 @@ function getWindowsMarkup(): string {
     <div class="floating-toolbar" aria-label="Game menu shortcuts">
       ${BUTTONS.map(getFloatingButtonMarkup).join('')}
     </div>
+    ${getCharacterWindowMarkup()}
     ${getInventoryWindowMarkup()}
     ${getCraftingWindowMarkup()}
     ${getBuildingWindowMarkup()}
@@ -439,7 +492,7 @@ function getWindowsMarkup(): string {
 
 function getFloatingButtonMarkup(config: FloatingButtonConfig): string {
   return `
-    <button class="floating-icon" type="button" data-floating="${config.id}" aria-label="${config.label}">
+    <button class="floating-icon" type="button" data-floating="${config.id}" aria-label="${config.label}" title="${config.title}">
       <span class="floating-icon-symbol">${config.icon}</span>
       <span class="floating-icon-label">${config.label}</span>
     </button>
@@ -451,6 +504,45 @@ function getWindowHeaderMarkup(title: string): string {
     <div class="game-window-header" data-window-header>
       <strong>${title}</strong>
       <button class="game-window-close" type="button" data-window-close aria-label="닫기">×</button>
+    </div>
+  `;
+}
+
+function getCharacterWindowMarkup(): string {
+  return `
+    <section class="game-window simple-system-window character-window" data-window="character" hidden>
+      ${getWindowHeaderMarkup('캐릭터')}
+      <div class="system-window-body character-window-body">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+          <div style="display:grid; place-items:center; width:54px; height:54px; border-radius:16px; background:rgba(126,231,255,.14); border:1px solid rgba(126,231,255,.34); font-size:30px;">🧍</div>
+          <div style="min-width:0; flex:1;">
+            <h3 data-character-name style="margin:0 0 4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Dale</h3>
+            <p style="margin:0; color:rgba(255,255,255,.68); font-size:12px; font-weight:800;">
+              <span data-character-level>Lv.—</span> · <span data-character-status>접속 대기</span>
+            </p>
+          </div>
+        </div>
+        ${getCharacterBarMarkup('EXP', 'exp')}
+        ${getCharacterBarMarkup('HP', 'hp')}
+        ${getCharacterBarMarkup('ST', 'stamina')}
+        <div style="display:grid; grid-template-columns:86px 1fr; gap:8px 10px; margin-top:12px; padding:10px; border:1px solid rgba(255,255,255,.12); border-radius:14px; background:rgba(255,255,255,.045); font-size:12px;">
+          <b style="color:#ffe4a3;">위치</b><span data-character-position>—</span>
+          <b style="color:#ffe4a3;">방향</b><span data-character-facing>—</span>
+          <b style="color:#ffe4a3;">자원</b><span data-character-inventory>—</span>
+        </div>
+        <p style="margin:10px 0 0; color:rgba(255,255,255,.58); font-size:11px; line-height:1.45;">
+          캐릭터 정보는 서버 snapshot 기준으로 표시됩니다. 레벨, 경험치, HP, 스태미나는 클라이언트에서 확정하지 않습니다.
+        </p>
+      </div>
+    </section>
+  `;
+}
+
+function getCharacterBarMarkup(label: string, key: 'exp' | 'hp' | 'stamina'): string {
+  return `
+    <div class="ui-stat-row ui-stat-${key}" style="margin-top:8px;">
+      <div class="ui-stat-label"><span>${label}</span><b data-character-${key}>—</b></div>
+      <div class="ui-bar"><div class="ui-bar-fill" data-character-${key}-fill></div></div>
     </div>
   `;
 }
@@ -646,4 +738,40 @@ function getRecipeOutputText(view: CraftingRecipeView): string {
   return view.recipe.outputs
     .map((output) => `${view.outputDefinition?.label ?? output.itemId} ${output.quantity}`)
     .join(' · ');
+}
+
+function isPlayerSnapshot(value: InventorySource): value is PlayerSnapshot {
+  return typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    'id' in value &&
+    'hp' in value &&
+    'maxHp' in value &&
+    'stamina' in value &&
+    'maxStamina' in value &&
+    'alive' in value;
+}
+
+function setScaleX(el: HTMLElement, ratio: number): void {
+  const safeRatio = Number.isFinite(ratio) ? clamp(ratio, 0, 1) : 0;
+  el.style.transform = `scaleX(${safeRatio})`;
+}
+
+function formatFacing(facing: PlayerSnapshot['facing']): string {
+  switch (facing) {
+    case 'up':
+      return '위';
+    case 'down':
+      return '아래';
+    case 'left':
+      return '왼쪽';
+    case 'right':
+      return '오른쪽';
+  }
+}
+
+function getRespawnText(respawnAt: number): string {
+  const remainingMs = Math.max(0, respawnAt - Date.now());
+  if (remainingMs <= 0) return '리스폰 대기';
+  return `리스폰 ${Math.ceil(remainingMs / 1000)}초`;
 }
