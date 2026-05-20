@@ -6,6 +6,7 @@ import type { InputSendSystem } from './systems/InputSendSystem';
 import type { SnapshotSystem } from './systems/SnapshotSystem';
 import { CombatInputSystem } from './systems/CombatInputSystem';
 import { CombatEffectRenderer } from '../render/CombatEffectRenderer';
+import { DeathOverlay } from './DeathOverlay';
 
 type CombatPatchTarget = {
   app: Application;
@@ -30,15 +31,18 @@ export function installCombatRuntimePatch(game: unknown): void {
 
   const effects = new CombatEffectRenderer(target.world);
   const inputSystem = new CombatInputSystem(target.inputSendSystem, effects);
+  const deathOverlay = new DeathOverlay();
   const getMyPlayerId = () => target.myPlayerId ?? null;
 
   target.app.ticker.add((ticker) => {
     const snapshot = target.snapshotSystem?.snapshot;
+    const player = target.snapshotSystem?.findMe(getMyPlayerId()) ?? null;
     inputSystem.update({
       input: target.input!,
-      player: target.snapshotSystem?.findMe(getMyPlayerId()) ?? null,
+      player,
       monsters: snapshot?.monsters ?? [],
     });
+    deathOverlay.update(player);
     effects.update(ticker.deltaMS / 1000);
   });
 
