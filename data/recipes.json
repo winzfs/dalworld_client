@@ -6,9 +6,7 @@
     "inputs": [
       { "itemId": "wood", "quantity": 2 }
     ],
-    "outputs": [
-      { "itemId": "wood", "quantity": 0 }
-    ],
+    "outputs": [],
     "unlocksPartId": "floor_1x1"
   }
 ]
