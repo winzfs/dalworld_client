@@ -12,6 +12,10 @@ const HUD_ROOT_ID = 'dalworld-ui';
 
 type HudRefs = {
   root: HTMLDivElement;
+  nameText: HTMLDivElement;
+  levelText: HTMLSpanElement;
+  expFill: HTMLDivElement;
+  expText: HTMLSpanElement;
   hpFill: HTMLDivElement;
   hpText: HTMLSpanElement;
   staminaFill: HTMLDivElement;
@@ -37,7 +41,19 @@ export class GameHud {
     const maxHp = player ? player.maxHp : 1;
     const stamina = player ? player.stamina : 0;
     const maxStamina = player ? player.maxStamina : 1;
+    const level = player?.level ?? 1;
+    const exp = player?.exp ?? 0;
+    const expToNextLevel = player?.expToNextLevel ?? 0;
     const inventory = player ? player.inventory : { wood: 0, stone: 0 };
+
+    this.refs.nameText.textContent = player?.characterName ?? 'Dale';
+    this.refs.levelText.textContent = player ? `Lv.${level}` : 'Lv.—';
+    setBar(this.refs.expFill, exp, expToNextLevel || 1);
+    this.refs.expText.textContent = player
+      ? expToNextLevel > 0
+        ? `${exp} / ${expToNextLevel}`
+        : 'MAX'
+      : '—';
 
     setBar(this.refs.hpFill, hp, maxHp);
     this.refs.hpText.textContent = player ? `${Math.ceil(hp)} / ${maxHp}` : '—';
@@ -70,6 +86,10 @@ function createOrGetHud(): HudRefs {
 
   return {
     root,
+    nameText: query(root, '[data-ui="character-name"]'),
+    levelText: query(root, '[data-ui="level"]'),
+    expFill: query(root, '[data-ui="exp-fill"]'),
+    expText: query(root, '[data-ui="exp-text"]'),
     hpFill: query(root, '[data-ui="hp-fill"]'),
     hpText: query(root, '[data-ui="hp-text"]'),
     staminaFill: query(root, '[data-ui="stamina-fill"]'),
@@ -86,7 +106,11 @@ function createOrGetHud(): HudRefs {
 function getHudMarkup(): string {
   return `
     <section class="ui-panel ui-player-panel" aria-label="Player status">
-      <div class="ui-panel-title">Dale</div>
+      <div class="ui-player-title-row">
+        <div class="ui-panel-title" data-ui="character-name">Dale</div>
+        <span class="ui-level-badge" data-ui="level">Lv.—</span>
+      </div>
+      ${getBarMarkup('EXP', 'exp')}
       ${getBarMarkup('HP', 'hp')}
       ${getBarMarkup('ST', 'stamina')}
     </section>
@@ -105,7 +129,7 @@ function getHudMarkup(): string {
   `;
 }
 
-function getBarMarkup(label: string, key: 'hp' | 'stamina'): string {
+function getBarMarkup(label: string, key: 'exp' | 'hp' | 'stamina'): string {
   return `
     <div class="ui-stat-row ui-stat-${key}">
       <div class="ui-stat-label"><span>${label}</span><b data-ui="${key}-text">—</b></div>
