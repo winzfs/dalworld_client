@@ -4,6 +4,8 @@ import type {
   WorldInfo,
   PublicGameplayConfig,
   CraftingServerEvent,
+  CombatServerEvent,
+  CombatHitEvent,
 } from '../../protocol/messages';
 import type { TimeOfDayState } from '../../systems/timeOfDay/TimeOfDayTypes';
 import type { BuildingServerEvent } from '../../systems/building/BuildingTypes';
@@ -34,6 +36,7 @@ export type ServerMessageRouterContext = {
   reloadWorldMap: () => void;
   onBuildingEvent?: (event: BuildingServerEvent) => void;
   onCraftingEvent?: (event: CraftingServerEvent) => void;
+  onCombatEvent?: (event: CombatServerEvent | CombatHitEvent) => void;
 };
 
 /** Routes server messages to client systems. */
@@ -63,6 +66,14 @@ export class ServerMessageRouter {
       case 'CRAFT_COMPLETED':
       case 'CRAFT_REJECTED':
         this.context.onCraftingEvent?.(message);
+        return;
+      case 'COMBAT_ATTACK_CONFIRMED':
+      case 'COMBAT_HIT':
+      case 'COMBAT_MISSED':
+      case 'COMBAT_REJECTED':
+      case 'MONSTER_KILLED':
+      case 'COMBAT_REWARD_GRANTED':
+        this.context.onCombatEvent?.(message);
         return;
       case 'pong':
         return;
@@ -119,8 +130,21 @@ export class ServerMessageRouter {
     this.context.monsterRenderer.sync(snapshot.monsters);
   }
 
-  private handleEvent(_message: Extract<ServerToClientMessage, { type: 'event' }>): void {
-    // Gameplay events will be dispatched here as systems are added.
+  private handleEvent(message: Extract<ServerToClientMessage, { type: 'event' }>): void {
+    if (message.event.type === 'combat_hit') {
+      this.context.onCombatEvent?.({
+        type: 'COMBAT_HIT',
+        requestId: message.event.requestId,
+        attackerId: message.event.attackerId,
+        targetId: message.event.targetId,
+        targetType: message.event.targetType,
+        damage: message.event.damage,
+        hpRemaining: message.event.hpRemaining,
+        maxHp: message.event.maxHp,
+        x: message.event.x,
+        y: message.event.y,
+      });
+    }
   }
 }
 
