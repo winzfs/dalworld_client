@@ -1,4 +1,4 @@
-import type { EditorMapCell, EditorMapCoord, EditorWorldMapDraft } from './types';
+import type { EditorMapCell, EditorMapCoord, EditorMonsterSpawnRule, EditorWorldMapDraft } from './types';
 
 export type WorldMapGridListener = () => void;
 
@@ -16,6 +16,7 @@ export class WorldMapGrid {
       cellSize: options.cellSize,
       current: { gridX: 0, gridY: 0 },
       cells: [createCell(0, 0)],
+      monsterSpawnRules: createDefaultMonsterSpawnRules(),
     };
   }
 
@@ -31,11 +32,16 @@ export class WorldMapGrid {
     return this.draft.cells.map((cell) => ({ ...cell }));
   }
 
+  get monsterSpawnRules(): EditorMonsterSpawnRule[] {
+    return cloneSpawnRules(this.draft.monsterSpawnRules ?? []);
+  }
+
   get snapshot(): EditorWorldMapDraft {
     return {
       ...this.draft,
       current: { ...this.draft.current },
       cells: this.cells,
+      monsterSpawnRules: this.monsterSpawnRules,
     };
   }
 
@@ -52,9 +58,15 @@ export class WorldMapGrid {
       cellSize: draft.cellSize || this.draft.cellSize,
       current: draft.current ? { ...draft.current } : { gridX: 0, gridY: 0 },
       cells: normalizeCells(draft.cells),
+      monsterSpawnRules: normalizeSpawnRules(draft.monsterSpawnRules),
     };
 
     this.ensureCell(this.draft.current.gridX, this.draft.current.gridY);
+    this.emit();
+  }
+
+  setMonsterSpawnRules(rules: EditorMonsterSpawnRule[]): void {
+    this.draft.monsterSpawnRules = normalizeSpawnRules(rules);
     this.emit();
   }
 
@@ -147,6 +159,52 @@ function normalizeCells(cells: EditorMapCell[]): EditorMapCell[] {
   }
 
   return result;
+}
+
+function createDefaultMonsterSpawnRules(): EditorMonsterSpawnRule[] {
+  return [
+    {
+      id: 'world-spawn-wild-slime',
+      enabled: false,
+      monsterType: 'wild_slime',
+      scope: 'world',
+      maxAlive: 12,
+      spawnsPerHour: 60,
+    },
+    {
+      id: 'world-spawn-sheep',
+      enabled: false,
+      monsterType: 'sheep',
+      scope: 'world',
+      maxAlive: 8,
+      spawnsPerHour: 30,
+    },
+  ];
+}
+
+function normalizeSpawnRules(rules: EditorMonsterSpawnRule[] | undefined): EditorMonsterSpawnRule[] {
+  const source = rules && rules.length > 0 ? rules : createDefaultMonsterSpawnRules();
+  return source.map((rule) => ({
+    id: rule.id || crypto.randomUUID(),
+    enabled: rule.enabled === true,
+    monsterType: rule.monsterType === 'sheep' ? 'sheep' : 'wild_slime',
+    scope: rule.scope === 'region' ? 'region' : 'world',
+    maxAlive: clampInteger(rule.maxAlive, 0, 500, 10),
+    spawnsPerHour: clampInteger(rule.spawnsPerHour, 1, 36000, 60),
+    spec: rule.spec ? { ...rule.spec } : undefined,
+  }));
+}
+
+function cloneSpawnRules(rules: EditorMonsterSpawnRule[]): EditorMonsterSpawnRule[] {
+  return rules.map((rule) => ({
+    ...rule,
+    spec: rule.spec ? { ...rule.spec } : undefined,
+  }));
+}
+
+function clampInteger(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
 }
 
 function cellId(gridX: number, gridY: number): string {
