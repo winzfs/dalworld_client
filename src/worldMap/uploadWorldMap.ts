@@ -16,6 +16,11 @@ export type UploadedWorldMapReport = {
     sheep: number;
     total: number;
   };
+  monsterSpawnRules: {
+    enabled: number;
+    total: number;
+    spawnsPerHour: number;
+  };
 };
 
 type WorldMapManifest = {
@@ -234,8 +239,12 @@ function createMapSignature(map: GameWorldMap | null | undefined): string {
     .map((cell) => `${cell.gridX}:${cell.gridY}:${cell.placements.length}:${createCellSignature(cell)}`)
     .sort()
     .join('|');
+  const rules = (map.monsterSpawnRules ?? [])
+    .map((rule) => `${rule.id}:${rule.enabled}:${rule.monsterType}:${rule.scope}:${rule.maxAlive}:${rule.spawnsPerHour}`)
+    .sort()
+    .join('|');
 
-  return `${map.version}:${map.name}:${map.tileSize}:${map.cellSize}:${cells}`;
+  return `${map.version}:${map.name}:${map.tileSize}:${map.cellSize}:${cells}:${rules}`;
 }
 
 function createCellSignature(cell: WorldMapCell): string {
@@ -267,6 +276,9 @@ function createUploadReport(map: GameWorldMap): UploadedWorldMapReport {
     }
   }
 
+  const rules = map.monsterSpawnRules ?? [];
+  const enabledRules = rules.filter((rule) => rule.enabled);
+
   return {
     cells: map.cells.length,
     placements,
@@ -279,6 +291,11 @@ function createUploadReport(map: GameWorldMap): UploadedWorldMapReport {
       wild_slime: wildSlime,
       sheep,
       total: wildSlime + sheep,
+    },
+    monsterSpawnRules: {
+      enabled: enabledRules.length,
+      total: rules.length,
+      spawnsPerHour: enabledRules.reduce((sum, rule) => sum + rule.spawnsPerHour, 0),
     },
   };
 }
