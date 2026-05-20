@@ -16,6 +16,7 @@ import { MobileControls } from '../render/MobileControls';
 import { GameWorldMapRenderer } from '../render/GameWorldMapRenderer';
 import { GameHud } from '../ui/GameHud';
 import { GameWindows } from '../ui/GameWindows';
+import { RuntimeMinimap } from '../ui/RuntimeMinimap';
 import { BuildingEditControls } from '../systems/building/BuildingEditControls';
 import { BuildingEditCoordinator } from '../systems/building/BuildingEditCoordinator';
 import type { BuildingEditDraft } from '../systems/building/BuildingEditTypes';
@@ -39,6 +40,7 @@ import { MapEditor } from '../editor/MapEditor';
 import { EditorCameraSystem } from '../editor/EditorCameraSystem';
 import { EditorMinimap } from '../editor/EditorMinimap';
 import { getActiveCell } from '../worldMap/activeCellStore';
+import { getRuntimeWorldMap } from '../worldMap/runtimeMapStore';
 
 const INPUT_SEND_HZ = 30;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
@@ -62,6 +64,7 @@ export class GameApp {
   private readonly monsterRenderer: MonsterRenderer;
   private readonly worldMapRenderer: GameWorldMapRenderer;
   private readonly runtimeWorldSystem: RuntimeWorldSystem;
+  private readonly runtimeMinimap = new RuntimeMinimap();
   private readonly buildingModeState = new BuildingModeState();
   private readonly buildingGridOverlay = new BuildingGridOverlay({
     buildingModeState: this.buildingModeState,
@@ -245,6 +248,7 @@ export class GameApp {
       return;
     }
 
+    this.runtimeMinimap.mount(document.body);
     this.app.canvas.addEventListener('pointermove', (event) => this.handleCanvasPointerMove(event));
     this.app.canvas.addEventListener('pointerleave', () => {
       if (!this.buildingEdit.hasDraft()) this.buildingGhostPreviewRenderer.hide();
@@ -301,6 +305,13 @@ export class GameApp {
     this.buildingPlacementRenderer.applyOcclusionFocus(me ? { worldX: me.x, worldY: me.y } : null);
     this.monsterRenderer.applyOcclusion((x, y) => this.buildingPlacementRenderer.isOccludingFocus({ worldX: x, worldY: y }));
     this.cameraSystem.update({ player: me, world: this.worldInfo, screenWidth: this.app.renderer.width, screenHeight: this.app.renderer.height });
+    this.runtimeMinimap.render({
+      map: getRuntimeWorldMap(),
+      players: this.snapshotSystem.snapshot.players,
+      resources: this.snapshotSystem.snapshot.resources,
+      monsters: this.snapshotSystem.snapshot.monsters,
+      localPlayer: me,
+    });
     this.hudSystem.update({ status: this.status, tick: this.snapshotSystem.snapshot.tick, player: me, latencyMs: this.network.latencyMs, buildingMode: this.buildingModeState.getSnapshot() });
     this.syncBuildingControlsPosition();
   }
