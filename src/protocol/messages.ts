@@ -33,6 +33,10 @@ export type Inventory = {
 
 export type PlayerSnapshot = {
   id: string;
+  characterName?: string;
+  level?: number;
+  exp?: number;
+  expToNextLevel?: number;
   x: number;
   y: number;
   cellX: number;
@@ -185,13 +189,37 @@ export type CombatRewardGrantedEvent = {
   amount: number;
 };
 
+export type PlayerExperienceGainedEvent = {
+  type: 'PLAYER_EXPERIENCE_GAINED';
+  requestId: string;
+  playerId: string;
+  sourceType: 'monster';
+  sourceId: string;
+  amount: number;
+  level: number;
+  exp: number;
+  expToNextLevel: number;
+};
+
+export type PlayerLevelUpEvent = {
+  type: 'PLAYER_LEVEL_UP';
+  requestId: string;
+  playerId: string;
+  previousLevel: number;
+  level: number;
+  maxHp: number;
+  maxStamina: number;
+};
+
 export type CombatServerEvent =
   | CombatAttackConfirmedEvent
   | CombatHitEvent
   | CombatMissedEvent
   | CombatRejectedEvent
   | MonsterKilledEvent
-  | CombatRewardGrantedEvent;
+  | CombatRewardGrantedEvent
+  | PlayerExperienceGainedEvent
+  | PlayerLevelUpEvent;
 
 export type ClientToServerMessage =
   | { type: 'hello'; name?: string }
