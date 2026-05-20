@@ -13,6 +13,18 @@ export type EditorMonsterSpecOverrides = {
   attackCooldownMs?: number;
 };
 
+export type EditorMonsterSpawnRuleScope = 'world' | 'region';
+
+export type EditorMonsterSpawnRule = {
+  id: string;
+  enabled: boolean;
+  monsterType: EditorMonsterType;
+  scope: EditorMonsterSpawnRuleScope;
+  maxAlive: number;
+  spawnsPerHour: number;
+  spec?: EditorMonsterSpecOverrides;
+};
+
 export type EditorPlacementGameplay =
   | {
       kind: 'resource';
@@ -27,6 +39,7 @@ export type EditorPlacementGameplay =
       spawnRadius: number;
       maxAlive: number;
       respawnMs: number;
+      spawnsPerHour?: number;
       spec?: EditorMonsterSpecOverrides;
     };
 
@@ -102,6 +115,7 @@ export type EditorWorldMapDraft = {
   cellSize: number;
   current: EditorMapCoord;
   cells: EditorMapCell[];
+  monsterSpawnRules?: EditorMonsterSpawnRule[];
 };
 
 export type EditorMapDraft = {
