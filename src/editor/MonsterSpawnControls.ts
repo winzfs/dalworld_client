@@ -12,6 +12,7 @@ const DEFAULT_SPAWN: Extract<EditorPlacementGameplay, { kind: 'monsterSpawn' }> 
   spawnRadius: 160,
   maxAlive: 3,
   respawnMs: 30_000,
+  spawnsPerHour: 120,
 };
 
 export class MonsterSpawnControls {
@@ -46,6 +47,9 @@ export class MonsterSpawnControls {
       }),
       this.createNumberInput('리스폰(ms)', current.respawnMs, 1000, 3600000, 1000, (value) => {
         this.update({ respawnMs: value });
+      }),
+      this.createNumberInput('시간당', current.spawnsPerHour ?? 120, 1, 3600, 1, (value) => {
+        this.update({ spawnsPerHour: Math.round(value) });
       }),
       this.createSpecInput('HP', current.spec?.maxHp, 'maxHp'),
       this.createSpecInput('이동속도', current.spec?.moveSpeed, 'moveSpeed'),
