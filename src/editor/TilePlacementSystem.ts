@@ -170,6 +170,10 @@ export class TilePlacementSystem {
         continue;
       }
 
+      if (placement.gameplay?.kind === 'monsterSpawn') {
+        continue;
+      }
+
       const inferred = inferSpriteGameplay(asset);
       if (inferred) {
         placement.gameplay = inferred;
@@ -589,6 +593,8 @@ function fallbackColor(categoryId: string): number {
       return 0x47b881;
     case 'buildings':
       return 0xc69054;
+    case 'monsters':
+      return 0x7bdff2;
     default:
       return 0x55d6be;
   }
