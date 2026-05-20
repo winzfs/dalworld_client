@@ -8,6 +8,9 @@
     "build": "npm run tilesets:generate && tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run check:authority && npm run check:protocol && npm run build",
+    "check:authority": "node scripts/check-client-authority-boundary.mjs",
+    "check:protocol": "node scripts/check-protocol-sync.mjs",
     "deploy": "wrangler deploy",
     "tilesets:generate": "node scripts/generate-tileset-manifest.mjs"
   },
