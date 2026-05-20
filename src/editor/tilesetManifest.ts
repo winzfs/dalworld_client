@@ -47,4 +47,42 @@ export const TILESET_CATEGORIES: EditorTilesetCategory[] = [
       },
     ],
   },
+  {
+    id: 'monsters',
+    name: 'Monsters',
+    assets: [
+      {
+        id: 'monster-spawn-wild-slime',
+        name: 'Slime Spawn',
+        categoryId: 'monsters',
+        url: 'solid://monster-spawn-slime',
+        tileWidth: 32,
+        tileHeight: 32,
+        solidColor: 0x7bdff2,
+        gameplayDefaults: {
+          kind: 'monsterSpawn',
+          monsterType: 'wild_slime',
+          spawnRadius: 160,
+          maxAlive: 3,
+          respawnMs: 30_000,
+        },
+      },
+      {
+        id: 'monster-spawn-sheep',
+        name: 'Sheep Spawn',
+        categoryId: 'monsters',
+        url: 'solid://monster-spawn-sheep',
+        tileWidth: 32,
+        tileHeight: 32,
+        solidColor: 0xf6f1df,
+        gameplayDefaults: {
+          kind: 'monsterSpawn',
+          monsterType: 'sheep',
+          spawnRadius: 160,
+          maxAlive: 3,
+          respawnMs: 30_000,
+        },
+      },
+    ],
+  },
 ];
