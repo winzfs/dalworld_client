@@ -1,6 +1,7 @@
 import type { GameNetwork } from '../../net/network';
 import { getActiveCell } from '../../worldMap/activeCellStore';
-import type { Facing, InputState, PlayerSnapshot } from '../../protocol/messages';
+import type { Facing, PlayerSnapshot } from '../../protocol/messages';
+import type { InputState } from '../InputController';
 
 export type InputSendContext = {
   input: InputState;
