@@ -634,7 +634,7 @@ function createEditorToast(): HTMLDivElement {
 
 function isEditorUiTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  return Boolean(target.closest('.tileset-panel, .tile-picker-window, .world-map-panel'));
+  return Boolean(target.closest('.map-editor-panel, .tile-picker-window, .world-map-panel'));
 }
 
 function cellKey(gridX: number, gridY: number): string {
