@@ -1,6 +1,7 @@
 import './style.css';
 import './timeOfDay.css';
 import './combat.css';
+import './runtimeMinimap.css';
 import './editor/monsterEditor.css';
 import { GameApp } from './game/GameApp';
 import { installCombatClientFeature } from './game/installCombatClientFeature';
