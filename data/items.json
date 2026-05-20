@@ -1,0 +1,16 @@
+[
+  {
+    "id": "wood",
+    "displayName": "Wood",
+    "category": "material",
+    "stackLimit": 999,
+    "description": "Basic building and crafting material gathered from trees."
+  },
+  {
+    "id": "stone",
+    "displayName": "Stone",
+    "category": "material",
+    "stackLimit": 999,
+    "description": "Basic building and crafting material gathered from rocks."
+  }
+]
