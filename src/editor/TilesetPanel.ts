@@ -1,5 +1,12 @@
 import { TILESET_CATEGORIES } from './tilesetManifest';
-import type { EditorLayerId, EditorMonsterSpawnRule, EditorTilesetAsset } from './types';
+import type {
+  EditorLayerId,
+  EditorMonsterSpecOverrides,
+  EditorMonsterSpawnRule,
+  EditorMonsterType,
+  EditorPlacementGameplay,
+  EditorTilesetAsset,
+} from './types';
 import { EditorState, BLACK_SOLID_ASSET } from './EditorState';
 import { MonsterSpawnControls } from './MonsterSpawnControls';
 
@@ -22,9 +29,17 @@ const EDITOR_LAYERS: Array<{ id: EditorLayerId; label: string }> = [
   { id: 'collision', label: 'Block' },
 ];
 
+const MONSTER_OPTIONS: Array<{ id: EditorMonsterType; label: string; color: number }> = [
+  { id: 'wild_slime', label: 'Wild Slime', color: 0x7bdff2 },
+  { id: 'sheep', label: 'Sheep', color: 0xf6f1df },
+];
+
 const GRID_SIZE_OPTIONS = [16, 32, 64];
 const MONSTER_CATEGORY_ID = 'monsters';
 type PanelTab = 'tiles' | 'monsters';
+type MonsterRegionSpawnDefaults = Extract<EditorPlacementGameplay, { kind: 'monsterSpawn' }>;
+
+type SpecKey = keyof EditorMonsterSpecOverrides;
 
 export class TilesetPanel {
   readonly element: HTMLDivElement;
@@ -38,11 +53,16 @@ export class TilesetPanel {
   private readonly fillContainer: HTMLDivElement;
   private readonly actionContainer: HTMLDivElement;
   private readonly categoryContainer: HTMLDivElement;
-  private readonly monsterRuleContainer: HTMLDivElement;
+  private readonly monsterEditorContainer: HTMLDivElement;
   private readonly assetContainer: HTMLDivElement;
   private readonly monsterSpawnControls: MonsterSpawnControls;
 
   private activeTab: PanelTab = 'tiles';
+  private selectedMonsterType: EditorMonsterType = 'wild_slime';
+  private readonly regionSpawnDefaults = new Map<EditorMonsterType, MonsterRegionSpawnDefaults>([
+    ['wild_slime', createDefaultRegionSpawn('wild_slime')],
+    ['sheep', createDefaultRegionSpawn('sheep')],
+  ]);
   private dragging = false;
   private dragOffsetX = 0;
   private dragOffsetY = 0;
@@ -85,8 +105,8 @@ export class TilesetPanel {
     this.categoryContainer = document.createElement('div');
     this.categoryContainer.className = 'map-editor-categories';
 
-    this.monsterRuleContainer = document.createElement('div');
-    this.monsterRuleContainer.className = 'map-editor-monster-rules';
+    this.monsterEditorContainer = document.createElement('div');
+    this.monsterEditorContainer.className = 'map-editor-monster-editor';
 
     this.assetContainer = document.createElement('div');
     this.assetContainer.className = 'map-editor-assets';
@@ -103,7 +123,7 @@ export class TilesetPanel {
       this.fillContainer,
       this.actionContainer,
       this.categoryContainer,
-      this.monsterRuleContainer,
+      this.monsterEditorContainer,
       this.assetContainer,
       this.monsterSpawnControls.element,
     );
@@ -126,7 +146,7 @@ export class TilesetPanel {
     this.renderFillControls();
     this.renderActions();
     this.renderCategories();
-    this.renderMonsterRules();
+    this.renderMonsterEditor();
     this.renderAssets();
     this.monsterSpawnControls.render();
     this.applyTabVisibility();
@@ -155,10 +175,19 @@ export class TilesetPanel {
 
   private applyTabVisibility(): void {
     const isMonsters = this.activeTab === 'monsters';
-    this.categoryContainer.hidden = isMonsters;
-    this.monsterRuleContainer.hidden = !isMonsters;
 
-    if (!isMonsters) {
+    this.scaleContainer.hidden = isMonsters;
+    this.gridContainer.hidden = false;
+    this.layerContainer.hidden = isMonsters;
+    this.toolContainer.hidden = isMonsters;
+    this.fillContainer.hidden = isMonsters;
+    this.categoryContainer.hidden = isMonsters;
+    this.assetContainer.hidden = isMonsters;
+    this.monsterEditorContainer.hidden = !isMonsters;
+
+    if (isMonsters) {
+      this.monsterSpawnControls.element.hidden = true;
+    } else if (this.state.selectedBrush?.asset.gameplayDefaults?.kind !== 'monsterSpawn') {
       this.monsterSpawnControls.element.hidden = true;
     }
   }
@@ -309,55 +338,114 @@ export class TilesetPanel {
     }
   }
 
-  private renderMonsterRules(): void {
-    this.monsterRuleContainer.innerHTML = '';
+  private renderMonsterEditor(): void {
+    this.monsterEditorContainer.innerHTML = '';
+
+    const selectedOption = getMonsterOption(this.selectedMonsterType);
+    const worldRule = this.getSelectedWorldRule();
+    const region = this.getSelectedRegionDefaults();
+
+    this.monsterEditorContainer.append(
+      this.createMonsterSelect(),
+      this.createMonsterSection('전체맵 스폰', [
+        this.createCheckboxField('전체맵에 스폰', worldRule.enabled, (checked) => {
+          this.patchSelectedWorldRule({ enabled: checked });
+        }),
+        this.createNumberField('최대 유지', worldRule.maxAlive, 0, 500, 1, (value) => {
+          this.patchSelectedWorldRule({ maxAlive: Math.round(value) });
+        }),
+        this.createNumberField('시간당', worldRule.spawnsPerHour, 1, 36000, 1, (value) => {
+          this.patchSelectedWorldRule({ spawnsPerHour: Math.round(value) });
+        }),
+      ], '체크하면 이 몬스터가 전체 월드맵에서 자동으로 보충됩니다.'),
+      this.createMonsterSection('스폰지역 배치', [
+        this.createNumberField('반경', region.spawnRadius, 16, 2000, 10, (value) => {
+          this.patchSelectedRegion({ spawnRadius: value });
+        }),
+        this.createNumberField('최대 수', region.maxAlive, 1, 50, 1, (value) => {
+          this.patchSelectedRegion({ maxAlive: Math.round(value) });
+        }),
+        this.createNumberField('리스폰(ms)', region.respawnMs, 1000, 3600000, 1000, (value) => {
+          this.patchSelectedRegion({ respawnMs: value });
+        }),
+        this.createNumberField('시간당', region.spawnsPerHour ?? 120, 1, 3600, 1, (value) => {
+          this.patchSelectedRegion({ spawnsPerHour: Math.round(value) });
+        }),
+        this.createSpawnRegionButton(selectedOption),
+      ], '버튼을 누른 뒤 맵에 클릭하면 해당 몬스터 스폰지역이 배치됩니다.'),
+      this.createMonsterSection('몬스터 스펙', [
+        this.createSpecField('HP', 'maxHp'),
+        this.createSpecField('이동속도', 'moveSpeed'),
+        this.createSpecField('감지범위', 'detectRange'),
+        this.createSpecField('추적해제', 'loseRange'),
+        this.createSpecField('공격범위', 'attackRange'),
+        this.createSpecField('공격력', 'attackDamage'),
+        this.createSpecField('공격쿨(ms)', 'attackCooldownMs'),
+      ], '비워두면 서버 몬스터 기본값을 사용합니다. 입력한 값은 전체스폰과 새로 배치하는 스폰지역에 같이 적용됩니다.'),
+    );
+  }
+
+  private createMonsterSelect(): HTMLElement {
+    const label = document.createElement('label');
+    label.className = 'map-editor-monster-select-row';
+
+    const text = document.createElement('span');
+    text.textContent = '몬스터';
+
+    const select = document.createElement('select');
+    select.value = this.selectedMonsterType;
+    for (const option of MONSTER_OPTIONS) {
+      const item = document.createElement('option');
+      item.value = option.id;
+      item.textContent = option.label;
+      select.appendChild(item);
+    }
+    select.onchange = () => {
+      this.selectedMonsterType = select.value as EditorMonsterType;
+      this.render();
+    };
+
+    label.append(text, select);
+    return label;
+  }
+
+  private createMonsterSection(titleText: string, children: HTMLElement[], noteText?: string): HTMLElement {
+    const section = document.createElement('section');
+    section.className = 'map-editor-monster-section';
 
     const title = document.createElement('div');
     title.className = 'map-editor-section-title';
-    title.textContent = '전체맵 몬스터 스폰';
+    title.textContent = titleText;
+    section.appendChild(title);
 
-    const note = document.createElement('div');
-    note.className = 'map-editor-monster-rule-note';
-    note.textContent = '지역 스폰 마커와 별도로, 전체맵에 몬스터를 시간당 보충합니다.';
-
-    this.monsterRuleContainer.append(title, note);
-
-    for (const rule of this.actions.getMonsterSpawnRules()) {
-      this.monsterRuleContainer.appendChild(this.createMonsterRuleCard(rule));
+    if (noteText) {
+      const note = document.createElement('div');
+      note.className = 'map-editor-monster-note';
+      note.textContent = noteText;
+      section.appendChild(note);
     }
+
+    section.append(...children);
+    return section;
   }
 
-  private createMonsterRuleCard(rule: EditorMonsterSpawnRule): HTMLElement {
-    const card = document.createElement('div');
-    card.className = 'map-editor-monster-rule-card';
-    if (!rule.enabled) card.classList.add('is-disabled');
+  private createCheckboxField(labelText: string, value: boolean, onChange: (value: boolean) => void): HTMLElement {
+    const label = document.createElement('label');
+    label.className = 'map-editor-monster-check-row';
 
-    const toggle = document.createElement('label');
-    toggle.className = 'map-editor-monster-rule-toggle';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = value;
+    input.onchange = () => onChange(input.checked);
 
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = rule.enabled;
-    checkbox.onchange = () => this.patchMonsterRule(rule.id, { enabled: checkbox.checked });
+    const span = document.createElement('span');
+    span.textContent = labelText;
 
-    const name = document.createElement('strong');
-    name.textContent = rule.monsterType === 'sheep' ? 'Sheep' : 'Wild Slime';
-    toggle.append(checkbox, name);
-
-    card.append(
-      toggle,
-      this.createMonsterRuleNumberField('최대 유지', rule.maxAlive, 0, 500, 1, (value) => {
-        this.patchMonsterRule(rule.id, { maxAlive: Math.round(value) });
-      }),
-      this.createMonsterRuleNumberField('시간당', rule.spawnsPerHour, 1, 36000, 1, (value) => {
-        this.patchMonsterRule(rule.id, { spawnsPerHour: Math.round(value) });
-      }),
-    );
-
-    return card;
+    label.append(input, span);
+    return label;
   }
 
-  private createMonsterRuleNumberField(
+  private createNumberField(
     labelText: string,
     value: number,
     min: number,
@@ -366,7 +454,7 @@ export class TilesetPanel {
     onChange: (value: number) => void,
   ): HTMLElement {
     const label = document.createElement('label');
-    label.className = 'map-editor-monster-rule-field';
+    label.className = 'map-editor-monster-field';
 
     const span = document.createElement('span');
     span.textContent = labelText;
@@ -383,18 +471,94 @@ export class TilesetPanel {
     return label;
   }
 
-  private patchMonsterRule(ruleId: string, patch: Partial<EditorMonsterSpawnRule>): void {
-    this.actions.setMonsterSpawnRules(this.actions.getMonsterSpawnRules().map((rule) => (
-      rule.id === ruleId ? { ...rule, ...patch } : rule
-    )));
+  private createSpecField(labelText: string, key: SpecKey): HTMLElement {
+    const value = this.getSelectedSpec()[key];
+    const label = document.createElement('label');
+    label.className = 'map-editor-monster-field';
+
+    const span = document.createElement('span');
+    span.textContent = labelText;
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.step = '1';
+    input.placeholder = '기본값';
+    input.value = value === undefined ? '' : String(value);
+    input.onchange = () => {
+      const raw = input.value.trim();
+      const nextSpec = { ...this.getSelectedSpec() };
+      if (!raw) delete nextSpec[key];
+      else nextSpec[key] = Math.max(1, Math.round(Number(raw) || 1));
+      this.patchSelectedSpec(Object.keys(nextSpec).length > 0 ? nextSpec : undefined);
+    };
+
+    label.append(span, input);
+    return label;
+  }
+
+  private createSpawnRegionButton(option: { id: EditorMonsterType; label: string; color: number }): HTMLElement {
+    const button = document.createElement('button');
+    button.className = 'map-editor-monster-spawn-region-button';
+    button.textContent = `${option.label} 스폰지역 배치`;
+    button.onclick = () => {
+      this.state.setLayer('object');
+      this.state.setBrushScale(1);
+      this.actions.onPickAsset(createSpawnRegionAsset(option, this.getSelectedRegionDefaults(), this.getSelectedSpec()));
+    };
+    return button;
+  }
+
+  private getSelectedWorldRule(): EditorMonsterSpawnRule {
+    return this.actions.getMonsterSpawnRules().find((rule) => rule.monsterType === this.selectedMonsterType && rule.scope === 'world')
+      ?? createDefaultWorldRule(this.selectedMonsterType);
+  }
+
+  private patchSelectedWorldRule(patch: Partial<EditorMonsterSpawnRule>): void {
+    const rules = this.actions.getMonsterSpawnRules();
+    const index = rules.findIndex((rule) => rule.monsterType === this.selectedMonsterType && rule.scope === 'world');
+    const current = index >= 0 ? rules[index] : createDefaultWorldRule(this.selectedMonsterType);
+    const next = { ...current, ...patch, monsterType: this.selectedMonsterType, scope: 'world' as const };
+    const nextRules = index >= 0 ? rules.map((rule, i) => (i === index ? next : rule)) : [...rules, next];
+    this.actions.setMonsterSpawnRules(nextRules);
+    this.render();
+  }
+
+  private getSelectedRegionDefaults(): MonsterRegionSpawnDefaults {
+    const current = this.regionSpawnDefaults.get(this.selectedMonsterType) ?? createDefaultRegionSpawn(this.selectedMonsterType);
+    return { ...current, spec: current.spec ? { ...current.spec } : undefined };
+  }
+
+  private patchSelectedRegion(patch: Partial<MonsterRegionSpawnDefaults>): void {
+    const current = this.getSelectedRegionDefaults();
+    this.regionSpawnDefaults.set(this.selectedMonsterType, {
+      ...current,
+      ...patch,
+      kind: 'monsterSpawn',
+      monsterType: this.selectedMonsterType,
+    });
+    this.render();
+  }
+
+  private getSelectedSpec(): EditorMonsterSpecOverrides {
+    return {
+      ...(this.getSelectedRegionDefaults().spec ?? {}),
+      ...(this.getSelectedWorldRule().spec ?? {}),
+    };
+  }
+
+  private patchSelectedSpec(spec: EditorMonsterSpecOverrides | undefined): void {
+    this.patchSelectedWorldRule({ spec });
+    const current = this.getSelectedRegionDefaults();
+    this.regionSpawnDefaults.set(this.selectedMonsterType, { ...current, spec });
     this.render();
   }
 
   private renderAssets(): void {
     this.assetContainer.innerHTML = '';
+    if (this.activeTab === 'monsters') return;
 
-    const activeCategoryId = this.activeTab === 'monsters' ? MONSTER_CATEGORY_ID : this.state.activeCategoryId;
-    const category = TILESET_CATEGORIES.find((item) => item.id === activeCategoryId);
+    const category = TILESET_CATEGORIES.find((item) => item.id === this.state.activeCategoryId);
 
     for (const asset of category?.assets ?? []) {
       this.assetContainer.appendChild(this.createAssetCard(asset));
@@ -428,7 +592,6 @@ export class TilesetPanel {
     button.className = 'map-editor-asset';
 
     if (this.state.selectedAsset?.id === asset.id) button.classList.add('is-selected');
-    if (asset.gameplayDefaults?.kind === 'monsterSpawn') button.classList.add('is-monster-spawn');
 
     if (asset.solidColor !== undefined || asset.url.startsWith('solid://')) {
       const swatch = document.createElement('span');
@@ -474,6 +637,53 @@ export class TilesetPanel {
     this.header.addEventListener('pointerup', stopDragging);
     this.header.addEventListener('pointercancel', stopDragging);
   }
+}
+
+function createDefaultWorldRule(monsterType: EditorMonsterType): EditorMonsterSpawnRule {
+  return {
+    id: `world-spawn-${monsterType}`,
+    enabled: false,
+    monsterType,
+    scope: 'world',
+    maxAlive: monsterType === 'sheep' ? 8 : 12,
+    spawnsPerHour: monsterType === 'sheep' ? 30 : 60,
+  };
+}
+
+function createDefaultRegionSpawn(monsterType: EditorMonsterType): MonsterRegionSpawnDefaults {
+  return {
+    kind: 'monsterSpawn',
+    monsterType,
+    spawnRadius: 160,
+    maxAlive: 3,
+    respawnMs: 30_000,
+    spawnsPerHour: 120,
+  };
+}
+
+function createSpawnRegionAsset(
+  option: { id: EditorMonsterType; label: string; color: number },
+  region: MonsterRegionSpawnDefaults,
+  spec: EditorMonsterSpecOverrides,
+): EditorTilesetAsset {
+  return {
+    id: `monster-spawn-${option.id}`,
+    name: `${option.label} Spawn Region`,
+    categoryId: MONSTER_CATEGORY_ID,
+    url: `solid://monster-spawn-${option.id}`,
+    tileWidth: 32,
+    tileHeight: 32,
+    solidColor: option.color,
+    gameplayDefaults: {
+      ...region,
+      monsterType: option.id,
+      spec: Object.keys(spec).length > 0 ? { ...spec } : undefined,
+    },
+  };
+}
+
+function getMonsterOption(type: EditorMonsterType): { id: EditorMonsterType; label: string; color: number } {
+  return MONSTER_OPTIONS.find((option) => option.id === type) ?? MONSTER_OPTIONS[0];
 }
 
 function normalizeChance(value: number): number {
