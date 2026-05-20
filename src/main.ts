@@ -1,6 +1,7 @@
 import './style.css';
 import './timeOfDay.css';
 import { GameApp } from './game/GameApp';
+import { installCombatRuntimePatch } from './game/installCombatRuntimePatch';
 import { installTimeOfDayClientFeature } from './systems/timeOfDay/TimeOfDayClientFeature';
 import { BootOverlay, installGlobalErrorOverlay } from './utils/bootOverlay';
 
@@ -19,6 +20,7 @@ async function boot(): Promise<void> {
   bootOverlay.setMessage('Starting Pixi.js application...');
   const game = new GameApp();
   await game.start(mount);
+  installCombatRuntimePatch(game);
 
   bootOverlay.remove();
 }
