@@ -144,6 +144,8 @@ export class MapEditor {
         void this.fillRandom(chancePercent);
       },
       onToggleWorldMap: () => this.worldMapPanel.toggle(),
+      getMonsterSpawnRules: () => this.worldMapGrid.monsterSpawnRules,
+      setMonsterSpawnRules: (rules) => this.worldMapGrid.setMonsterSpawnRules(rules),
     });
   }
 
