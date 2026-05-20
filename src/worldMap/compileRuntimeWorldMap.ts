@@ -1,5 +1,5 @@
-import type { EditorPlacementGameplay, EditorTilePlacement, EditorWorldSave } from '../editor/types';
-import type { GameWorldMap, WorldMapPlacement, WorldMapPlacementGameplay, WorldMapSourceRect } from './types';
+import type { EditorMonsterSpawnRule, EditorPlacementGameplay, EditorTilePlacement, EditorWorldSave } from '../editor/types';
+import type { GameWorldMap, WorldMapMonsterSpawnRule, WorldMapPlacement, WorldMapPlacementGameplay, WorldMapSourceRect } from './types';
 
 const DEFAULT_CELL_SIZE = 3000;
 const MIN_SCALE = 0.1;
@@ -25,6 +25,7 @@ export function compileRuntimeWorldMap(world: EditorWorldSave): GameWorldMap {
         .map(compilePlacement)
         .filter((placement): placement is WorldMapPlacement => placement !== null),
     })),
+    monsterSpawnRules: compileMonsterSpawnRules(world.worldMap?.monsterSpawnRules),
   };
 }
 
@@ -102,11 +103,34 @@ function compileGameplay(gameplay: EditorPlacementGameplay | undefined): WorldMa
       spawnRadius: clamp(normalizePositiveNumber(gameplay.spawnRadius, 160), 16, 2000),
       maxAlive: clamp(normalizeInteger(gameplay.maxAlive, 1), 1, 50),
       respawnMs: clamp(normalizePositiveNumber(gameplay.respawnMs, 30_000), 1_000, 3_600_000),
+      spawnsPerHour: clamp(normalizePositiveNumber(gameplay.spawnsPerHour, 120), 1, 3600),
       spec: spec && Object.keys(spec).length > 0 ? spec : undefined,
     };
   }
 
   return undefined;
+}
+
+function compileMonsterSpawnRules(rules: EditorMonsterSpawnRule[] | undefined): WorldMapMonsterSpawnRule[] | undefined {
+  if (!rules || rules.length === 0) return undefined;
+
+  const compiled = rules
+    .map((rule) => {
+      if (!VALID_MONSTER_TYPES.has(rule.monsterType)) return null;
+      const spec = compileMonsterSpec(rule.spec ? { kind: 'monsterSpawn', monsterType: rule.monsterType, spawnRadius: 1, maxAlive: 1, respawnMs: 1, spec: rule.spec }['spec'] : undefined);
+      return {
+        id: sanitizeString(rule.id, crypto.randomUUID()),
+        enabled: rule.enabled !== false,
+        monsterType: rule.monsterType,
+        scope: rule.scope === 'region' ? 'region' : 'world',
+        maxAlive: clamp(normalizeInteger(rule.maxAlive, 10), 0, 500),
+        spawnsPerHour: clamp(normalizePositiveNumber(rule.spawnsPerHour, 60), 1, 36000),
+        spec: spec && Object.keys(spec).length > 0 ? spec : undefined,
+      } satisfies WorldMapMonsterSpawnRule;
+    })
+    .filter((rule): rule is WorldMapMonsterSpawnRule => rule !== null);
+
+  return compiled.length > 0 ? compiled : undefined;
 }
 
 function compileMonsterSpec(spec: Extract<EditorPlacementGameplay, { kind: 'monsterSpawn' }>['spec']): NonNullable<Extract<WorldMapPlacementGameplay, { kind: 'monsterSpawn' }>['spec']> | undefined {
