@@ -4,12 +4,19 @@ import type { CraftingRecipeCategory, CraftingRecipeDefinition, CraftingTier } f
 
 const EARLY_RECIPES: CraftingRecipeDefinition[] = [
   recipe('craft:plank', '목재 판자', 'early', 'material', [{ itemId: 'wood', quantity: 2 }], [{ itemId: 'plank', quantity: 1 }], 10),
+  recipe('craft:plank_bundle', '목재 판자 묶음', 'early', 'material', [{ itemId: 'wood', quantity: 18 }], [{ itemId: 'plank', quantity: 10 }], 11, 'workbench'),
   recipe('craft:stone_block', '석재 블록', 'early', 'material', [{ itemId: 'stone', quantity: 2 }], [{ itemId: 'stone_block', quantity: 1 }], 20),
+  recipe('craft:stone_block_bundle', '석재 블록 묶음', 'early', 'material', [{ itemId: 'stone', quantity: 18 }], [{ itemId: 'stone_block', quantity: 10 }], 21, 'workbench'),
   recipe('craft:rope', '밧줄', 'early', 'material', [{ itemId: 'fiber', quantity: 3 }], [{ itemId: 'rope', quantity: 1 }], 30),
+  recipe('craft:rope_bundle', '밧줄 묶음', 'early', 'material', [{ itemId: 'fiber', quantity: 24 }], [{ itemId: 'rope', quantity: 9 }], 31, 'workbench'),
   recipe('craft:cloth', '천', 'early', 'material', [{ itemId: 'fiber', quantity: 4 }], [{ itemId: 'cloth', quantity: 1 }], 40, 'loom'),
+  recipe('craft:cloth_roll', '천 두루마리', 'early', 'material', [{ itemId: 'fiber', quantity: 18 }, { itemId: 'rope', quantity: 1 }], [{ itemId: 'cloth', quantity: 5 }], 41, 'loom'),
   recipe('craft:floor_kit', '바닥 키트', 'early', 'material', [{ itemId: 'plank', quantity: 2 }], [{ itemId: 'floor_kit', quantity: 1 }], 50, 'workbench'),
+  recipe('craft:floor_kit_bundle', '바닥 키트 묶음', 'early', 'material', [{ itemId: 'plank', quantity: 10 }, { itemId: 'rope', quantity: 1 }], [{ itemId: 'floor_kit', quantity: 6 }], 51, 'workbench'),
   recipe('craft:wall_kit', '벽 키트', 'early', 'material', [{ itemId: 'plank', quantity: 2 }], [{ itemId: 'wall_kit', quantity: 1 }], 60, 'workbench'),
+  recipe('craft:wall_kit_bundle', '벽 키트 묶음', 'early', 'material', [{ itemId: 'plank', quantity: 10 }, { itemId: 'rope', quantity: 1 }], [{ itemId: 'wall_kit', quantity: 6 }], 61, 'workbench'),
   recipe('craft:roof_kit', '지붕 키트', 'early', 'material', [{ itemId: 'plank', quantity: 2 }, { itemId: 'stone_block', quantity: 1 }], [{ itemId: 'roof_kit', quantity: 1 }], 70, 'workbench'),
+  recipe('craft:roof_kit_bundle', '지붕 키트 묶음', 'early', 'material', [{ itemId: 'plank', quantity: 10 }, { itemId: 'stone_block', quantity: 5 }, { itemId: 'rope', quantity: 1 }], [{ itemId: 'roof_kit', quantity: 6 }], 71, 'workbench'),
 
   recipe('craft:workbench', '작업대', 'early', 'station', [{ itemId: 'wood', quantity: 8 }, { itemId: 'stone', quantity: 4 }], [{ itemId: 'workbench', quantity: 1 }], 100),
   recipe('craft:campfire', '모닥불', 'early', 'station', [{ itemId: 'stone', quantity: 6 }, { itemId: 'wood', quantity: 3 }], [{ itemId: 'campfire', quantity: 1 }], 110),
@@ -25,9 +32,13 @@ const EARLY_RECIPES: CraftingRecipeDefinition[] = [
   recipe('craft:basic_bow', '기초 활', 'early', 'weapon', [{ itemId: 'wood', quantity: 5 }, { itemId: 'rope', quantity: 2 }], [{ itemId: 'basic_bow', quantity: 1 }], 320, 'workbench'),
   recipe('craft:cloth_armor', '천 방어구', 'early', 'equipment', [{ itemId: 'cloth', quantity: 4 }, { itemId: 'rope', quantity: 2 }], [{ itemId: 'cloth_armor', quantity: 1 }], 330, 'loom'),
   recipe('craft:torch', '횃불', 'early', 'consumable', [{ itemId: 'wood', quantity: 1 }, { itemId: 'fiber', quantity: 1 }], [{ itemId: 'torch', quantity: 2 }], 400),
+  recipe('craft:torch_bundle', '횃불 묶음', 'early', 'consumable', [{ itemId: 'wood', quantity: 6 }, { itemId: 'fiber', quantity: 6 }], [{ itemId: 'torch', quantity: 16 }], 401, 'workbench'),
   recipe('craft:healing_salve', '회복 연고', 'early', 'consumable', [{ itemId: 'fiber', quantity: 3 }], [{ itemId: 'healing_salve', quantity: 1 }], 410, 'campfire'),
+  recipe('craft:healing_salve_pack', '회복 연고 꾸러미', 'early', 'consumable', [{ itemId: 'fiber', quantity: 12 }, { itemId: 'cloth', quantity: 1 }], [{ itemId: 'healing_salve', quantity: 5 }], 411, 'campfire'),
   recipe('craft:stamina_food', '스태미나 음식', 'early', 'consumable', [{ itemId: 'fiber', quantity: 2 }, { itemId: 'wood', quantity: 1 }], [{ itemId: 'stamina_food', quantity: 1 }], 420, 'campfire'),
+  recipe('craft:stamina_food_pack', '스태미나 음식 꾸러미', 'early', 'consumable', [{ itemId: 'fiber', quantity: 10 }, { itemId: 'wood', quantity: 4 }, { itemId: 'cloth', quantity: 1 }], [{ itemId: 'stamina_food', quantity: 6 }], 421, 'campfire'),
   recipe('craft:capture_orb_basic', '기초 포획구', 'early', 'capture', [{ itemId: 'stone', quantity: 3 }, { itemId: 'fiber', quantity: 2 }], [{ itemId: 'capture_orb_basic', quantity: 1 }], 430, 'workbench'),
+  recipe('craft:capture_orb_basic_pack', '기초 포획구 꾸러미', 'early', 'capture', [{ itemId: 'stone_block', quantity: 5 }, { itemId: 'rope', quantity: 3 }], [{ itemId: 'capture_orb_basic', quantity: 6 }], 431, 'workbench'),
 ];
 
 const MID_RECIPES: CraftingRecipeDefinition[] = [
@@ -36,8 +47,11 @@ const MID_RECIPES: CraftingRecipeDefinition[] = [
   recipe('craft:alchemy_table', '연금 작업대', 'mid', 'station', [{ itemId: 'plank', quantity: 8 }, { itemId: 'crystal', quantity: 3 }, { itemId: 'cloth', quantity: 4 }], [{ itemId: 'alchemy_table', quantity: 1 }], 1020, 'advanced_workbench'),
 
   recipe('craft:copper_ingot', '구리 주괴', 'mid', 'material', [{ itemId: 'ore_copper', quantity: 3 }, { itemId: 'coal', quantity: 1 }], [{ itemId: 'copper_ingot', quantity: 1 }], 1100, 'stone_forge'),
+  recipe('craft:copper_ingot_batch', '구리 주괴 대량 제련', 'mid', 'material', [{ itemId: 'ore_copper', quantity: 24 }, { itemId: 'coal', quantity: 6 }], [{ itemId: 'copper_ingot', quantity: 10 }], 1101, 'stone_forge'),
   recipe('craft:iron_ingot', '철 주괴', 'mid', 'material', [{ itemId: 'ore_iron', quantity: 3 }, { itemId: 'coal', quantity: 2 }], [{ itemId: 'iron_ingot', quantity: 1 }], 1110, 'stone_forge'),
+  recipe('craft:iron_ingot_batch', '철 주괴 대량 제련', 'mid', 'material', [{ itemId: 'ore_iron', quantity: 24 }, { itemId: 'coal', quantity: 12 }], [{ itemId: 'iron_ingot', quantity: 10 }], 1111, 'stone_forge'),
   recipe('craft:mana_thread', '마나 실', 'mid', 'material', [{ itemId: 'fiber', quantity: 4 }, { itemId: 'ore_mana', quantity: 1 }], [{ itemId: 'mana_thread', quantity: 1 }], 1120, 'alchemy_table'),
+  recipe('craft:mana_thread_spool', '마나 실타래', 'mid', 'material', [{ itemId: 'fiber', quantity: 18 }, { itemId: 'ore_mana', quantity: 5 }, { itemId: 'crystal', quantity: 1 }], [{ itemId: 'mana_thread', quantity: 6 }], 1121, 'alchemy_table'),
 
   recipe('craft:iron_pickaxe', '철 곡괭이', 'mid', 'tool', [{ itemId: 'iron_ingot', quantity: 4 }, { itemId: 'plank', quantity: 3 }, { itemId: 'rope', quantity: 2 }], [{ itemId: 'iron_pickaxe', quantity: 1 }], 1200, 'advanced_workbench'),
   recipe('craft:iron_axe', '철 도끼', 'mid', 'tool', [{ itemId: 'iron_ingot', quantity: 4 }, { itemId: 'plank', quantity: 3 }, { itemId: 'rope', quantity: 2 }], [{ itemId: 'iron_axe', quantity: 1 }], 1210, 'advanced_workbench'),
@@ -47,18 +61,24 @@ const MID_RECIPES: CraftingRecipeDefinition[] = [
   recipe('craft:iron_armor', '철 방어구', 'mid', 'equipment', [{ itemId: 'iron_ingot', quantity: 8 }, { itemId: 'hide', quantity: 4 }, { itemId: 'cloth', quantity: 3 }], [{ itemId: 'iron_armor', quantity: 1 }], 1330, 'advanced_workbench'),
   recipe('craft:explorer_pack', '탐험가 배낭', 'mid', 'equipment', [{ itemId: 'cloth', quantity: 8 }, { itemId: 'hide', quantity: 5 }, { itemId: 'rope', quantity: 4 }], [{ itemId: 'explorer_pack', quantity: 1 }], 1340, 'loom'),
   recipe('craft:capture_orb_refined', '정제 포획구', 'mid', 'capture', [{ itemId: 'capture_orb_basic', quantity: 1 }, { itemId: 'copper_ingot', quantity: 2 }, { itemId: 'crystal', quantity: 1 }], [{ itemId: 'capture_orb_refined', quantity: 1 }], 1400, 'alchemy_table'),
+  recipe('craft:capture_orb_refined_pack', '정제 포획구 꾸러미', 'mid', 'capture', [{ itemId: 'capture_orb_basic', quantity: 6 }, { itemId: 'copper_ingot', quantity: 8 }, { itemId: 'crystal', quantity: 4 }], [{ itemId: 'capture_orb_refined', quantity: 6 }], 1401, 'alchemy_table'),
   recipe('craft:mana_potion', '마나 포션', 'mid', 'consumable', [{ itemId: 'ore_mana', quantity: 1 }, { itemId: 'fiber', quantity: 2 }, { itemId: 'crystal', quantity: 1 }], [{ itemId: 'mana_potion', quantity: 1 }], 1410, 'alchemy_table'),
+  recipe('craft:mana_potion_pack', '마나 포션 꾸러미', 'mid', 'consumable', [{ itemId: 'ore_mana', quantity: 6 }, { itemId: 'cloth', quantity: 2 }, { itemId: 'crystal', quantity: 4 }], [{ itemId: 'mana_potion', quantity: 6 }], 1411, 'alchemy_table'),
 ];
 
 const LATE_RECIPES: CraftingRecipeDefinition[] = [
   recipe('craft:energy_assembler', '에너지 조립기', 'late', 'station', [{ itemId: 'steel_ingot', quantity: 8 }, { itemId: 'circuit_board', quantity: 3 }, { itemId: 'ancient_core', quantity: 1 }], [{ itemId: 'energy_assembler', quantity: 1 }], 2000, 'advanced_workbench'),
   recipe('craft:steel_ingot', '강철 주괴', 'late', 'material', [{ itemId: 'iron_ingot', quantity: 2 }, { itemId: 'coal', quantity: 3 }, { itemId: 'ore_mana', quantity: 1 }], [{ itemId: 'steel_ingot', quantity: 1 }], 2100, 'stone_forge'),
+  recipe('craft:steel_ingot_batch', '강철 주괴 대량 제련', 'late', 'material', [{ itemId: 'iron_ingot', quantity: 16 }, { itemId: 'coal', quantity: 18 }, { itemId: 'ore_mana', quantity: 8 }], [{ itemId: 'steel_ingot', quantity: 10 }], 2101, 'stone_forge'),
   recipe('craft:circuit_board', '회로판', 'late', 'material', [{ itemId: 'copper_ingot', quantity: 2 }, { itemId: 'crystal', quantity: 2 }, { itemId: 'mana_thread', quantity: 1 }], [{ itemId: 'circuit_board', quantity: 1 }], 2110, 'advanced_workbench'),
+  recipe('craft:circuit_board_batch', '회로판 묶음', 'late', 'material', [{ itemId: 'copper_ingot', quantity: 10 }, { itemId: 'crystal', quantity: 10 }, { itemId: 'mana_thread', quantity: 5 }], [{ itemId: 'circuit_board', quantity: 6 }], 2111, 'advanced_workbench'),
   recipe('craft:energy_cell', '에너지 셀', 'late', 'material', [{ itemId: 'crystal', quantity: 3 }, { itemId: 'circuit_board', quantity: 1 }, { itemId: 'ancient_core', quantity: 1 }], [{ itemId: 'energy_cell', quantity: 1 }], 2120, 'energy_assembler'),
+  recipe('craft:energy_cell_pack', '에너지 셀 팩', 'late', 'material', [{ itemId: 'crystal', quantity: 12 }, { itemId: 'circuit_board', quantity: 4 }, { itemId: 'ancient_core', quantity: 3 }], [{ itemId: 'energy_cell', quantity: 5 }], 2121, 'energy_assembler'),
   recipe('craft:steel_pickaxe', '강철 곡괭이', 'late', 'tool', [{ itemId: 'steel_ingot', quantity: 5 }, { itemId: 'energy_cell', quantity: 1 }, { itemId: 'plank', quantity: 3 }], [{ itemId: 'steel_pickaxe', quantity: 1 }], 2200, 'energy_assembler'),
   recipe('craft:steel_blade', '강철 블레이드', 'late', 'weapon', [{ itemId: 'steel_ingot', quantity: 7 }, { itemId: 'energy_cell', quantity: 1 }, { itemId: 'hide', quantity: 3 }], [{ itemId: 'steel_blade', quantity: 1 }], 2300, 'energy_assembler'),
   recipe('craft:glider', '글라이더', 'late', 'equipment', [{ itemId: 'mana_thread', quantity: 4 }, { itemId: 'steel_ingot', quantity: 3 }, { itemId: 'cloth', quantity: 8 }], [{ itemId: 'glider', quantity: 1 }], 2310, 'advanced_workbench'),
   recipe('craft:capture_orb_elite', '엘리트 포획구', 'late', 'capture', [{ itemId: 'capture_orb_refined', quantity: 1 }, { itemId: 'energy_cell', quantity: 1 }, { itemId: 'ancient_core', quantity: 1 }], [{ itemId: 'capture_orb_elite', quantity: 1 }], 2400, 'energy_assembler'),
+  recipe('craft:capture_orb_elite_pack', '엘리트 포획구 꾸러미', 'late', 'capture', [{ itemId: 'capture_orb_refined', quantity: 5 }, { itemId: 'energy_cell', quantity: 4 }, { itemId: 'ancient_core', quantity: 3 }], [{ itemId: 'capture_orb_elite', quantity: 5 }], 2401, 'energy_assembler'),
 ];
 
 const BUILD_PART_RECIPES: CraftingRecipeDefinition[] = BUILD_PART_LIST.map((part, index): CraftingRecipeDefinition => ({
