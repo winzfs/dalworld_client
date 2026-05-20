@@ -327,7 +327,7 @@ function estimateJsonBytes(value: unknown): number {
 }
 
 function withCacheBuster(url: string): string {
-  const separator = url.includes('?') ? '&';
+  const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}t=${Date.now()}`;
 }
 
