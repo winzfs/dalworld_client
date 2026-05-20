@@ -24,6 +24,7 @@ input {
 body.is-map-editor-mode #dalworld-ui,
 body.is-map-editor-mode #dalworld-windows,
 body.is-map-editor-mode #dalworld-mobile .gather-btn,
+body.is-map-editor-mode #dalworld-system-log,
 body.is-map-editor-mode .building-edit-controls {
   display: none !important;
 }
@@ -31,8 +32,54 @@ body.is-map-editor-mode .building-edit-controls {
 #dalworld-ui,
 #dalworld-windows,
 #dalworld-mobile,
+#dalworld-system-log,
 .building-edit-controls {
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#dalworld-system-log {
+  position: fixed;
+  left: 30px;
+  bottom: 206px;
+  z-index: 9;
+  width: min(340px, calc(100vw - 56px));
+  pointer-events: none;
+}
+
+.system-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.system-log-entry {
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 232, 180, 0.18);
+  border-radius: 11px;
+  background: rgba(15, 22, 28, 0.78);
+  color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.34);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-log-entry.is-success {
+  border-color: rgba(102, 255, 156, 0.34);
+  background: rgba(18, 45, 33, 0.82);
+  color: #c8ffd7;
+}
+
+.system-log-entry.is-warning {
+  border-color: rgba(255, 209, 102, 0.42);
+  background: rgba(56, 42, 18, 0.82);
+  color: #ffe4a3;
 }
 
 #dalworld-windows { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
@@ -151,4 +198,4 @@ body.is-map-editor-mode #dalworld-mobile.desktop-hidden .joystick { display: blo
 .building-part-main { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 .building-part-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .building-part-main small { overflow: hidden; color: rgba(255,255,255,.58); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 720px) { .ui-debug-panel { display: none; } .inventory-body { grid-template-columns: 1fr; } .inventory-detail { min-height: 120px; } .inventory-grid { grid-template-columns: repeat(5, 48px); } .building-part-grid { grid-template-columns: 1fr; } .map-editor-panel { width: min(320px, calc(100vw - 24px)); } .tile-picker-window { left: 12px; top: 90px; width: calc(100vw - 24px); } .world-map-panel { left: 12px !important; right: auto !important; top: 96px !important; width: min(300px, calc(100vw - 24px)); } .editor-minimap { right: 12px; top: auto; bottom: 212px; padding: 8px; } .editor-minimap-canvas { width: 132px; height: 132px; } }
+@media (max-width: 720px) { .ui-debug-panel { display: none; } .inventory-body { grid-template-columns: 1fr; } .inventory-detail { min-height: 120px; } .inventory-grid { grid-template-columns: repeat(5, 48px); } .building-part-grid { grid-template-columns: 1fr; } .map-editor-panel { width: min(320px, calc(100vw - 24px)); } .tile-picker-window { left: 12px; top: 90px; width: calc(100vw - 24px); } .world-map-panel { left: 12px !important; right: auto !important; top: 96px !important; width: min(300px, calc(100vw - 24px)); } .editor-minimap { right: 12px; top: auto; bottom: 212px; padding: 8px; } .editor-minimap-canvas { width: 132px; height: 132px; } #dalworld-system-log { left: 24px; bottom: 202px; width: min(320px, calc(100vw - 48px)); } }
