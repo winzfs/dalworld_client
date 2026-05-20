@@ -14,6 +14,7 @@ type CombatPatchTarget = {
   network: GameNetwork;
   inputSendSystem: InputSendSystem;
   snapshotSystem: SnapshotSystem;
+  myPlayerId: string | null;
 };
 
 /**
@@ -29,23 +30,30 @@ export function installCombatRuntimePatch(game: unknown): void {
 
   const effects = new CombatEffectRenderer(target.world);
   const inputSystem = new CombatInputSystem(target.inputSendSystem, effects);
+  const getMyPlayerId = () => target.myPlayerId ?? null;
 
   target.app.ticker.add((ticker) => {
     const snapshot = target.snapshotSystem?.snapshot;
     inputSystem.update({
       input: target.input!,
-      player: target.snapshotSystem?.findMe((game as { myPlayerId?: string | null }).myPlayerId ?? null) ?? null,
+      player: target.snapshotSystem?.findMe(getMyPlayerId()) ?? null,
       monsters: snapshot?.monsters ?? [],
     });
     effects.update(ticker.deltaMS / 1000);
   });
 
-  target.network.onMessage((message) => routeCombatMessage(message, effects));
+  target.network.onMessage((message) => routeCombatMessage(message, effects, getMyPlayerId));
 }
 
-function routeCombatMessage(message: ServerToClientMessage, effects: CombatEffectRenderer): void {
+function routeCombatMessage(
+  message: ServerToClientMessage,
+  effects: CombatEffectRenderer,
+  getMyPlayerId: () => string | null,
+): void {
   if (message.type === 'COMBAT_ATTACK_CONFIRMED') {
-    effects.showServerAttack({ x: message.x, y: message.y, facing: message.facing });
+    if (message.attackerId !== getMyPlayerId()) {
+      effects.showServerAttack({ x: message.x, y: message.y, facing: message.facing });
+    }
     return;
   }
 
