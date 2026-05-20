@@ -1,5 +1,4 @@
 import { WorldMapGrid } from './WorldMapGrid';
-import type { EditorMonsterSpawnRule } from './types';
 
 export type WorldMapPanelOptions = {
   grid: WorldMapGrid;
@@ -15,7 +14,6 @@ export class WorldMapPanel {
   private readonly header: HTMLDivElement;
   private readonly gridEl: HTMLDivElement;
   private readonly controls: HTMLDivElement;
-  private readonly spawnRules: HTMLDivElement;
   private openState = false;
   private dragging = false;
   private dragOffsetX = 0;
@@ -44,13 +42,10 @@ export class WorldMapPanel {
     this.controls = document.createElement('div');
     this.controls.className = 'world-map-controls';
 
-    this.spawnRules = document.createElement('div');
-    this.spawnRules.className = 'world-map-spawn-rules';
-
     this.gridEl = document.createElement('div');
     this.gridEl.className = 'world-map-grid';
 
-    this.element.append(this.header, this.controls, this.spawnRules, this.gridEl);
+    this.element.append(this.header, this.controls, this.gridEl);
     this.attachDragHandlers();
     this.options.grid.subscribe(() => this.render());
     this.render();
@@ -78,7 +73,6 @@ export class WorldMapPanel {
 
   private render(): void {
     this.renderControls();
-    this.renderSpawnRules();
     this.renderGrid();
   }
 
@@ -106,86 +100,6 @@ export class WorldMapPanel {
     deleteButton.onclick = () => this.options.onDeleteCurrentCell();
 
     this.controls.append(info, row, deleteButton);
-  }
-
-  private renderSpawnRules(): void {
-    this.spawnRules.innerHTML = '';
-
-    const title = document.createElement('div');
-    title.className = 'world-map-spawn-title';
-    title.textContent = '전체맵 몬스터 스폰';
-
-    const note = document.createElement('div');
-    note.className = 'world-map-spawn-note';
-    note.textContent = '서버가 블락/건물/플레이어/몬스터 위치를 피해 스폰합니다.';
-
-    this.spawnRules.append(title, note);
-
-    for (const rule of this.options.grid.monsterSpawnRules) {
-      this.spawnRules.appendChild(this.createSpawnRuleCard(rule));
-    }
-  }
-
-  private createSpawnRuleCard(rule: EditorMonsterSpawnRule): HTMLElement {
-    const card = document.createElement('div');
-    card.className = 'world-map-spawn-card';
-    if (!rule.enabled) card.classList.add('is-disabled');
-
-    const toggle = document.createElement('label');
-    toggle.className = 'world-map-spawn-toggle';
-
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = rule.enabled;
-    checkbox.onchange = () => this.patchSpawnRule(rule.id, { enabled: checkbox.checked });
-
-    const name = document.createElement('strong');
-    name.textContent = rule.monsterType === 'sheep' ? 'Sheep' : 'Wild Slime';
-    toggle.append(checkbox, name);
-
-    card.append(
-      toggle,
-      this.createNumberField('최대 유지', rule.maxAlive, 0, 500, 1, (value) => {
-        this.patchSpawnRule(rule.id, { maxAlive: Math.round(value) });
-      }),
-      this.createNumberField('시간당', rule.spawnsPerHour, 1, 36000, 1, (value) => {
-        this.patchSpawnRule(rule.id, { spawnsPerHour: Math.round(value) });
-      }),
-    );
-
-    return card;
-  }
-
-  private createNumberField(
-    labelText: string,
-    value: number,
-    min: number,
-    max: number,
-    step: number,
-    onChange: (value: number) => void,
-  ): HTMLElement {
-    const label = document.createElement('label');
-    label.className = 'world-map-spawn-field';
-
-    const text = document.createElement('span');
-    text.textContent = labelText;
-
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.min = String(min);
-    input.max = String(max);
-    input.step = String(step);
-    input.value = String(value);
-    input.onchange = () => onChange(clampNumber(Number(input.value), min, max, value));
-
-    label.append(text, input);
-    return label;
-  }
-
-  private patchSpawnRule(ruleId: string, patch: Partial<EditorMonsterSpawnRule>): void {
-    this.options.grid.setMonsterSpawnRules(this.options.grid.monsterSpawnRules.map((rule) => (
-      rule.id === ruleId ? { ...rule, ...patch } : rule
-    )));
   }
 
   private renderGrid(): void {
@@ -252,9 +166,4 @@ export class WorldMapPanel {
     this.header.addEventListener('pointerup', stopDragging);
     this.header.addEventListener('pointercancel', stopDragging);
   }
-}
-
-function clampNumber(value: number, min: number, max: number, fallback: number): number {
-  if (!Number.isFinite(value)) return fallback;
-  return Math.min(max, Math.max(min, value));
 }
