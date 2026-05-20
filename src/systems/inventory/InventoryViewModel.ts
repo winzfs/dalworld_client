@@ -1,7 +1,7 @@
 import type { Inventory, ItemType, PlayerSnapshot } from '../../protocol/messages';
 import { BUILD_PART_ITEM_ENTRIES, getBuildPartIdFromItemId } from '../building/BuildPartInventoryCatalog';
 import type { BuildPartId } from '../building/BuildingTypes';
-import { BASE_ITEM_DEFINITIONS, type ItemDefinition } from './ItemDefinitions';
+import { BASE_ITEM_DEFINITIONS, type ItemCategory, type ItemDefinition } from './ItemDefinitions';
 import type { InventoryItemStack } from './InventoryTypes';
 
 export type InventoryTabId = 'general' | 'consumable' | 'equipment' | 'crafting' | 'building' | 'pet';
@@ -33,8 +33,8 @@ export type InventorySource = Inventory | PlayerSnapshot | InventoryItemStack[] 
 export const INVENTORY_TABS: InventoryTabView[] = [
   { id: 'general', label: '일반', emptyText: '채집한 자원이 이곳에 표시됩니다.' },
   { id: 'consumable', label: '사용', emptyText: '아직 사용 아이템이 없습니다.' },
-  { id: 'equipment', label: '장비', emptyText: '아직 장비 아이템이 없습니다.' },
-  { id: 'crafting', label: '제작', emptyText: '아직 제작 재료가 없습니다.' },
+  { id: 'equipment', label: '장비', emptyText: '아직 장비/도구/무기가 없습니다.' },
+  { id: 'crafting', label: '제작', emptyText: '아직 제작 재료나 제작도구가 없습니다.' },
   { id: 'building', label: '건설', emptyText: '건설 부품을 선택하면 건설모드로 진입합니다.' },
   { id: 'pet', label: '펫', emptyText: '아직 펫 아이템이 없습니다.' },
 ];
@@ -48,15 +48,17 @@ export function getInventorySlotsForTab(tab: InventoryTabId, source: InventorySo
 
   switch (tab) {
     case 'general':
-      return getGeneralResourceSlots(stacks);
+      return getSlotsByCategories(stacks, ['resource']);
     case 'building':
       return getBuildingPartSlots(stacks);
     case 'crafting':
-      return getCraftingMaterialSlots(stacks);
+      return getSlotsByCategories(stacks, ['crafting_material', 'crafting_station', 'capture']);
     case 'consumable':
+      return getSlotsByCategories(stacks, ['consumable']);
     case 'equipment':
+      return getSlotsByCategories(stacks, ['equipment', 'weapon', 'tool']);
     case 'pet':
-      return [];
+      return getSlotsByCategories(stacks, ['pet']);
   }
 }
 
@@ -71,23 +73,15 @@ export function normalizeInventoryStacks(source: InventorySource): InventoryItem
     .filter((stack) => stack.quantity > 0);
 }
 
-function getGeneralResourceSlots(stacks: InventoryItemStack[]): InventoryResourceSlotView[] {
-  return getResourceSlotsByCategory(stacks, 'resource');
-}
-
-function getCraftingMaterialSlots(stacks: InventoryItemStack[]): InventoryResourceSlotView[] {
-  return getResourceSlotsByCategory(stacks, 'crafting_material');
-}
-
-function getResourceSlotsByCategory(
+function getSlotsByCategories(
   stacks: InventoryItemStack[],
-  category: ItemDefinition['category'],
+  categories: ItemCategory[],
 ): InventoryResourceSlotView[] {
   const slots: InventoryResourceSlotView[] = [];
 
   for (const stack of stacks) {
     const definition = BASE_ITEM_DEFINITIONS[stack.itemId];
-    if (!definition || definition.category !== category || stack.quantity <= 0) continue;
+    if (!definition || !categories.includes(definition.category) || stack.quantity <= 0) continue;
 
     slots.push({
       kind: 'resource',
