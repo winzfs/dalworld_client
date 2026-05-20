@@ -1,7 +1,7 @@
 import type { EditorWorldSave } from '../editor/types';
 import { getServerHttpPath } from '../net/serverHttp';
 import { compileRuntimeWorldMap } from './compileRuntimeWorldMap';
-import type { GameWorldMap, WorldMapCell, WorldMapPlacement } from './types';
+import type { GameWorldMap, WorldMapCell, WorldMapMonsterSpawnRule, WorldMapPlacement } from './types';
 
 export type UploadedWorldMapReport = {
   cells: number;
@@ -29,6 +29,7 @@ type WorldMapManifest = {
   tileSize: number;
   cellSize: number;
   cells: Array<{ gridX: number; gridY: number }>;
+  monsterSpawnRules?: WorldMapMonsterSpawnRule[];
 };
 
 type CompactWorldMapAsset = Omit<WorldMapPlacement, 'id' | 'x' | 'y' | 'layer' | 'scale'>;
@@ -102,6 +103,7 @@ async function uploadWorldMapByCell(map: GameWorldMap): Promise<void> {
     tileSize: map.tileSize,
     cellSize: map.cellSize,
     cells: map.cells.map((cell) => ({ gridX: cell.gridX, gridY: cell.gridY })),
+    monsterSpawnRules: map.monsterSpawnRules,
   };
 
   await putJsonWithRetry(getServerHttpPath('/maps/default/manifest'), manifest, 'manifest');
@@ -325,7 +327,7 @@ function estimateJsonBytes(value: unknown): number {
 }
 
 function withCacheBuster(url: string): string {
-  const separator = url.includes('?') ? '&' : '?';
+  const separator = url.includes('?') ? '&';
   return `${url}${separator}t=${Date.now()}`;
 }
 
