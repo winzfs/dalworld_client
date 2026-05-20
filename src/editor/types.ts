@@ -1,6 +1,17 @@
 export type EditorLayerId = 'ground' | 'object' | 'collision';
 
 export type EditorResourceType = 'tree' | 'stone';
+export type EditorMonsterType = 'wild_slime' | 'sheep';
+
+export type EditorMonsterSpecOverrides = {
+  maxHp?: number;
+  moveSpeed?: number;
+  detectRange?: number;
+  loseRange?: number;
+  attackRange?: number;
+  attackDamage?: number;
+  attackCooldownMs?: number;
+};
 
 export type EditorPlacementGameplay =
   | {
@@ -9,6 +20,14 @@ export type EditorPlacementGameplay =
       blocksMovement?: boolean;
       maxHp?: number;
       respawnMs?: number;
+    }
+  | {
+      kind: 'monsterSpawn';
+      monsterType: EditorMonsterType;
+      spawnRadius: number;
+      maxAlive: number;
+      respawnMs: number;
+      spec?: EditorMonsterSpecOverrides;
     };
 
 export type EditorTilesetAsset = {
