@@ -5,6 +5,7 @@ import './editor/monsterEditor.css';
 import { GameApp } from './game/GameApp';
 import { installCombatClientFeature } from './game/installCombatClientFeature';
 import { installTimeOfDayClientFeature } from './systems/timeOfDay/TimeOfDayClientFeature';
+import { installSystemLogHud } from './ui/SystemLogHud';
 import { BootOverlay, installGlobalErrorOverlay } from './utils/bootOverlay';
 
 const bootOverlay = new BootOverlay();
@@ -18,6 +19,7 @@ async function boot(): Promise<void> {
   }
 
   installTimeOfDayClientFeature(document.body);
+  installSystemLogHud(document.body);
 
   bootOverlay.setMessage('Starting Pixi.js application...');
   const game = new GameApp();
