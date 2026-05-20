@@ -3,7 +3,7 @@
 
 import type { BuildingClientMessage, BuildingServerEvent } from '../systems/building/BuildingTypes';
 import type { CraftingRecipeId } from '../systems/crafting/CraftingTypes';
-import type { InventoryItemStack, InventorySnapshot } from '../systems/inventory/InventoryTypes';
+import type { InventoryItemId, InventoryItemStack, InventorySnapshot } from '../systems/inventory/InventoryTypes';
 import type { TimeOfDayState } from '../systems/timeOfDay/TimeOfDayTypes';
 import type { GameWorldMap, WorldMapSourceRect } from '../worldMap/types';
 
@@ -99,6 +99,14 @@ export type TimeOfDayToggleRequest = {
   requestId: string;
 };
 
+export type CombatAttackRequest = {
+  type: 'COMBAT_ATTACK_REQUEST';
+  requestId: string;
+  seq: number;
+  facing: Facing;
+  targetId?: string;
+};
+
 export type CraftingCompletedEvent = {
   type: 'CRAFT_COMPLETED';
   requestId: string;
@@ -113,6 +121,68 @@ export type CraftingRejectedEvent = {
 };
 
 export type CraftingServerEvent = CraftingCompletedEvent | CraftingRejectedEvent;
+
+export type CombatAttackConfirmedEvent = {
+  type: 'COMBAT_ATTACK_CONFIRMED';
+  requestId: string;
+  attackerId: string;
+  facing: Facing;
+  x: number;
+  y: number;
+};
+
+export type CombatHitEvent = {
+  type: 'COMBAT_HIT';
+  requestId: string;
+  attackerId: string;
+  targetId: string;
+  targetType: 'monster' | 'player';
+  damage: number;
+  hpRemaining: number;
+  maxHp: number;
+  x: number;
+  y: number;
+};
+
+export type CombatMissedEvent = {
+  type: 'COMBAT_MISSED';
+  requestId: string;
+  attackerId: string;
+  reason: 'range' | 'blocked' | 'invalid_target';
+};
+
+export type CombatRejectedEvent = {
+  type: 'COMBAT_REJECTED';
+  requestId: string;
+  reason: string;
+};
+
+export type MonsterKilledEvent = {
+  type: 'MONSTER_KILLED';
+  requestId: string;
+  attackerId: string;
+  monsterId: string;
+  monsterType: MonsterType;
+  x: number;
+  y: number;
+};
+
+export type CombatRewardGrantedEvent = {
+  type: 'COMBAT_REWARD_GRANTED';
+  requestId: string;
+  playerId: string;
+  monsterId: string;
+  itemId: InventoryItemId;
+  amount: number;
+};
+
+export type CombatServerEvent =
+  | CombatAttackConfirmedEvent
+  | CombatHitEvent
+  | CombatMissedEvent
+  | CombatRejectedEvent
+  | MonsterKilledEvent
+  | CombatRewardGrantedEvent;
 
 export type ClientToServerMessage =
   | { type: 'hello'; name?: string }
@@ -134,6 +204,7 @@ export type ClientToServerMessage =
   | { type: 'ping'; now: number }
   | BuildingClientMessage
   | CraftingClientMessage
+  | CombatAttackRequest
   | TimeOfDayToggleRequest;
 
 export type ServerEvent =
@@ -141,7 +212,19 @@ export type ServerEvent =
   | { type: 'player_left'; playerId: string }
   | { type: 'resource_hit'; resourceId: string; resourceType: ResourceType; hpRemaining: number }
   | { type: 'resource_destroyed'; resourceId: string; resourceType: ResourceType }
-  | { type: 'item_gained'; playerId: string; item: ItemType; amount: number };
+  | { type: 'item_gained'; playerId: string; item: ItemType; amount: number }
+  | {
+      type: 'combat_hit';
+      requestId: string;
+      attackerId: string;
+      targetId: string;
+      targetType: 'monster' | 'player';
+      damage: number;
+      hpRemaining: number;
+      maxHp: number;
+      x: number;
+      y: number;
+    };
 
 export type ServerToClientMessage =
   | {
@@ -166,4 +249,5 @@ export type ServerToClientMessage =
   | { type: 'event'; serverTime: number; event: ServerEvent }
   | { type: 'pong'; now: number }
   | BuildingServerEvent
-  | CraftingServerEvent;
+  | CraftingServerEvent
+  | CombatServerEvent;
