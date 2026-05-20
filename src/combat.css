@@ -1,0 +1,21 @@
+body.is-map-editor-mode #dalworld-mobile .attack-btn {
+  display: none !important;
+}
+
+#dalworld-mobile.desktop-hidden .attack-btn {
+  display: none;
+}
+
+#dalworld-mobile .attack-btn {
+  right: 120px;
+  bottom: 38px;
+  width: 76px;
+  height: 76px;
+  background: #ff6b6b;
+  color: #fff9ef;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+}
+
+#dalworld-mobile .attack-btn:active {
+  transform: scale(0.94);
+}
