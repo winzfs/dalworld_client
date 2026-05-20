@@ -87,6 +87,14 @@ export class ServerMessageRouter {
         emitSystemLog({ message: `${formatItemName(message.itemId)} +${message.amount}`, kind: 'success' });
         this.context.onCombatEvent?.(message);
         return;
+      case 'PLAYER_EXPERIENCE_GAINED':
+        emitSystemLog({ message: `EXP +${message.amount}`, kind: 'success' });
+        this.context.onCombatEvent?.(message);
+        return;
+      case 'PLAYER_LEVEL_UP':
+        emitSystemLog({ message: `레벨 업! Lv.${message.level}`, kind: 'success' });
+        this.context.onCombatEvent?.(message);
+        return;
       case 'pong':
         return;
     }
