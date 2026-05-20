@@ -1,8 +1,29 @@
+.map-editor-panel {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.map-editor-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.map-editor-panel::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: rgba(255,255,255,.22);
+}
+
 .map-editor-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  padding: 9px 10px 0;
+  padding: 9px 10px 6px;
+  background: rgba(17, 24, 39, .96);
+  backdrop-filter: blur(6px);
 }
 
 .map-editor-tab {
@@ -23,7 +44,7 @@
 }
 
 .map-editor-monster-editor {
-  margin: 8px 10px 0;
+  margin: 8px 10px 10px;
   padding: 10px;
   border: 1px solid rgba(126, 223, 242, .18);
   border-radius: 12px;
