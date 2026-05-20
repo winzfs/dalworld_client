@@ -455,7 +455,7 @@ export class MapEditor {
     const size = await loadImageSize(asset.url);
     if (!size) return false;
 
-    return size.width > DIRECT_SELECT_MAX_SIZE;
+    return size.width > DIRECT_SELECT_MAX_SIZE || size.height > DIRECT_SELECT_MAX_SIZE;
   }
 
   private async fillAll(): Promise<void> {
