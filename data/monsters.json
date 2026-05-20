@@ -1,0 +1,22 @@
+[
+  {
+    "id": "wild_slime",
+    "displayName": "Wild Slime",
+    "maxHp": 20,
+    "moveSpeed": 45,
+    "aggroRange": 120,
+    "attackRange": 24,
+    "attackDamage": 3,
+    "attackCooldownMs": 1200
+  },
+  {
+    "id": "sheep",
+    "displayName": "Sheep",
+    "maxHp": 16,
+    "moveSpeed": 35,
+    "aggroRange": 0,
+    "attackRange": 0,
+    "attackDamage": 0,
+    "attackCooldownMs": 0
+  }
+]
