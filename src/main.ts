@@ -1,5 +1,6 @@
 import './style.css';
 import './timeOfDay.css';
+import './combat.css';
 import { GameApp } from './game/GameApp';
 import { installCombatRuntimePatch } from './game/installCombatRuntimePatch';
 import { installTimeOfDayClientFeature } from './systems/timeOfDay/TimeOfDayClientFeature';
