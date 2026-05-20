@@ -386,6 +386,9 @@ export class TilesetPanel {
   }
 
   private createMonsterSelect(): HTMLElement {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'map-editor-monster-select-block';
+
     const label = document.createElement('label');
     label.className = 'map-editor-monster-select-row';
 
@@ -394,19 +397,51 @@ export class TilesetPanel {
 
     const select = document.createElement('select');
     select.value = this.selectedMonsterType;
+    select.addEventListener('pointerdown', (event) => event.stopPropagation());
+    select.addEventListener('mousedown', (event) => event.stopPropagation());
+    select.addEventListener('click', (event) => event.stopPropagation());
+
     for (const option of MONSTER_OPTIONS) {
       const item = document.createElement('option');
       item.value = option.id;
       item.textContent = option.label;
       select.appendChild(item);
     }
-    select.onchange = () => {
-      this.selectedMonsterType = select.value as EditorMonsterType;
-      this.render();
+
+    const applySelection = () => {
+      const next = select.value as EditorMonsterType;
+      if (next === this.selectedMonsterType) return;
+      this.selectedMonsterType = next;
+      window.requestAnimationFrame(() => this.render());
     };
 
+    select.oninput = applySelection;
+    select.onchange = applySelection;
+
     label.append(text, select);
-    return label;
+    wrapper.append(label, this.createMonsterButtonList());
+    return wrapper;
+  }
+
+  private createMonsterButtonList(): HTMLElement {
+    const list = document.createElement('div');
+    list.className = 'map-editor-monster-list';
+
+    for (const option of MONSTER_OPTIONS) {
+      const button = document.createElement('button');
+      button.className = 'map-editor-monster-list-item';
+      if (option.id === this.selectedMonsterType) button.classList.add('is-active');
+      button.type = 'button';
+      button.textContent = option.label;
+      button.onclick = () => {
+        if (option.id === this.selectedMonsterType) return;
+        this.selectedMonsterType = option.id;
+        this.render();
+      };
+      list.appendChild(button);
+    }
+
+    return list;
   }
 
   private createMonsterSection(titleText: string, children: HTMLElement[], noteText?: string): HTMLElement {
@@ -666,6 +701,12 @@ function createSpawnRegionAsset(
   region: MonsterRegionSpawnDefaults,
   spec: EditorMonsterSpecOverrides,
 ): EditorTilesetAsset {
+  const gameplayDefaults: MonsterRegionSpawnDefaults = {
+    ...region,
+    monsterType: option.id,
+  };
+  if (Object.keys(spec).length > 0) gameplayDefaults.spec = { ...spec };
+
   return {
     id: `monster-spawn-${option.id}`,
     name: `${option.label} Spawn Region`,
@@ -674,11 +715,7 @@ function createSpawnRegionAsset(
     tileWidth: 32,
     tileHeight: 32,
     solidColor: option.color,
-    gameplayDefaults: {
-      ...region,
-      monsterType: option.id,
-      spec: Object.keys(spec).length > 0 ? { ...spec } : undefined,
-    },
+    gameplayDefaults,
   };
 }
 
