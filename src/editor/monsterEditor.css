@@ -62,6 +62,10 @@
   display: none !important;
 }
 
+.map-editor-monster-select-block {
+  margin-bottom: 10px;
+}
+
 .map-editor-monster-select-row,
 .map-editor-monster-field {
   display: grid;
@@ -88,6 +92,34 @@
 
 .map-editor-monster-select-row select {
   padding: 0 8px;
+}
+
+.map-editor-monster-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.map-editor-monster-list-item {
+  min-height: 30px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  background: rgba(0,0,0,.22);
+  color: rgba(255,255,255,.76);
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.map-editor-monster-list-item.is-active {
+  border-color: rgba(126, 223, 242, .72);
+  background: rgba(126, 223, 242, .17);
+  color: #9defff;
+}
+
+.map-editor-monster-list-item:hover {
+  background: rgba(126, 223, 242, .12);
 }
 
 .map-editor-monster-field input {
