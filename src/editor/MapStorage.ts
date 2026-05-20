@@ -1,7 +1,7 @@
-import type { EditorMapDraft, EditorTilePlacement, EditorWorldMapDraft, EditorWorldSave } from './types';
+import type { EditorMapDraft, EditorPlacementGameplay, EditorTilePlacement, EditorWorldMapDraft, EditorWorldSave } from './types';
 import { uploadWorldMap, type UploadedWorldMapReport } from '../worldMap/uploadWorldMap';
 import { fetchRuntimeWorldMap } from '../worldMap/fetchRuntimeWorldMap';
-import type { GameWorldMap, WorldMapPlacement } from '../worldMap/types';
+import type { GameWorldMap, WorldMapPlacement, WorldMapPlacementGameplay } from '../worldMap/types';
 
 const STORAGE_PREFIX = 'dalworld:editor-map:';
 const WORLD_STORAGE_PREFIX = 'dalworld:editor-world:';
@@ -142,6 +142,7 @@ export class MapStorage {
 }
 
 function convertRuntimeMapToEditorWorldSave(map: GameWorldMap, mapName: string): EditorWorldSave {
+  const worldMap = createEditorWorldMapDraft(map);
   const cells = map.cells.map((cell) => ({
     gridX: cell.gridX,
     gridY: cell.gridY,
@@ -149,7 +150,7 @@ function convertRuntimeMapToEditorWorldSave(map: GameWorldMap, mapName: string):
       version: 1,
       name: `${mapName}-${cell.gridX}-${cell.gridY}`,
       tileSize: map.tileSize,
-      worldMap: createEditorWorldMapDraft(map),
+      worldMap,
       placements: cell.placements.map(convertRuntimePlacementToEditorPlacement),
     } satisfies EditorMapDraft,
   }));
@@ -158,7 +159,7 @@ function convertRuntimeMapToEditorWorldSave(map: GameWorldMap, mapName: string):
     version: 1,
     name: mapName,
     tileSize: map.tileSize,
-    worldMap: createEditorWorldMapDraft(map),
+    worldMap,
     cells,
   };
 }
@@ -166,6 +167,10 @@ function convertRuntimeMapToEditorWorldSave(map: GameWorldMap, mapName: string):
 function createEditorWorldMapDraft(map: GameWorldMap): EditorWorldMapDraft {
   const sortedCells = [...map.cells].sort((a, b) => (a.gridY - b.gridY) || (a.gridX - b.gridX));
   const firstCell = sortedCells[0] ?? { gridX: 0, gridY: 0 };
+  const monsterSpawnRules = map.monsterSpawnRules?.map((rule) => ({
+    ...rule,
+    ...(rule.spec ? { spec: { ...rule.spec } } : {}),
+  }));
 
   return {
     version: 1,
@@ -177,12 +182,12 @@ function createEditorWorldMapDraft(map: GameWorldMap): EditorWorldMapDraft {
       gridX: cell.gridX,
       gridY: cell.gridY,
     })),
-    monsterSpawnRules: map.monsterSpawnRules?.map((rule) => ({ ...rule, spec: rule.spec ? { ...rule.spec } : undefined })),
+    ...(monsterSpawnRules ? { monsterSpawnRules } : {}),
   };
 }
 
 function convertRuntimePlacementToEditorPlacement(placement: WorldMapPlacement): EditorTilePlacement {
-  return {
+  const editorPlacement: EditorTilePlacement = {
     id: placement.id,
     assetId: placement.assetId,
     assetUrl: placement.assetUrl,
@@ -196,8 +201,40 @@ function convertRuntimePlacementToEditorPlacement(placement: WorldMapPlacement):
     sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
     solidColor: placement.solidColor,
     transparentBlack: placement.transparentBlack,
-    gameplay: placement.gameplay ? { ...placement.gameplay, spec: 'spec' in placement.gameplay && placement.gameplay.spec ? { ...placement.gameplay.spec } : undefined } : undefined,
   };
+
+  const gameplay = convertRuntimeGameplayToEditorGameplay(placement.gameplay);
+  if (gameplay) editorPlacement.gameplay = gameplay;
+
+  return editorPlacement;
+}
+
+function convertRuntimeGameplayToEditorGameplay(
+  gameplay: WorldMapPlacementGameplay | undefined,
+): EditorPlacementGameplay | undefined {
+  if (!gameplay) return undefined;
+
+  if (gameplay.kind === 'resource') {
+    return {
+      kind: 'resource',
+      resourceType: gameplay.resourceType,
+      blocksMovement: gameplay.blocksMovement,
+      maxHp: gameplay.maxHp,
+      respawnMs: gameplay.respawnMs,
+    };
+  }
+
+  const converted: EditorPlacementGameplay = {
+    kind: 'monsterSpawn',
+    monsterType: gameplay.monsterType,
+    spawnRadius: gameplay.spawnRadius,
+    maxAlive: gameplay.maxAlive,
+    respawnMs: gameplay.respawnMs,
+    spawnsPerHour: gameplay.spawnsPerHour,
+  };
+
+  if (gameplay.spec) converted.spec = { ...gameplay.spec };
+  return converted;
 }
 
 function estimateJsonBytes(value: unknown): number {
