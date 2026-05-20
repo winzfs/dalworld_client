@@ -10,8 +10,11 @@ type RenderedLogEntry = Required<SystemLogEntry> & {
   createdAt: number;
 };
 
+export type SystemLogEvent = CustomEvent<SystemLogEntry>;
+
 const MAX_LOGS = 3;
 const LOG_TTL_MS = 6_000;
+const SYSTEM_LOG_EVENT = 'dalworld:system-log';
 
 export class SystemLogHud {
   readonly element: HTMLDivElement;
@@ -100,4 +103,20 @@ export class SystemLogHud {
       this.list.appendChild(item);
     }
   }
+}
+
+export function emitSystemLog(entry: SystemLogEntry): void {
+  window.dispatchEvent(new CustomEvent<SystemLogEntry>(SYSTEM_LOG_EVENT, { detail: entry }));
+}
+
+export function installSystemLogHud(parent: HTMLElement = document.body): SystemLogHud {
+  const hud = new SystemLogHud();
+  hud.mount(parent);
+
+  window.addEventListener(SYSTEM_LOG_EVENT, (event) => {
+    const logEvent = event as SystemLogEvent;
+    hud.push(logEvent.detail);
+  });
+
+  return hud;
 }
