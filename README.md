@@ -1,6 +1,30 @@
 # dalworld-client
 
-Pixi.js v8 + TypeScript + Vite + Cloudflare Pages 기반 2D 멀티플레이 생존 게임 클라이언트.
+Pixi.js v8 + TypeScript + Vite + Cloudflare Pages 기반 2D 멀티플레이 생존/건설 게임 클라이언트.
+
+클라이언트는 렌더링, 입력, UI, 미리보기, 서버 이벤트 반영을 담당한다. 실제 게임 판정과 월드 상태 확정은 `dalworld_server`의 Durable Object가 담당한다.
+
+## 작업 전 필수 문서
+
+AI 또는 개발자는 코드 수정 전에 아래 문서를 먼저 확인한다.
+
+| 문서 | 목적 |
+|------|------|
+| [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) | AI 작업 규칙, 금지 사항, 작업 전/후 체크리스트 |
+| [`docs/CURRENT_SYSTEM_STATUS.md`](docs/CURRENT_SYSTEM_STATUS.md) | 현재 구현/부분 구현/미구현 상태 |
+| [`docs/ARCHITECTURE_GUIDE.md`](docs/ARCHITECTURE_GUIDE.md) | 클라이언트 구조, 계층, GameApp 분리 기준 |
+| [`docs/isometric-building-system.md`](docs/isometric-building-system.md) | 아이소메트릭 건설 시스템 클라이언트 설계 |
+
+문서와 실제 코드가 다르면 현재 코드를 확인하고, 필요한 경우 문서를 함께 갱신한다.
+
+## 핵심 원칙
+
+- Pixi.js v8 기준으로 작성한다.
+- 클라이언트는 게임 판정을 최종 확정하지 않는다.
+- 서버가 확정한 snapshot/event만 실제 월드 상태로 반영한다.
+- 건설 고스트와 로컬 예측 이동은 편의 기능이며 최종 판정이 아니다.
+- 프로토콜 변경 시 `dalworld_server`의 `src/protocol/messages.ts`도 함께 맞춘다.
+- 새 기능을 `GameApp.ts`에 계속 몰아넣지 말고 도메인별 시스템으로 분리한다.
 
 ## 기술 스택
 
@@ -32,7 +56,7 @@ npm run dev
 
 # 2. dalworld_client 폴더에서 클라이언트 실행 (포트 5173)
 npm run dev
-# → vite.config.ts 의 proxy 설정이 /ws 를 localhost:8787 로 전달준다
+# vite.config.ts 의 proxy 설정이 /ws 를 localhost:8787 로 전달한다
 ```
 
 ## 빌드 / 배포
@@ -43,25 +67,34 @@ npm run build       # dist/ 생성
 npm run deploy      # Cloudflare Pages 배포 (wrangler)
 ```
 
-## 아키텍처
+## 현재 구현 상태
 
-```
+현재 구현 상태는 README에 중복 관리하지 않는다.
+아래 문서를 기준으로 확인한다.
+
+- [`docs/CURRENT_SYSTEM_STATUS.md`](docs/CURRENT_SYSTEM_STATUS.md)
+
+## 주요 구조
+
+```txt
 src/
 ├─ main.ts
-├─ protocol/messages.ts       서버와 동일한 타입 (복사, 모노레포 불필요)
-├─ net/network.ts             WebSocket + 자동 재연결 + ping
+├─ protocol/messages.ts
+├─ net/network.ts
 ├─ game/
-│  ├─ GameApp.ts              메인 게임 루프
-│  ├─ InputController.ts      WASD + 터치 조이스틱
-│  ├─ Camera.ts               카메라 follow + 월드 경계 클램프
-│  └─ interpolation.ts        원격 엔티티 보간
-└─ render/
-   ├─ PlayerRenderer.ts       플레이어 (방향 표시 눈)
-   ├─ ResourceRenderer.ts     자원 (HP바, 리스폰 반투명)
-   ├─ MonsterRenderer.ts      몬스터 (chase 상태 표시)
-   ├─ DebugHud.ts             HUD (HP·스태미나·인벤토리·ping)
-   └─ MobileControls.ts       모바일 조이스틱 + 채집 버튼
+│  ├─ GameApp.ts
+│  ├─ InputController.ts
+│  ├─ Camera.ts
+│  └─ systems/
+├─ render/
+├─ ui/
+├─ systems/
+│  └─ building/
+├─ editor/
+└─ worldMap/
 ```
+
+상세 구조는 [`docs/ARCHITECTURE_GUIDE.md`](docs/ARCHITECTURE_GUIDE.md)를 기준으로 확인한다.
 
 ## 조작법
 
@@ -71,53 +104,34 @@ src/
 | E / Space | 채집 |
 | 모바일 조이스틱 | 이동 |
 | 모바일 E 버튼 | 채집 |
-| ⛶ 버튼 | 전체화면 (모바일) |
-
-## HUD 항목
-
-| 항목 | 설명 |
-|------|------|
-| WS | 연결 상태 (open/connecting/closed/error) |
-| ping | 서버 왕복 지연시간 |
-| tick | 서버 틱 번호 |
-| pos | 월드 좌표 |
-| hp | 현재/최대 체력 |
-| sta | 스태미나 |
-| wood | 보유 나무 |
-| stone | 보유 돌 |
-| E: tree/stone | 채집 가능한 자원이 근처에 있을 때 표시 |
-
-## 현재 구현 기능
-
-- [x] Pixi.js v8 렌더링 엔진
-- [x] 서버 권위 이동 + 보간 (원격 플레이어 부드러운 이동)
-- [x] 자원 채집 (E/Space, 범위 80)
-- [x] 자원 HP 바 표시
-- [x] 자원 리스폰 반투명 처리
-- [x] 몬스터 (chase 상태 색상 변화)
-- [x] 카메라 follow + 월드 경계 클램프
-- [x] HUD (연결·좌표·HP·스태미나·인벤토리·ping·tick)
-- [x] WebSocket 자동 재연결 (지수 백오프)
-- [x] 모바일 조이스틱 + 채집 버튼
-- [x] 플레이어 방향 표시 (눈/점)
-- [x] 채집 가능 자원 안내 (HUD E: tree/stone)
+| R | 건설 부품 회전 |
+| PageUp / PageDown | 건설 층 변경 |
+| G | 건설 그리드 토글 |
+| Enter | 건설 드래프트 확정 요청 |
+| Escape | 건설 드래프트 취소 |
+| Delete / Backspace | 철거 모드 |
+| `?editor=1` | 맵 에디터 모드 |
 
 ## 문제 해결
 
 **WebSocket 연결 안 됨:**
-1. `VITE_DALWORLD_WS_URL` 환경 변수 확인 (Cloudflare Pages → Settings → Environment variables)
-2. Pages 재배포 (환경 변수 변경 후 반드시 재배포 필요)
+
+1. `VITE_DALWORLD_WS_URL` 환경 변수 확인
+2. Cloudflare Pages 환경 변수 변경 후 재배포
 3. URL 형식 확인: `wss://dalworld-server.<계정>.workers.dev/ws`
+4. 서버 `GET /health` 응답 확인
 
 **HUD에 좌표가 안 보임:**
-- HUD WS 항목이 `open`인지 확인
-- 서버가 실행 중인지 확인
 
-## TODO
+- HUD의 WS 항목이 `open`인지 확인한다.
+- 서버가 실행 중인지 확인한다.
 
-- [ ] 전투 (몬스터 데미지)
-- [ ] 아이템 사용 / 크래프팅
-- [ ] 플레이어 사망 / 리스폰
-- [ ] 사운드 효과
-- [ ] 스프라이트 애니메이션
-- [ ] 체팅
+## 기능 추가 시 체크리스트
+
+- [ ] `docs/AI_WORKFLOW.md`를 확인했는가?
+- [ ] `docs/CURRENT_SYSTEM_STATUS.md`를 확인했는가?
+- [ ] `docs/ARCHITECTURE_GUIDE.md`를 확인했는가?
+- [ ] 서버 권위 구조를 깨지 않았는가?
+- [ ] 프로토콜 변경 시 서버 저장소도 수정했는가?
+- [ ] 기존 기능을 임의로 삭제하지 않았는가?
+- [ ] 관련 문서를 갱신했는가?
