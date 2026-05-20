@@ -2,21 +2,21 @@
   {
     "id": "wild_slime",
     "displayName": "Wild Slime",
-    "maxHp": 20,
-    "moveSpeed": 45,
-    "aggroRange": 120,
-    "attackRange": 24,
-    "attackDamage": 3,
-    "attackCooldownMs": 1200
+    "maxHp": 50,
+    "moveSpeed": 80,
+    "aggroRange": 250,
+    "attackRange": 42,
+    "attackDamage": 8,
+    "attackCooldownMs": 900
   },
   {
     "id": "sheep",
     "displayName": "Sheep",
-    "maxHp": 16,
-    "moveSpeed": 35,
-    "aggroRange": 0,
-    "attackRange": 0,
-    "attackDamage": 0,
-    "attackCooldownMs": 0
+    "maxHp": 35,
+    "moveSpeed": 65,
+    "aggroRange": 180,
+    "attackRange": 34,
+    "attackDamage": 2,
+    "attackCooldownMs": 1200
   }
 ]
