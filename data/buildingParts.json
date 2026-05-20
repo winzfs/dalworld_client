@@ -1,0 +1,34 @@
+[
+  {
+    "id": "floor_1x1",
+    "displayName": "Wood Floor",
+    "category": "floor",
+    "slotKind": "tile",
+    "size": { "w": 1, "d": 1, "h": 0.12 },
+    "blocksMovement": false,
+    "requiresSupport": false,
+    "allowedOn": "ground",
+    "placementCost": [
+      { "itemId": "wood", "quantity": 2 }
+    ],
+    "refundOnRemove": [
+      { "itemId": "wood", "quantity": 1 }
+    ]
+  },
+  {
+    "id": "thin_wall",
+    "displayName": "Thin Wall",
+    "category": "wall",
+    "slotKind": "edge",
+    "size": { "w": 1, "d": 0.12, "h": 1 },
+    "blocksMovement": true,
+    "requiresSupport": true,
+    "allowedOn": ["floor_1x1", "stone_floor_1x1", "deck_floor_1x1"],
+    "placementCost": [
+      { "itemId": "wood", "quantity": 3 }
+    ],
+    "refundOnRemove": [
+      { "itemId": "wood", "quantity": 1 }
+    ]
+  }
+]
