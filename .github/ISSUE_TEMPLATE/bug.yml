@@ -1,0 +1,48 @@
+name: Bug
+about: 버그 수정 작업
+labels: [bug]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 문제 상황
+      description: 어떤 문제가 발생했는지 적어주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대 동작
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 재현 방법
+      placeholder: 1. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: 발생 환경
+      options:
+        - desktop
+        - mobile
+        - editor mode
+        - game mode
+        - unknown
+    validations:
+      required: true
+  - type: textarea
+    id: authority
+    attributes:
+      label: 서버 권위 구조 영향
+      description: 클라이언트 표시 문제인지, 서버 판정 문제인지 구분해주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: 수정 후 검증 방법
+      placeholder: npm run check, 재현 경로 재테스트 등
