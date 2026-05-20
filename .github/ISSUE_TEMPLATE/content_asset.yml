@@ -1,0 +1,47 @@
+name: Content / Asset
+about: 아이템, 몬스터, 건설 부품, 스프라이트 등 콘텐츠 추가
+labels: [content]
+body:
+  - type: dropdown
+    id: content_type
+    attributes:
+      label: 콘텐츠 종류
+      options:
+        - item
+        - recipe
+        - monster
+        - building part
+        - sprite/asset
+        - UI asset
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: 콘텐츠 설명
+    validations:
+      required: true
+  - type: textarea
+    id: gameplay
+    attributes:
+      label: 게임플레이 영향
+      description: 능력치, 비용, 제작법, 충돌, 상호작용 등 서버가 검증해야 할 내용을 적어주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: client
+    attributes:
+      label: 클라이언트 표시/입력 요구사항
+      description: 렌더링, UI, 고스트, 애니메이션, 모바일 조작성 등을 적어주세요.
+  - type: textarea
+    id: protocol
+    attributes:
+      label: 프로토콜/공유 데이터 변경 여부
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: 검증 방법
+      placeholder: npm run check, 에셋 경로 확인, 실제 배치/표시 확인 등
