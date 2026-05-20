@@ -515,7 +515,7 @@ export class MapEditor {
   }
 
   private async load(): Promise<void> {
-    const worldSave = this.storage.loadWorld();
+    const worldSave = this.storage.loadWorld() ?? await this.storage.loadWorldFromServerBackup();
 
     if (worldSave) {
       this.worldMapGrid.load(worldSave.worldMap);
