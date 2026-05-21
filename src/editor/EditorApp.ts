@@ -102,7 +102,7 @@ export class EditorApp {
         preference: 'webgl',
         preferWebGLVersion: 2,
         failIfMajorPerformanceCaveat: false,
-        powerPreference: 'default',
+        powerPreference: 'low-power',
       }),
       PIXI_INIT_TIMEOUT_MS,
       'Pixi initialization timed out.',
