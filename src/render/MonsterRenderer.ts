@@ -84,9 +84,17 @@ export class MonsterRenderer {
       view.interp.setTarget(monster.x, monster.y);
       view.attackCooldownMs = resolveAttackCooldownMs(monster);
 
+      const serverFacing = resolveFacing(monster.facing, view.facing);
+      if (!view.attackPlaying && serverFacing !== view.facing) {
+        view.facing = serverFacing;
+        view.frame = -1;
+        view.animationKey = '';
+      }
+
       const attackSeq = resolveAttackSeq(monster);
       if (attackSeq > view.lastAttackSeq) {
         view.lastAttackSeq = attackSeq;
+        view.facing = serverFacing;
         this.startAttackAnimation(view);
       }
 
@@ -103,6 +111,7 @@ export class MonsterRenderer {
         view.type = monster.type;
         view.attackCooldownMs = resolveAttackCooldownMs(monster);
         view.lastAttackSeq = attackSeq;
+        view.facing = serverFacing;
         view.frame = -1;
         view.animationKey = '';
         view.attackPlaying = false;
@@ -131,10 +140,6 @@ export class MonsterRenderer {
       view.previousY = pos.y;
 
       const moving = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
-      if (moving && !view.attackPlaying) {
-        view.facing = getFacingFromDelta(dx, dy, view.facing);
-      }
-
       this.updateSpriteAnimation(view, dt, moving);
     }
   }
@@ -174,6 +179,7 @@ export class MonsterRenderer {
     const body = new Graphics();
     const attackCooldownMs = resolveAttackCooldownMs(monster);
     const attackSeq = resolveAttackSeq(monster);
+    const facing = resolveFacing(monster.facing, 'down');
     container.position.set(monster.x, monster.y);
     container.zIndex = getWorldEntityZIndex(monster.y, MONSTER_DEPTH_OFFSET);
 
@@ -183,7 +189,7 @@ export class MonsterRenderer {
       sprite: null,
       type: monster.type,
       state: monster.state,
-      facing: 'down',
+      facing,
       interp: new Interpolator2D(monster.x, monster.y, 10),
       previousX: monster.x,
       previousY: monster.y,
@@ -191,7 +197,7 @@ export class MonsterRenderer {
       frame: -1,
       animationKey: '',
       attackPlaying: false,
-      attackFacing: 'down',
+      attackFacing: facing,
       attackCooldownMs,
       lastAttackSeq: attackSeq,
     };
@@ -447,6 +453,10 @@ function resolveAttackSeq(monster: MonsterSnapshot): number {
   return Number.isFinite(attackSeq) && (attackSeq as number) >= 0 ? attackSeq as number : 0;
 }
 
+function resolveFacing(value: Facing | undefined, fallback: Facing): Facing {
+  return value === 'up' || value === 'down' || value === 'left' || value === 'right' ? value : fallback;
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -455,10 +465,4 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     image.onerror = () => reject(new Error(`Failed to load monster sprite: ${src}`));
     image.src = src;
   });
-}
-
-function getFacingFromDelta(dx: number, dy: number, fallback: Facing): Facing {
-  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return fallback;
-  if (Math.abs(dx) > Math.abs(dy)) return dx < 0 ? 'left' : 'right';
-  return dy < 0 ? 'up' : 'down';
 }
