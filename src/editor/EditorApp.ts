@@ -7,9 +7,6 @@ import { EditorCameraSystem } from './EditorCameraSystem';
 import { EditorMinimap } from './EditorMinimap';
 
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
-const PIXI_INIT_TIMEOUT_MS = 8_000;
-
-type EditorBootStatus = (message: string) => void;
 
 export class EditorApp {
   private readonly app = new Application();
@@ -23,30 +20,29 @@ export class EditorApp {
   private minimap: EditorMinimap | null = null;
   private transitioning = false;
 
-  async start(mount: HTMLElement, onStatus: EditorBootStatus = () => undefined): Promise<void> {
-    onStatus('EditorApp.start entered');
+  async start(mount: HTMLElement): Promise<void> {
+    console.log('[EditorBoot] EditorApp.start entered.');
     document.body.classList.add('is-map-editor-mode');
 
-    onStatus('Waiting one frame before Pixi init...');
-    await nextFrame();
+    console.log('[EditorBoot] Calling Pixi app.init with GameApp-compatible options.');
+    await this.app.init({
+      background: '#1d2b34',
+      antialias: false,
+      resizeTo: window,
+      autoDensity: true,
+      resolution: getRenderResolution(),
+    });
+    console.log('[EditorBoot] Pixi app.init resolved.');
 
-    onStatus('Initializing Pixi application...');
-    await this.initializePixiApplication(onStatus);
-    onStatus('Pixi application initialized');
-
-    onStatus('Mounting canvas...');
     mount.appendChild(this.app.canvas);
     this.input.attach();
     this.world.sortableChildren = true;
     this.world.addChild(this.background);
     this.app.stage.addChild(this.world);
-    window.addEventListener('resize', () => this.resizeRenderer());
 
-    onStatus('Drawing editor background...');
     this.drawBackground(DEFAULT_WORLD);
     this.cameraSystem.setWorldSize(DEFAULT_WORLD);
 
-    onStatus('Creating MapEditor UI objects...');
     this.mapEditor = new MapEditor({
       app: this.app,
       world: this.world,
@@ -61,39 +57,11 @@ export class EditorApp {
       worldHeight: DEFAULT_WORLD.height,
       onMoveTo: (x, y) => this.cameraSystem.setPosition(x, y),
     });
-    onStatus('MapEditor UI objects created');
 
-    onStatus('Starting MapEditor UI...');
     this.mapEditor.start();
-
-    onStatus('Mounting editor minimap...');
     this.minimap.mount(document.body);
-
-    onStatus('Starting editor ticker...');
     this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
-    onStatus('EditorApp.start completed');
-  }
-
-  private async initializePixiApplication(onStatus: EditorBootStatus): Promise<void> {
-    const size = getViewportSize();
-    onStatus(`Trying Pixi init with explicit size ${size.width}x${size.height}...`);
-    await withTimeout(
-      this.app.init({
-        background: '#1d2b34',
-        antialias: false,
-        width: size.width,
-        height: size.height,
-        autoDensity: true,
-        resolution: getRenderResolution(),
-      }),
-      PIXI_INIT_TIMEOUT_MS,
-      'Pixi initialization timed out.',
-    );
-  }
-
-  private resizeRenderer(): void {
-    const size = getViewportSize();
-    this.app.renderer.resize(size.width, size.height);
+    console.log('[EditorBoot] EditorApp.start completed.');
   }
 
   private update(dt: number): void {
@@ -142,31 +110,7 @@ export class EditorApp {
   }
 }
 
-function getViewportSize(): { width: number; height: number } {
-  return {
-    width: Math.max(1, Math.floor(window.innerWidth || document.documentElement.clientWidth || 1)),
-    height: Math.max(1, Math.floor(window.innerHeight || document.documentElement.clientHeight || 1)),
-  };
-}
-
 function getRenderResolution(): number {
   const raw = window.devicePixelRatio || 1;
   return Math.max(1, Math.min(2, raw));
-}
-
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  let timeoutId: number | null = null;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
-  });
-
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timeoutId !== null) window.clearTimeout(timeoutId);
-  }
-}
-
-function nextFrame(): Promise<void> {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
