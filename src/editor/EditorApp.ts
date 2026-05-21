@@ -40,6 +40,7 @@ export class EditorApp {
     this.world.sortableChildren = true;
     this.world.addChild(this.background);
     this.app.stage.addChild(this.world);
+    window.addEventListener('resize', () => this.resizeRenderer());
 
     onStatus('Drawing editor background...');
     this.drawBackground(DEFAULT_WORLD);
@@ -74,18 +75,25 @@ export class EditorApp {
   }
 
   private async initializePixiApplication(onStatus: EditorBootStatus): Promise<void> {
-    onStatus('Trying Pixi init with game app options...');
+    const size = getViewportSize();
+    onStatus(`Trying Pixi init with explicit size ${size.width}x${size.height}...`);
     await withTimeout(
       this.app.init({
         background: '#1d2b34',
         antialias: false,
-        resizeTo: window,
+        width: size.width,
+        height: size.height,
         autoDensity: true,
         resolution: getRenderResolution(),
       }),
       PIXI_INIT_TIMEOUT_MS,
       'Pixi initialization timed out.',
     );
+  }
+
+  private resizeRenderer(): void {
+    const size = getViewportSize();
+    this.app.renderer.resize(size.width, size.height);
   }
 
   private update(dt: number): void {
@@ -132,6 +140,13 @@ export class EditorApp {
         .stroke({ width: 1, color: 0x2d3f4f, alpha: 0.28 });
     }
   }
+}
+
+function getViewportSize(): { width: number; height: number } {
+  return {
+    width: Math.max(1, Math.floor(window.innerWidth || document.documentElement.clientWidth || 1)),
+    height: Math.max(1, Math.floor(window.innerHeight || document.documentElement.clientHeight || 1)),
+  };
 }
 
 function getRenderResolution(): number {
