@@ -79,6 +79,7 @@ export type MonsterSnapshot = {
   hp: number;
   maxHp: number;
   state: MonsterStateName;
+  facing?: Facing;
   targetPlayerId: string | null;
   attackCooldownMs?: number;
   attackSeq?: number;
