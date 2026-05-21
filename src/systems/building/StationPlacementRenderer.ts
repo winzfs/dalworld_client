@@ -9,6 +9,7 @@ const STATION_COLUMNS = 8;
 const STATION_ROWS = 5;
 const STATION_FRAME_COUNT = 35;
 const STATION_FPS = 12;
+const STATION_SPRITE_SCALE = 1.8;
 
 type StationView = {
   container: Container;
@@ -127,7 +128,7 @@ export class StationPlacementRenderer {
     if (!view.sprite) {
       view.sprite = new Sprite(texture);
       view.sprite.anchor.set(0.5, 0.82);
-      view.sprite.scale.set(1);
+      view.sprite.scale.set(STATION_SPRITE_SCALE);
       view.container.addChild(view.sprite);
       return;
     }
