@@ -7,6 +7,7 @@ let currentMap: GameWorldMap | null = null;
 export function setRuntimeWorldMap(map: GameWorldMap | null | undefined): void {
   currentMap = map ?? null;
   setRuntimeItemOverrides(currentMap?.itemOverrides);
+  window.dispatchEvent(new CustomEvent('dalworld:item-overrides-updated'));
 }
 
 export function getRuntimeWorldMap(): GameWorldMap | null {
