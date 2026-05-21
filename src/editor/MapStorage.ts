@@ -57,13 +57,41 @@ export class MapStorage {
     }
   }
 
-  async loadWorldFromServerBackup(): Promise<EditorWorldSave | null> {
+  async loadBestWorld(): Promise<EditorWorldSave | null> {
+    const localWorld = this.loadWorld();
+    const serverWorld = await this.loadWorldFromServerBackup({ writeLocalBackup: false });
+    const localScore = getWorldSaveContentScore(localWorld);
+    const serverScore = getWorldSaveContentScore(serverWorld);
+
+    if (serverWorld && serverScore > localScore) {
+      this.writeJson(this.worldKey, serverWorld);
+      console.info('[MapStorage] Using server editor world because it has more content.', {
+        localScore,
+        serverScore,
+        cells: serverWorld.cells.length,
+      });
+      return serverWorld;
+    }
+
+    if (localWorld) {
+      console.info('[MapStorage] Using local editor world backup.', {
+        localScore,
+        serverScore,
+        cells: localWorld.cells.length,
+      });
+      return localWorld;
+    }
+
+    return serverWorld;
+  }
+
+  async loadWorldFromServerBackup(options: { writeLocalBackup?: boolean } = {}): Promise<EditorWorldSave | null> {
     try {
       const runtimeMap = await fetchRuntimeWorldMap();
       if (!runtimeMap || runtimeMap.cells.length === 0) return null;
 
       const world = convertRuntimeMapToEditorWorldSave(runtimeMap, this.mapName);
-      this.writeJson(this.worldKey, world);
+      if (options.writeLocalBackup !== false) this.writeJson(this.worldKey, world);
       console.info('[MapStorage] Restored editor world from server map backup.', {
         cells: world.cells.length,
         placements: world.cells.reduce((sum, cell) => sum + cell.draft.placements.length, 0),
@@ -235,6 +263,17 @@ function convertRuntimeGameplayToEditorGameplay(
 
   if (gameplay.spec) converted.spec = { ...gameplay.spec };
   return converted;
+}
+
+function getWorldSaveContentScore(world: EditorWorldSave | null): number {
+  if (!world) return 0;
+  const placementScore = world.cells.reduce((sum, cell) => sum + countUserPlacements(cell.draft.placements), 0);
+  const spawnRuleScore = world.worldMap.monsterSpawnRules?.length ?? 0;
+  return placementScore + spawnRuleScore;
+}
+
+function countUserPlacements(placements: EditorTilePlacement[]): number {
+  return placements.filter((placement) => placement.id !== 'editor-black-base').length;
 }
 
 function estimateJsonBytes(value: unknown): number {
