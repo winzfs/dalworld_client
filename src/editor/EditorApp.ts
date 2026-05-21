@@ -27,19 +27,11 @@ export class EditorApp {
     onStatus('EditorApp.start entered');
     document.body.classList.add('is-map-editor-mode');
 
+    onStatus('Waiting one frame before Pixi init...');
+    await nextFrame();
+
     onStatus('Initializing Pixi application...');
-    await withTimeout(
-      this.app.init({
-        background: '#1d2b34',
-        antialias: false,
-        resizeTo: window,
-        autoDensity: true,
-        resolution: getRenderResolution(),
-        preference: 'webgl',
-      }),
-      PIXI_INIT_TIMEOUT_MS,
-      'Pixi application initialization timed out.',
-    );
+    await this.initializePixiApplication(onStatus);
     onStatus('Pixi application initialized');
 
     onStatus('Mounting canvas...');
@@ -79,6 +71,29 @@ export class EditorApp {
     onStatus('Starting editor ticker...');
     this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
     onStatus('EditorApp.start completed');
+  }
+
+  private async initializePixiApplication(onStatus: EditorBootStatus): Promise<void> {
+    try {
+      onStatus('Trying Pixi WebGL init...');
+      await withTimeout(
+        this.app.init({
+          background: '#1d2b34',
+          antialias: false,
+          resizeTo: window,
+          autoDensity: true,
+          resolution: getRenderResolution(),
+          preference: 'webgl',
+          powerPreference: 'low-power',
+        }),
+        PIXI_INIT_TIMEOUT_MS,
+        'Pixi WebGL initialization timed out.',
+      );
+      return;
+    } catch (error) {
+      onStatus(`Pixi WebGL init failed: ${formatErrorMessage(error)}`);
+      throw error;
+    }
   }
 
   private update(dt: number): void {
@@ -143,4 +158,13 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
   } finally {
     if (timeoutId !== null) window.clearTimeout(timeoutId);
   }
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function formatErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
