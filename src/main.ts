@@ -2,6 +2,7 @@ import './style.css';
 import './timeOfDay.css';
 import './combat.css';
 import './runtimeMinimap.css';
+import './questTracker.css';
 import './editor/monsterEditor.css';
 import './ui/gameWindowsGlobalHelpers';
 import { GameApp } from './game/GameApp';
