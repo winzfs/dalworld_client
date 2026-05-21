@@ -45,6 +45,12 @@ export class BootOverlay {
   }
 
   showError(error: ErrorLike): void {
+    // Re-attach root if it was previously removed (e.g. bootEditor removes
+    // the overlay before starting Pixi). Otherwise the error would mutate
+    // a detached element and never reach the user.
+    if (!this.root.isConnected) {
+      document.body.appendChild(this.root);
+    }
     this.root.style.background = '#1b1014';
     this.root.style.color = '#ffe8ef';
     this.pre.textContent = formatError(error);
