@@ -46,6 +46,8 @@ export class InputSendSystem {
   }
 
   sendGather(resourceId: string | undefined): void {
+    if (!resourceId) return;
+
     this.network.send({
       type: 'gather',
       seq: this.nextSeq(),
