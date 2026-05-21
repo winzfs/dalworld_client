@@ -20,10 +20,10 @@ async function bootEditor(): Promise<void> {
   }
 
   document.getElementById('editor-html-build-marker')?.remove();
-  bootOverlay.remove();
 
   const editor = new EditorApp();
-  await withEditorBootTimeout(editor.start(mount));
+  await editor.start(mount);
+  bootOverlay.remove();
 
   try {
     installItemEditorFeature(document.body);
@@ -72,6 +72,7 @@ function showEditorBootFailure(message: string): void {
 
 bootEditor().catch((error: unknown) => {
   console.error('[EditorBoot] Failed to boot editor.', error);
+  bootOverlay.showError(error);
   showEditorBootFailure(formatError(error));
 });
 
