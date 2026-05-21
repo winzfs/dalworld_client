@@ -45,6 +45,7 @@ DalWorld는 **팰월드, 마인크래프트, 테라리아, 원스휴먼 계열�
 - 제작도구는 인벤토리 보유 아이템 요구조건으로 표시/검증되며, 작업대처럼 배치 가능한 제작 건물은 서버가 확정한 건설 이벤트 이후 월드에 렌더링한다.
 - 배치된 제작 건물은 클릭 상호작용으로 제작 UI에 진입할 수 있다. 현재는 `station_workbench`가 연결되어 있다.
 - 아이템 카탈로그와 제작 레시피는 서버 저장소와 반드시 동기화한다.
+- 런타임 월드맵의 `itemOverrides`는 인벤토리/제작 UI 표시와 일부 서버 판정에 반영된다.
 
 현재 제작 티어의 의도는 다음과 같다.
 
@@ -89,6 +90,11 @@ DalWorld는 **팰월드, 마인크래프트, 테라리아, 원스휴먼 계열�
 - `?editor=1` 맵 에디터 모드
 - 에디터 카메라
 - 에디터 미니맵
+- 에디터 Tiles 탭 맵 저장: 셀/manifest 전용 저장
+- 에디터 Monsters 탭 저장: `/maps/default/monsters` 전용 저장
+- 에디터 Items 탭: 아이템 편집 UI와 `/maps/default/items` 전용 저장
+- 아이템 편집 필드: 이름, 아이콘, 설명, 스택, 최대 스택, 카테고리별 기능값
+- 런타임 `itemOverrides` 적용: 인벤토리/제작 UI의 아이템 정의 조회
 - 건설 모드 상태
 - 건설 그리드 오버레이
 - 건설 고스트 미리보기
@@ -116,6 +122,8 @@ DalWorld는 **팰월드, 마인크래프트, 테라리아, 원스휴먼 계열�
 
 다음 기능은 연결되어 있으나 추가 검증이 필요하다.
 
+- 탭별 에디터 저장 UX 실기기 검증
+- Items 탭의 카테고리별 필드 전체 서버 판정 반영 범위 확장
 - 건설물과 플레이어 충돌의 클라이언트 예측 정확도
 - 건설 배치 실패 UX
 - 건설 수정/드래그 UX
@@ -171,6 +179,11 @@ DalWorld는 **팰월드, 마인크래프트, 테라리아, 원스휴먼 계열�
 - HUD/UI: `src/ui/*`
 - 맵 렌더링: `src/render/GameWorldMapRenderer.ts`
 - 맵 에디터: `src/editor/*`
+- 에디터 탭별 서버 저장 보조: `src/editor/EditorTabServerSaves.ts`
+- 에디터 아이템 override 저장소: `src/editor/ItemEditorStorage.ts`
+- 월드맵 업로드: `src/worldMap/uploadWorldMap.ts`
+- 런타임 월드맵 저장소: `src/worldMap/runtimeMapStore.ts`
+- 런타임 아이템 override: `src/systems/inventory/ItemRuntimeOverrides.ts`
 - 건설 시스템: `src/systems/building/*`
 - 제작 시스템: `src/systems/crafting/*`
 - 인벤토리 시스템: `src/systems/inventory/*`
@@ -197,6 +210,30 @@ DalWorld는 **팰월드, 마인크래프트, 테라리아, 원스휴먼 계열�
 제작 시작 애니메이션은 서버의 `CRAFT_STARTED` 이벤트와 `startsAt/completesAt` 시간을 기준으로 표시한다.
 제작법이나 아이템 카탈로그를 수정할 때는 서버 저장소와 동기화해야 한다.
 
+### 맵 에디터 탭별 저장 구조
+
+에디터 저장은 대형 payload 실패를 줄이기 위해 탭별로 분리한다.
+
+```txt
+Tiles 저장
+  -> 맵 셀과 manifest만 업로드
+  -> /maps/default/cell
+  -> /maps/default/manifest
+
+Monsters 저장
+  -> monsterSpawnRules만 업로드
+  -> /maps/default/monsters
+
+Items 저장
+  -> itemOverrides만 업로드
+  -> /maps/default/items
+```
+
+Tiles 탭의 `저장`은 맵 전용이다.
+Monsters 탭의 `저장`은 기존 맵 저장을 가로채 몬스터 설정만 서버에 저장한다.
+Items 탭은 탭 내부의 `서버 저장` 버튼으로 아이템 설정만 서버에 저장한다.
+서버는 저장 완료 후 Durable Object 런타임 월드맵을 즉시 재로딩한다.
+
 ### 서버 권위 유지
 
 클라이언트는 미리보기와 예측을 할 수 있지만, 실제 상태 확정은 서버 이벤트 이후에만 한다.
@@ -208,13 +245,15 @@ DalWorld는 **팰월드, 마인크래프트, 테라리아, 원스휴먼 계열�
 
 ## 8. 다음 우선순위 제안
 
-1. 제작 UI 전체 레시피/티어/카테고리 필터 UX 실기기 검증
-2. 배치된 제작 건물별 전용 제작 메뉴/레시피 제한
-3. 건설 실패 UX 정리
-4. GameApp 책임 추가 분리
-5. 전투 입력과 서버 이벤트 반영 구조 추가
-6. 모바일 건설/제작 건물 상호작용 개선
-7. 펫/몬스터 수집 UI 설계
+1. 타입체크/빌드 오류 수정
+2. 탭별 맵/몬스터/아이템 저장 UX 실기기 검증
+3. 제작 UI 전체 레시피/티어/카테고리 필터 UX 실기기 검증
+4. 배치된 제작 건물별 전용 제작 메뉴/레시피 제한
+5. 건설 실패 UX 정리
+6. GameApp 책임 추가 분리
+7. 전투 입력과 서버 이벤트 반영 구조 추가
+8. 모바일 건설/제작 건물 상호작용 개선
+9. 펫/몬스터 수집 UI 설계
 
 ## 9. 작업 체크리스트
 
