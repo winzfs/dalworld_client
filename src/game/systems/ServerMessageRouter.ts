@@ -65,6 +65,10 @@ export class ServerMessageRouter {
       case 'INVENTORY_SNAPSHOT':
         this.context.onBuildingEvent?.(message);
         return;
+      case 'CRAFT_STARTED':
+        emitSystemLog({ message: '제작 시작', kind: 'info' });
+        this.context.onCraftingEvent?.(message);
+        return;
       case 'CRAFT_COMPLETED':
         emitSystemLog({ message: '제작 완료', kind: 'success' });
         this.context.onCraftingEvent?.(message);
