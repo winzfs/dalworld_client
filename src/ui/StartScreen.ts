@@ -1,8 +1,13 @@
 import type { GameConnectionProfile } from '../net/network';
+import {
+  clearSessionToken,
+  loadLastUsername,
+  loadSessionToken,
+  saveLastUsername,
+  saveSessionToken,
+} from './AuthSessionStorage';
 
 const DEFAULT_CHARACTER_NAME = '테스트 생존자';
-const AUTH_USERNAME_STORAGE_KEY = 'dalworld:last-username';
-const AUTH_SESSION_STORAGE_KEY = 'dalworld:session-token';
 
 type AuthCharacterProfile = {
   id: string;
@@ -284,44 +289,4 @@ function setMessage(element: HTMLElement | null, message: string): void {
 function normalizeCharacterName(raw: string): string {
   const trimmed = raw.trim().replace(/\s+/g, ' ');
   return trimmed.length > 0 ? trimmed.slice(0, 16) : DEFAULT_CHARACTER_NAME;
-}
-
-function loadLastUsername(): string {
-  try {
-    return window.localStorage.getItem(AUTH_USERNAME_STORAGE_KEY) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-function saveLastUsername(username: string): void {
-  try {
-    window.localStorage.setItem(AUTH_USERNAME_STORAGE_KEY, username);
-  } catch {
-    // localStorage may be unavailable.
-  }
-}
-
-function loadSessionToken(): string | null {
-  try {
-    return window.localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function saveSessionToken(token: string): void {
-  try {
-    window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, token);
-  } catch {
-    // localStorage may be unavailable.
-  }
-}
-
-function clearSessionToken(): void {
-  try {
-    window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
-  } catch {
-    // localStorage may be unavailable.
-  }
 }
