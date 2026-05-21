@@ -9,15 +9,8 @@ type StationFeatureGameApp = {
   app: Application;
   world: Container;
   network: GameNetwork;
-  buildingModeState: {
-    enter(partId: BuildPartId): void;
-  };
-  beginNewBuildingDraft(partId: BuildPartId): void;
-  setBuildingGridVisible(visible: boolean): void;
+  beginStationBuildPlacement(partId: BuildPartId): void;
 };
-
-let activeCraftingTier = 'all';
-let activeCraftingCategory = 'all';
 
 export function installStationClientFeature(game: unknown): void {
   const app = game as StationFeatureGameApp;
@@ -33,7 +26,7 @@ export function installStationClientFeature(game: unknown): void {
 
   installInventoryStationPlacementButton(app);
   installStationCraftingInteraction(app, renderer);
-  installCraftingCategoryFallbackFilter();
+  installCraftingFilterVisualFallback();
 }
 
 function routeStationMessage(renderer: StationPlacementRenderer, message: ServerToClientMessage): void {
@@ -89,46 +82,34 @@ function openCraftingWindowForStation(partId: string): void {
 
   crafting.hidden = false;
   crafting.style.zIndex = '80';
-  applyStationCategoryPreset(partId);
+  syncCraftingFilterDisplay();
 
   const title = crafting.querySelector<HTMLElement>('[data-station-crafting-title]');
-  if (title) title.textContent = '작업대 제작';
+  if (title) title.textContent = partId === 'station_workbench' ? '작업대 제작' : '제작';
 }
 
-function applyStationCategoryPreset(partId: string): void {
-  if (partId !== 'station_workbench') return;
-  activeCraftingTier = 'all';
-  activeCraftingCategory = 'all';
-  applyCraftingFilter(activeCraftingTier, activeCraftingCategory);
-}
-
-function installCraftingCategoryFallbackFilter(): void {
+function installCraftingFilterVisualFallback(): void {
   document.addEventListener('click', (event) => {
     const target = event.target as HTMLElement | null;
-    const tierButton = target?.closest<HTMLButtonElement>('[data-crafting-tier]');
-    const categoryButton = target?.closest<HTMLButtonElement>('[data-crafting-category]');
-    if (!tierButton && !categoryButton) return;
+    if (!target?.closest('[data-window="crafting"]')) return;
+    if (!target.closest('[data-crafting-tier]') && !target.closest('[data-crafting-category]')) return;
 
-    const craftingWindow = target?.closest<HTMLElement>('[data-window="crafting"]');
-    if (!craftingWindow) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    if ('stopImmediatePropagation' in event) event.stopImmediatePropagation();
-
-    if (tierButton) activeCraftingTier = tierButton.dataset.craftingTier ?? 'all';
-    if (categoryButton) activeCraftingCategory = categoryButton.dataset.craftingCategory ?? 'all';
-
-    applyCraftingFilter(activeCraftingTier, activeCraftingCategory);
-  }, true);
+    // GameWindows owns the actual filter state. This fallback only mirrors its DOM result
+    // after the native handler runs, so it must not block propagation.
+    window.setTimeout(syncCraftingFilterDisplay, 0);
+    window.setTimeout(syncCraftingFilterDisplay, 80);
+  });
 }
 
-function applyCraftingFilter(tier: string, category: string): void {
+function syncCraftingFilterDisplay(): void {
   const crafting = document.querySelector<HTMLElement>('[data-window="crafting"]');
   if (!crafting) return;
 
+  const tier = getActiveFilterValue(crafting, '[data-crafting-tier]', 'craftingTier') ?? 'all';
+  const category = getActiveFilterValue(crafting, '[data-crafting-category]', 'craftingCategory') ?? 'all';
   const cards = [...crafting.querySelectorAll<HTMLElement>('[data-craft-recipe]')];
   let visibleCount = 0;
+  let craftableVisibleCount = 0;
 
   for (const card of cards) {
     const cardTier = card.dataset.craftTierValue ?? 'all';
@@ -138,27 +119,18 @@ function applyCraftingFilter(tier: string, category: string): void {
     card.style.display = visible ? 'grid' : 'none';
     card.setAttribute('aria-hidden', visible ? 'false' : 'true');
     if (visible) visibleCount += 1;
+    if (visible && !card.classList.contains('is-disabled-by-cost')) craftableVisibleCount += 1;
   }
-
-  setActivePill(crafting, '[data-crafting-tier]', 'craftingTier', tier);
-  setActivePill(crafting, '[data-crafting-category]', 'craftingCategory', category);
 
   const summary = crafting.querySelector<HTMLElement>('[data-crafting-summary]');
   if (summary) {
-    const craftableVisibleCount = cards.filter((card) => !card.hidden && !card.classList.contains('is-disabled-by-cost')).length;
     summary.textContent = `표시 ${visibleCount}개 · 제작 가능 ${craftableVisibleCount}개 · 전체 ${cards.length}개`;
   }
 }
 
-function setActivePill(root: HTMLElement, selector: string, datasetKey: 'craftingTier' | 'craftingCategory', value: string): void {
-  const buttons = [...root.querySelectorAll<HTMLElement>(selector)];
-  for (const button of buttons) {
-    const active = button.dataset[datasetKey] === value;
-    button.classList.toggle('is-active', active);
-    button.style.background = active ? 'rgba(84, 220, 120, 0.2)' : 'rgba(255, 255, 255, 0.08)';
-    button.style.borderColor = active ? 'rgba(84, 220, 120, 0.95)' : 'rgba(255, 255, 255, 0.14)';
-    button.style.color = active ? '#f5fff7' : 'rgba(245, 247, 251, 0.76)';
-  }
+function getActiveFilterValue(root: HTMLElement, selector: string, datasetKey: 'craftingTier' | 'craftingCategory'): string | null {
+  const active = root.querySelector<HTMLElement>(`${selector}.is-active`);
+  return active?.dataset[datasetKey] ?? null;
 }
 
 function renderPlacementButton(app: StationFeatureGameApp, partId: BuildPartId): void {
@@ -185,9 +157,7 @@ function renderPlacementButton(app: StationFeatureGameApp, partId: BuildPartId):
   button.style.cursor = 'pointer';
 
   button.addEventListener('click', () => {
-    app.setBuildingGridVisible(true);
-    app.buildingModeState.enter(partId);
-    app.beginNewBuildingDraft(partId);
+    app.beginStationBuildPlacement(partId);
   });
 
   detailBody.appendChild(button);
