@@ -253,7 +253,6 @@ export class GameApp {
     this.installBuildingEditControls();
     this.app.stage.addChild(this.world);
     this.runtimeWorldSystem.drawBackground(this.worldInfo);
-    await this.loadWorldMap();
 
     if (this.editorMode) {
       this.buildingEditControls.hide();
@@ -263,6 +262,8 @@ export class GameApp {
       this.app.ticker.add((ticker) => this.updateEditor(ticker.deltaMS / 1000));
       return;
     }
+
+    await this.loadWorldMap();
 
     this.runtimeMinimap.mount(document.body);
     this.app.canvas.addEventListener('pointermove', (event) => this.handleCanvasPointerMove(event));
