@@ -62,6 +62,12 @@ export class StationPlacementRenderer {
     view.container.zIndex = getIsoZIndex(part.x, part.y, part.z, 18);
   }
 
+  getStationAtPointer(canvas: HTMLCanvasElement, world: Container, event: PointerEvent): PlacedBuildPart | null {
+    const rect = canvas.getBoundingClientRect();
+    const worldPoint = world.toLocal({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+    return this.getStationAt(worldPoint.x, worldPoint.y);
+  }
+
   getStationAt(worldX: number, worldY: number): PlacedBuildPart | null {
     const views = [...this.views.values()].sort((a, b) => b.container.zIndex - a.container.zIndex);
 
