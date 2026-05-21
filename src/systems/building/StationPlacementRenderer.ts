@@ -24,6 +24,8 @@ export class StationPlacementRenderer {
   private frames: Texture[] | null = null;
   private animTime = 0;
   private craftingUntilMs = 0;
+  private frameWidth = 0;
+  private frameHeight = 0;
 
   constructor(parent: Container) {
     this.container.sortableChildren = true;
@@ -58,6 +60,23 @@ export class StationPlacementRenderer {
     const screen = gridToScreen(part.x, part.y, part.z);
     view.container.position.set(screen.x, screen.y);
     view.container.zIndex = getIsoZIndex(part.x, part.y, part.z, 18);
+  }
+
+  getStationAt(worldX: number, worldY: number): PlacedBuildPart | null {
+    const views = [...this.views.values()].sort((a, b) => b.container.zIndex - a.container.zIndex);
+
+    for (const view of views) {
+      const hitWidth = Math.max(56, this.frameWidth * STATION_SPRITE_SCALE * 0.72);
+      const hitHeight = Math.max(48, this.frameHeight * STATION_SPRITE_SCALE * 0.68);
+      const dx = worldX - view.container.x;
+      const dy = worldY - view.container.y;
+
+      if (Math.abs(dx) <= hitWidth / 2 && dy <= 14 && dy >= -hitHeight) {
+        return view.part;
+      }
+    }
+
+    return null;
   }
 
   remove(entityId: string): void {
@@ -104,6 +123,8 @@ export class StationPlacementRenderer {
     sheet.source.scaleMode = 'nearest';
     const frameWidth = Math.floor(image.naturalWidth / STATION_COLUMNS);
     const frameHeight = Math.floor(image.naturalHeight / STATION_ROWS);
+    this.frameWidth = frameWidth;
+    this.frameHeight = frameHeight;
 
     this.frames = Array.from({ length: STATION_FRAME_COUNT }, (_, frameIndex) => {
       const row = Math.floor(frameIndex / STATION_COLUMNS);
