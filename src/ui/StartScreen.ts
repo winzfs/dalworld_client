@@ -137,6 +137,25 @@ export async function showStartScreen(parent: HTMLElement): Promise<StartScreenR
   return await new Promise((resolve) => {
     let currentToken = '';
     let currentProfile: AuthUserProfile | null = null;
+    let busy = false;
+
+    const setBusy = (nextBusy: boolean) => {
+      busy = nextBusy;
+      overlay.classList.toggle('is-busy', busy);
+      overlay.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button, input').forEach((element) => {
+        element.disabled = busy;
+      });
+    };
+
+    const runExclusive = async (task: () => Promise<void>): Promise<void> => {
+      if (busy) return;
+      setBusy(true);
+      try {
+        await task();
+      } finally {
+        if (overlay.isConnected) setBusy(false);
+      }
+    };
 
     const showStep = (step: 'title' | 'login' | 'register' | 'character') => {
       overlay.querySelectorAll<HTMLElement>('[data-step]').forEach((panel) => {
@@ -162,6 +181,7 @@ export async function showStartScreen(parent: HTMLElement): Promise<StartScreenR
     };
 
     overlay.addEventListener('click', (event) => {
+      if (busy) return;
       const target = event.target instanceof Element
         ? event.target.closest<HTMLElement>('[data-action]')
         : null;
@@ -178,25 +198,25 @@ export async function showStartScreen(parent: HTMLElement): Promise<StartScreenR
           showStep('title');
           return;
         case 'login':
-          void submitLogin();
+          void runExclusive(submitLogin);
           return;
         case 'register':
-          void submitRegister();
+          void runExclusive(submitRegister);
           return;
         case 'create-character':
-          void submitCharacter();
+          void runExclusive(submitCharacter);
           return;
       }
     });
 
     overlay.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter') return;
+      if (event.key !== 'Enter' || busy) return;
       const activePanel = overlay.querySelector<HTMLElement>('[data-step]:not([hidden])');
       if (!activePanel) return;
       event.preventDefault();
-      if (activePanel.dataset.step === 'login') void submitLogin();
-      if (activePanel.dataset.step === 'register') void submitRegister();
-      if (activePanel.dataset.step === 'character') void submitCharacter();
+      if (activePanel.dataset.step === 'login') void runExclusive(submitLogin);
+      if (activePanel.dataset.step === 'register') void runExclusive(submitRegister);
+      if (activePanel.dataset.step === 'character') void runExclusive(submitCharacter);
     });
 
     async function submitLogin(): Promise<void> {
