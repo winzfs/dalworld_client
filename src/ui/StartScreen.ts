@@ -1,4 +1,4 @@
-import type { GameConnectionProfile } from '../net/network';
+import { getDefaultHttpApiUrl, type GameConnectionProfile } from '../net/network';
 import {
   clearSessionToken,
   loadLastUsername,
@@ -278,7 +278,7 @@ export async function showStartScreen(parent: HTMLElement): Promise<StartScreenR
 
 async function postAuth(path: string, body: unknown): Promise<AuthResult> {
   try {
-    const response = await fetch(path, {
+    const response = await fetch(getDefaultHttpApiUrl(path), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -291,7 +291,7 @@ async function postAuth(path: string, body: unknown): Promise<AuthResult> {
 
 async function postAuthMe(sessionToken: string): Promise<AuthMeResult> {
   try {
-    const response = await fetch('/auth/me', {
+    const response = await fetch(getDefaultHttpApiUrl('/auth/me'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionToken }),
