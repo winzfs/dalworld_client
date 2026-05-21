@@ -38,6 +38,20 @@ type AuthMeResult = AuthMeSuccess | AuthFailure;
 export type StartScreenResult = Required<Pick<GameConnectionProfile, 'sessionToken' | 'accountId' | 'characterName'>>;
 
 export async function showStartScreen(parent: HTMLElement): Promise<StartScreenResult> {
+  const storedSessionToken = loadSessionToken();
+  if (storedSessionToken) {
+    const storedSession = await postAuthMe(storedSessionToken);
+    if (storedSession.ok && storedSession.profile.character) {
+      saveLastUsername(storedSession.profile.username);
+      return {
+        sessionToken: storedSessionToken,
+        accountId: storedSession.profile.accountId,
+        characterName: storedSession.profile.character.name,
+      };
+    }
+    clearSessionToken();
+  }
+
   const overlay = document.createElement('div');
   overlay.className = 'start-screen';
   overlay.innerHTML = `
