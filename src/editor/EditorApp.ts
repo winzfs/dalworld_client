@@ -18,21 +18,9 @@ export class EditorApp {
   private readonly input = new InputController();
   private readonly camera = new Camera(this.world);
   private readonly cameraSystem = new EditorCameraSystem(this.camera);
-  private readonly mapEditor = new MapEditor({
-    app: this.app,
-    world: this.world,
-    tileSize: 32,
-    mapName: 'dalworld-map',
-    worldWidth: DEFAULT_WORLD.width,
-    worldHeight: DEFAULT_WORLD.height,
-    onMoveCameraTo: (x, y) => this.cameraSystem.setPosition(x, y),
-  });
-  private readonly minimap = new EditorMinimap({
-    worldWidth: DEFAULT_WORLD.width,
-    worldHeight: DEFAULT_WORLD.height,
-    onMoveTo: (x, y) => this.cameraSystem.setPosition(x, y),
-  });
 
+  private mapEditor: MapEditor | null = null;
+  private minimap: EditorMinimap | null = null;
   private transitioning = false;
 
   async start(mount: HTMLElement, onStatus: EditorBootStatus = () => undefined): Promise<void> {
@@ -65,6 +53,23 @@ export class EditorApp {
     this.drawBackground(DEFAULT_WORLD);
     this.cameraSystem.setWorldSize(DEFAULT_WORLD);
 
+    onStatus('Creating MapEditor UI objects...');
+    this.mapEditor = new MapEditor({
+      app: this.app,
+      world: this.world,
+      tileSize: 32,
+      mapName: 'dalworld-map',
+      worldWidth: DEFAULT_WORLD.width,
+      worldHeight: DEFAULT_WORLD.height,
+      onMoveCameraTo: (x, y) => this.cameraSystem.setPosition(x, y),
+    });
+    this.minimap = new EditorMinimap({
+      worldWidth: DEFAULT_WORLD.width,
+      worldHeight: DEFAULT_WORLD.height,
+      onMoveTo: (x, y) => this.cameraSystem.setPosition(x, y),
+    });
+    onStatus('MapEditor UI objects created');
+
     onStatus('Starting MapEditor UI...');
     this.mapEditor.start();
 
@@ -77,6 +82,8 @@ export class EditorApp {
   }
 
   private update(dt: number): void {
+    if (!this.mapEditor || !this.minimap) return;
+
     const transition = this.cameraSystem.update({
       input: this.input.state,
       world: DEFAULT_WORLD,
