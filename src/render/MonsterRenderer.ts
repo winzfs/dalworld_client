@@ -1,5 +1,5 @@
 import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
-import type { Facing, MonsterSnapshot, MonsterType } from '../protocol/messages';
+import type { Facing, MonsterSnapshot, MonsterStateName, MonsterType } from '../protocol/messages';
 import { Interpolator2D } from '../game/interpolation';
 import {
   getMonsterConfig,
@@ -26,13 +26,21 @@ type MonsterView = {
   previousY: number;
   animTime: number;
   frame: number;
+  animationKey: string;
 };
 
 type DirectionalFrames = Record<Facing, Texture[]>;
 
+type ActionFrames = {
+  idle: Texture[];
+  walk: DirectionalFrames;
+  attack?: DirectionalFrames;
+};
+
 type LoadedSpriteSheet = {
   config: MonsterSpriteSheetConfig;
   frames: DirectionalFrames;
+  actionFrames?: ActionFrames;
 };
 
 type SpriteMonsterConfig = MonsterRenderConfig & {
@@ -67,12 +75,15 @@ export class MonsterRenderer {
 
       if (view.state !== monster.state) {
         view.state = monster.state;
+        view.frame = -1;
+        view.animationKey = '';
         this.drawFallback(view);
       }
 
       if (view.type !== monster.type) {
         view.type = monster.type;
         view.frame = -1;
+        view.animationKey = '';
         this.applyMonsterVisual(view);
       }
     }
@@ -122,8 +133,8 @@ export class MonsterRenderer {
         const sheetConfig = config.spriteSheet;
 
         try {
-          const frames = await loadDirectionalFrames(sheetConfig);
-          this.spriteSheets.set(config.type, { config: sheetConfig, frames });
+          const loaded = await loadMonsterSpriteSheet(sheetConfig);
+          this.spriteSheets.set(config.type, loaded);
         } catch (error) {
           this.failedSpriteSheets.add(config.type);
           console.warn(`Failed to load ${config.type} monster sprite. Using fallback shape.`, error);
@@ -154,6 +165,7 @@ export class MonsterRenderer {
       previousY: monster.y,
       animTime: Math.random(),
       frame: -1,
+      animationKey: '',
     };
 
     container.addChild(body);
@@ -167,7 +179,7 @@ export class MonsterRenderer {
 
     if (loaded) {
       if (!view.sprite) {
-        view.sprite = new Sprite(loaded.frames.down[0]);
+        view.sprite = new Sprite(getInitialTexture(loaded));
         view.container.addChild(view.sprite);
       }
 
@@ -176,6 +188,7 @@ export class MonsterRenderer {
       view.sprite.visible = true;
       view.body.visible = false;
       view.frame = -1;
+      view.animationKey = '';
       this.updateSpriteAnimation(view, 0, false);
       return;
     }
@@ -191,17 +204,27 @@ export class MonsterRenderer {
     const loaded = this.spriteSheets.get(view.type);
     if (!loaded || !view.sprite) return;
 
-    if (moving || view.state === 'chase') {
+    const selection = selectAnimationFrames(loaded, view.state, view.facing, moving);
+    const animating = selection.animate;
+    const nextAnimationKey = selection.key;
+
+    if (nextAnimationKey !== view.animationKey) {
+      view.animationKey = nextAnimationKey;
+      view.frame = -1;
+      view.animTime = 0;
+    }
+
+    if (animating) {
       view.animTime += dt;
     }
 
-    const frame = moving || view.state === 'chase'
+    const frame = animating
       ? Math.floor(view.animTime * loaded.config.fps) % loaded.config.frameCount
       : 0;
 
     if (frame !== view.frame) {
       view.frame = frame;
-      view.sprite.texture = loaded.frames[view.facing][frame];
+      view.sprite.texture = selection.frames[frame] ?? selection.frames[0];
     }
   }
 
@@ -224,17 +247,41 @@ function hasSpriteSheet(config: MonsterRenderConfig): config is SpriteMonsterCon
   return config.spriteSheet !== undefined;
 }
 
-async function loadDirectionalFrames(config: MonsterSpriteSheetConfig): Promise<DirectionalFrames> {
+async function loadMonsterSpriteSheet(config: MonsterSpriteSheetConfig): Promise<LoadedSpriteSheet> {
   const image = await loadImage(config.src);
   const sheet = Texture.from(image);
   sheet.source.scaleMode = 'nearest';
 
-  return {
+  const directionalFrames = {
     down: makeRowTextures(sheet, config.rows.down, config),
     up: makeRowTextures(sheet, config.rows.up, config),
     left: makeRowTextures(sheet, config.rows.left, config),
     right: makeRowTextures(sheet, config.rows.right, config),
   };
+
+  if (!config.actionRows) {
+    return { config, frames: directionalFrames };
+  }
+
+  const actionFrames: ActionFrames = {
+    idle: makeRowTextures(sheet, config.actionRows.idle, config),
+    walk: {
+      down: makeRowTextures(sheet, config.actionRows.walk.down, config),
+      up: makeRowTextures(sheet, config.actionRows.walk.up, config),
+      left: makeRowTextures(sheet, config.actionRows.walk.left, config),
+      right: makeRowTextures(sheet, config.actionRows.walk.right, config),
+    },
+    attack: config.actionRows.attack
+      ? {
+          down: makeRowTextures(sheet, config.actionRows.attack.down, config),
+          up: makeRowTextures(sheet, config.actionRows.attack.up, config),
+          left: makeRowTextures(sheet, config.actionRows.attack.left, config),
+          right: makeRowTextures(sheet, config.actionRows.attack.right, config),
+        }
+      : undefined,
+  };
+
+  return { config, frames: directionalFrames, actionFrames };
 }
 
 function makeRowTextures(
@@ -253,6 +300,35 @@ function makeRowTextures(
       ),
     });
   });
+}
+
+function getInitialTexture(loaded: LoadedSpriteSheet): Texture {
+  return loaded.actionFrames?.idle[0] ?? loaded.frames.down[0];
+}
+
+function selectAnimationFrames(
+  loaded: LoadedSpriteSheet,
+  state: MonsterStateName,
+  facing: Facing,
+  moving: boolean,
+): { key: string; frames: Texture[]; animate: boolean } {
+  if (loaded.actionFrames) {
+    if (state === 'attack' && loaded.actionFrames.attack) {
+      return { key: `attack:${facing}`, frames: loaded.actionFrames.attack[facing], animate: true };
+    }
+
+    if (moving || state === 'chase') {
+      return { key: `walk:${facing}`, frames: loaded.actionFrames.walk[facing], animate: true };
+    }
+
+    return { key: 'idle', frames: loaded.actionFrames.idle, animate: true };
+  }
+
+  if (moving || state === 'chase') {
+    return { key: `walk:${facing}`, frames: loaded.frames[facing], animate: true };
+  }
+
+  return { key: `idle:${facing}`, frames: loaded.frames[facing], animate: false };
 }
 
 function drawSheepFallback(body: Graphics, chasing: boolean): void {
