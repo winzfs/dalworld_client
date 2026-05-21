@@ -80,6 +80,7 @@ export type MonsterSnapshot = {
   maxHp: number;
   state: MonsterStateName;
   targetPlayerId: string | null;
+  attackCooldownMs?: number;
 };
 
 export type WorldInfo = {
@@ -180,111 +181,81 @@ export type MonsterKilledEvent = {
   y: number;
 };
 
-export type CombatRewardGrantedEvent = {
-  type: 'COMBAT_REWARD_GRANTED';
-  requestId: string;
-  playerId: string;
-  monsterId: string;
-  itemId: InventoryItemId;
-  amount: number;
-};
-
-export type PlayerExperienceGainedEvent = {
-  type: 'PLAYER_EXPERIENCE_GAINED';
-  requestId: string;
-  playerId: string;
-  sourceType: 'monster';
-  sourceId: string;
-  amount: number;
-  level: number;
-  exp: number;
-  expToNextLevel: number;
-};
-
-export type PlayerLevelUpEvent = {
-  type: 'PLAYER_LEVEL_UP';
-  requestId: string;
-  playerId: string;
-  previousLevel: number;
-  level: number;
-  maxHp: number;
-  maxStamina: number;
-};
-
-export type CombatServerEvent =
+export type ServerEvent =
+  | { type: 'player_joined'; playerId: string }
+  | { type: 'player_left'; playerId: string }
+  | { type: 'resource_gathered'; playerId: string; resourceId: string; gained: Inventory; resourceHp: number }
+  | { type: 'resource_depleted'; resourceId: string; respawnAt: number }
+  | { type: 'resource_respawned'; resourceId: string }
   | CombatAttackConfirmedEvent
   | CombatHitEvent
   | CombatMissedEvent
   | CombatRejectedEvent
   | MonsterKilledEvent
-  | CombatRewardGrantedEvent
-  | PlayerExperienceGainedEvent
-  | PlayerLevelUpEvent;
+  | BuildingServerEvent;
 
-export type ClientToServerMessage =
-  | { type: 'hello'; name?: string }
-  | {
-      type: 'input';
-      seq: number;
-      keys: MovementKeys;
-      facing?: Facing;
-      clientX?: number;
-      clientY?: number;
-      cellX?: number;
-      cellY?: number;
-    }
-  | {
-      type: 'gather';
-      seq: number;
-      resourceId?: string;
-    }
-  | { type: 'ping'; now: number }
-  | BuildingClientMessage
-  | CraftingClientMessage
-  | CombatAttackRequest
-  | TimeOfDayToggleRequest;
+export type SnapshotMessage = {
+  type: 'snapshot';
+  tick: number;
+  serverTime: number;
+  players: PlayerSnapshot[];
+  resources: ResourceSnapshot[];
+  monsters: MonsterSnapshot[];
+  timeOfDay?: TimeOfDayState;
+};
 
-export type ServerEvent =
-  | { type: 'player_joined'; playerId: string }
-  | { type: 'player_left'; playerId: string }
-  | { type: 'resource_hit'; resourceId: string; resourceType: ResourceType; hpRemaining: number }
-  | { type: 'resource_destroyed'; resourceId: string; resourceType: ResourceType }
-  | { type: 'item_gained'; playerId: string; item: ItemType; amount: number }
-  | {
-      type: 'combat_hit';
-      requestId: string;
-      attackerId: string;
-      targetId: string;
-      targetType: 'monster' | 'player';
-      damage: number;
-      hpRemaining: number;
-      maxHp: number;
-      x: number;
-      y: number;
-    };
+export type WelcomeMessage = {
+  type: 'welcome';
+  protocolVersion: string;
+  playerId: string;
+  world: WorldInfo;
+  gameplay: PublicGameplayConfig;
+  map: GameWorldMap | null;
+  timeOfDay?: TimeOfDayState;
+  serverTime: number;
+};
+
+export type PongMessage = { type: 'pong'; now: number };
+export type EventMessage = { type: 'event'; serverTime: number; event: ServerEvent };
+
+export type InventorySnapshotMessage = {
+  type: 'INVENTORY_SNAPSHOT';
+  ownerId: string;
+  items: InventoryItemStack[];
+  updatedAt: number;
+};
 
 export type ServerToClientMessage =
-  | {
-      type: 'welcome';
-      protocolVersion: number;
-      playerId: string;
-      world: WorldInfo;
-      gameplay: PublicGameplayConfig;
-      map?: GameWorldMap | null;
-      timeOfDay: TimeOfDayState;
-      serverTime: number;
-    }
-  | {
-      type: 'snapshot';
-      tick: number;
-      serverTime: number;
-      players: PlayerSnapshot[];
-      resources: ResourceSnapshot[];
-      monsters: MonsterSnapshot[];
-      timeOfDay?: TimeOfDayState;
-    }
-  | { type: 'event'; serverTime: number; event: ServerEvent }
-  | { type: 'pong'; now: number }
-  | BuildingServerEvent
-  | CraftingServerEvent
-  | CombatServerEvent;
+  | WelcomeMessage
+  | SnapshotMessage
+  | PongMessage
+  | EventMessage
+  | CraftingCompletedEvent
+  | CraftingRejectedEvent
+  | InventorySnapshotMessage
+  | BuildingServerEvent;
+
+export type InputMessage = {
+  type: 'input';
+  seq: number;
+  keys: MovementKeys;
+  facing: Facing;
+  cellX?: number;
+  cellY?: number;
+  clientX?: number;
+  clientY?: number;
+};
+
+export type GatherMessage = { type: 'gather'; seq: number; resourceId: string };
+export type HelloMessage = { type: 'hello'; name?: string };
+export type PingMessage = { type: 'ping'; now: number };
+
+export type ClientToServerMessage =
+  | InputMessage
+  | GatherMessage
+  | HelloMessage
+  | PingMessage
+  | TimeOfDayToggleRequest
+  | CombatAttackRequest
+  | CraftingClientMessage
+  | BuildingClientMessage;
