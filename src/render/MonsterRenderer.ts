@@ -13,6 +13,7 @@ const MONSTER_DEPTH_OFFSET = 130;
 const MONSTER_LAYER_Z_INDEX = 110;
 const MONSTER_NORMAL_ALPHA = 1;
 const MONSTER_OCCLUDED_ALPHA = 0.42;
+const MONSTER_Z_INDEX_BUCKET_SIZE = 4;
 
 type MonsterView = {
   container: Container;
@@ -31,6 +32,7 @@ type MonsterView = {
   attackFacing: Facing;
   attackCooldownMs: number;
   lastAttackSeq: number;
+  lastZIndex: number;
 };
 
 type DirectionalFrames = Record<Facing, Texture[]>;
@@ -132,7 +134,11 @@ export class MonsterRenderer {
     for (const view of this.views.values()) {
       const pos = view.interp.update(dt);
       view.container.position.set(Math.round(pos.x), Math.round(pos.y));
-      view.container.zIndex = getWorldEntityZIndex(pos.y, MONSTER_DEPTH_OFFSET);
+      const zIndex = getQuantizedMonsterZIndex(pos.y);
+      if (zIndex !== view.lastZIndex) {
+        view.lastZIndex = zIndex;
+        view.container.zIndex = zIndex;
+      }
 
       const dx = pos.x - view.previousX;
       const dy = pos.y - view.previousY;
@@ -180,8 +186,9 @@ export class MonsterRenderer {
     const attackCooldownMs = resolveAttackCooldownMs(monster);
     const attackSeq = resolveAttackSeq(monster);
     const facing = resolveFacing(monster.facing, 'down');
+    const zIndex = getQuantizedMonsterZIndex(monster.y);
     container.position.set(monster.x, monster.y);
-    container.zIndex = getWorldEntityZIndex(monster.y, MONSTER_DEPTH_OFFSET);
+    container.zIndex = zIndex;
 
     const view: MonsterView = {
       container,
@@ -200,6 +207,7 @@ export class MonsterRenderer {
       attackFacing: facing,
       attackCooldownMs,
       lastAttackSeq: attackSeq,
+      lastZIndex: zIndex,
     };
 
     container.addChild(body);
@@ -440,6 +448,11 @@ function drawSheepFallback(body: Graphics, chasing: boolean): void {
     .fill({ color: outline })
     .roundRect(7, -19, 5, 13, 2)
     .fill({ color: outline });
+}
+
+function getQuantizedMonsterZIndex(y: number): number {
+  const bucketY = Math.round(y / MONSTER_Z_INDEX_BUCKET_SIZE) * MONSTER_Z_INDEX_BUCKET_SIZE;
+  return getWorldEntityZIndex(bucketY, MONSTER_DEPTH_OFFSET);
 }
 
 function resolveAttackCooldownMs(monster: MonsterSnapshot): number {
