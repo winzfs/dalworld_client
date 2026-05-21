@@ -1,7 +1,8 @@
 import type { Inventory, ItemType, PlayerSnapshot } from '../../protocol/messages';
 import { BUILD_PART_ITEM_ENTRIES, getBuildPartIdFromItemId } from '../building/BuildPartInventoryCatalog';
 import type { BuildPartId } from '../building/BuildingTypes';
-import { BASE_ITEM_DEFINITIONS, type ItemCategory, type ItemDefinition } from './ItemDefinitions';
+import type { ItemCategory, ItemDefinition } from './ItemDefinitions';
+import { getRuntimeItemDefinition } from './ItemRuntimeOverrides';
 import type { InventoryItemStack } from './InventoryTypes';
 
 export type InventoryTabId = 'general' | 'consumable' | 'equipment' | 'crafting' | 'building' | 'pet';
@@ -80,7 +81,7 @@ function getSlotsByCategories(
   const slots: InventoryResourceSlotView[] = [];
 
   for (const stack of stacks) {
-    const definition = BASE_ITEM_DEFINITIONS[stack.itemId];
+    const definition = getRuntimeItemDefinition(stack.itemId);
     if (!definition || !categories.includes(definition.category) || stack.quantity <= 0) continue;
 
     slots.push({
@@ -106,7 +107,7 @@ function getBuildingPartSlots(stacks: InventoryItemStack[]): InventoryBuildPartS
     owned.push({
       kind: 'building_part',
       buildPartId: entry.buildPartId,
-      definition: entry.definition,
+      definition: getRuntimeItemDefinition(entry.itemId) ?? entry.definition,
       amount: stack.quantity,
     });
   }
@@ -116,7 +117,7 @@ function getBuildingPartSlots(stacks: InventoryItemStack[]): InventoryBuildPartS
   return BUILD_PART_ITEM_ENTRIES.map((entry) => ({
     kind: 'building_part',
     buildPartId: entry.buildPartId,
-    definition: entry.definition,
+    definition: getRuntimeItemDefinition(entry.itemId) ?? entry.definition,
     amount: quantities.get(entry.itemId) ?? null,
   }));
 }
