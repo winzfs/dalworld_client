@@ -29,6 +29,8 @@ export function installStationClientFeature(game: unknown): void {
   });
 
   installInventoryStationPlacementButton(app);
+  installStationCraftingInteraction(app, renderer);
+  installCraftingCategoryFallbackFilter();
 }
 
 function routeStationMessage(renderer: StationPlacementRenderer, message: ServerToClientMessage): void {
@@ -62,6 +64,93 @@ function installInventoryStationPlacementButton(app: StationFeatureGameApp): voi
       renderPlacementButton(app, partId);
     }, 0);
   });
+}
+
+function installStationCraftingInteraction(app: StationFeatureGameApp, renderer: StationPlacementRenderer): void {
+  const canvas = app.app.canvas;
+
+  canvas.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    const station = renderer.getStationAtPointer(canvas, app.world, event);
+    if (!station) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    openCraftingWindowForStation(station.partId);
+  }, { capture: true });
+}
+
+function openCraftingWindowForStation(partId: string): void {
+  const crafting = document.querySelector<HTMLElement>('[data-window="crafting"]');
+  if (!crafting) return;
+
+  crafting.hidden = false;
+  crafting.style.zIndex = '80';
+  applyStationCategoryPreset(partId);
+
+  const title = crafting.querySelector<HTMLElement>('[data-station-crafting-title]');
+  if (title) title.textContent = '작업대 제작';
+}
+
+function applyStationCategoryPreset(partId: string): void {
+  if (partId !== 'station_workbench') return;
+  applyCraftingFilter('all', 'all');
+}
+
+function installCraftingCategoryFallbackFilter(): void {
+  document.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+    const tierButton = target?.closest<HTMLButtonElement>('[data-crafting-tier]');
+    const categoryButton = target?.closest<HTMLButtonElement>('[data-crafting-category]');
+    if (!tierButton && !categoryButton) return;
+
+    window.setTimeout(() => {
+      const activeTier = getActiveFilterValue('[data-crafting-tier]', 'craftingTier') ?? 'all';
+      const activeCategory = getActiveFilterValue('[data-crafting-category]', 'craftingCategory') ?? 'all';
+      applyCraftingFilter(activeTier, activeCategory);
+    }, 0);
+  });
+}
+
+function applyCraftingFilter(tier: string, category: string): void {
+  const crafting = document.querySelector<HTMLElement>('[data-window="crafting"]');
+  if (!crafting) return;
+
+  const cards = [...crafting.querySelectorAll<HTMLElement>('[data-craft-recipe]')];
+  let visibleCount = 0;
+
+  for (const card of cards) {
+    const cardTier = card.dataset.craftTierValue ?? 'all';
+    const cardCategory = card.dataset.craftCategoryValue ?? 'all';
+    const visible = (tier === 'all' || cardTier === tier) && (category === 'all' || cardCategory === category);
+    card.hidden = !visible;
+    if (visible) visibleCount += 1;
+  }
+
+  setActivePill(crafting, '[data-crafting-tier]', 'craftingTier', tier);
+  setActivePill(crafting, '[data-crafting-category]', 'craftingCategory', category);
+
+  const summary = crafting.querySelector<HTMLElement>('[data-crafting-summary]');
+  if (summary) {
+    const craftableVisibleCount = cards.filter((card) => !card.hidden && !card.classList.contains('is-disabled-by-cost')).length;
+    summary.textContent = `표시 ${visibleCount}개 · 제작 가능 ${craftableVisibleCount}개 · 전체 ${cards.length}개`;
+  }
+}
+
+function getActiveFilterValue(selector: string, datasetKey: 'craftingTier' | 'craftingCategory'): string | null {
+  const active = document.querySelector<HTMLElement>(`${selector}.is-active`);
+  return active?.dataset[datasetKey] ?? null;
+}
+
+function setActivePill(root: HTMLElement, selector: string, datasetKey: 'craftingTier' | 'craftingCategory', value: string): void {
+  const buttons = [...root.querySelectorAll<HTMLElement>(selector)];
+  for (const button of buttons) {
+    const active = button.dataset[datasetKey] === value;
+    button.classList.toggle('is-active', active);
+    button.style.background = active ? 'rgba(84, 220, 120, 0.2)' : 'rgba(255, 255, 255, 0.08)';
+    button.style.borderColor = active ? 'rgba(84, 220, 120, 0.95)' : 'rgba(255, 255, 255, 0.14)';
+    button.style.color = active ? '#f5fff7' : 'rgba(245, 247, 251, 0.76)';
+  }
 }
 
 function renderPlacementButton(app: StationFeatureGameApp, partId: BuildPartId): void {
