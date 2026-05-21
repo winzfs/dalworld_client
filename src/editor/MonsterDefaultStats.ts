@@ -2,6 +2,10 @@ import type { EditorMonsterSpecOverrides, EditorMonsterType } from './types';
 
 export type EditorMonsterDefaultStats = Required<EditorMonsterSpecOverrides>;
 
+export type EditorMonsterAnimationDefaults = {
+  attackAnimationMs: number;
+};
+
 /**
  * Display-only mirror of dalworld_server/src/systems/monster/MonsterDefinitions.ts.
  * The server remains authoritative; the map editor uses these values only to show
@@ -28,6 +32,19 @@ export const EDITOR_MONSTER_DEFAULT_STATS: Record<EditorMonsterType, EditorMonst
   },
 };
 
+/**
+ * Client-side presentation defaults from src/assets/monsters.ts.
+ * These values control how long attack sprite rows are displayed, not server hit timing.
+ */
+export const EDITOR_MONSTER_ANIMATION_DEFAULTS: Record<EditorMonsterType, EditorMonsterAnimationDefaults> = {
+  wild_slime: {
+    attackAnimationMs: 420,
+  },
+  sheep: {
+    attackAnimationMs: 480,
+  },
+};
+
 export const EDITOR_MONSTER_STAT_LABELS: Record<keyof EditorMonsterDefaultStats, string> = {
   maxHp: 'HP',
   moveSpeed: '이동속도',
@@ -38,6 +55,14 @@ export const EDITOR_MONSTER_STAT_LABELS: Record<keyof EditorMonsterDefaultStats,
   attackCooldownMs: '공격쿨(ms)',
 };
 
+export const EDITOR_MONSTER_ANIMATION_LABELS: Record<keyof EditorMonsterAnimationDefaults, string> = {
+  attackAnimationMs: '공격 애니메이션(ms)',
+};
+
 export function getEditorMonsterDefaultStats(type: EditorMonsterType): EditorMonsterDefaultStats {
   return EDITOR_MONSTER_DEFAULT_STATS[type] ?? EDITOR_MONSTER_DEFAULT_STATS.wild_slime;
+}
+
+export function getEditorMonsterAnimationDefaults(type: EditorMonsterType): EditorMonsterAnimationDefaults {
+  return EDITOR_MONSTER_ANIMATION_DEFAULTS[type] ?? EDITOR_MONSTER_ANIMATION_DEFAULTS.wild_slime;
 }
