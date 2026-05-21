@@ -27,7 +27,7 @@ type MonsterView = {
   animTime: number;
   frame: number;
   animationKey: string;
-  attackAnimationRemaining: number;
+  attackPlaying: boolean;
   attackFacing: Facing;
   attackCooldownMs: number;
   lastAttackSeq: number;
@@ -92,8 +92,10 @@ export class MonsterRenderer {
 
       if (view.state !== monster.state) {
         view.state = monster.state;
-        view.frame = -1;
-        view.animationKey = '';
+        if (!view.attackPlaying) {
+          view.frame = -1;
+          view.animationKey = '';
+        }
         this.drawFallback(view);
       }
 
@@ -103,7 +105,7 @@ export class MonsterRenderer {
         view.lastAttackSeq = attackSeq;
         view.frame = -1;
         view.animationKey = '';
-        view.attackAnimationRemaining = 0;
+        view.attackPlaying = false;
         this.applyMonsterVisual(view);
       }
     }
@@ -129,12 +131,8 @@ export class MonsterRenderer {
       view.previousY = pos.y;
 
       const moving = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
-      if (moving && view.attackAnimationRemaining <= 0) {
+      if (moving && !view.attackPlaying) {
         view.facing = getFacingFromDelta(dx, dy, view.facing);
-      }
-
-      if (view.attackAnimationRemaining > 0) {
-        view.attackAnimationRemaining = Math.max(0, view.attackAnimationRemaining - dt * 1000);
       }
 
       this.updateSpriteAnimation(view, dt, moving);
@@ -192,7 +190,7 @@ export class MonsterRenderer {
       animTime: Math.random(),
       frame: -1,
       animationKey: '',
-      attackAnimationRemaining: 0,
+      attackPlaying: false,
       attackFacing: 'down',
       attackCooldownMs,
       lastAttackSeq: attackSeq,
@@ -205,8 +203,15 @@ export class MonsterRenderer {
   }
 
   private startAttackAnimation(view: MonsterView): void {
-    view.attackAnimationRemaining = view.attackCooldownMs;
+    view.attackPlaying = true;
     view.attackFacing = view.facing;
+    view.frame = -1;
+    view.animationKey = '';
+    view.animTime = 0;
+  }
+
+  private stopAttackAnimation(view: MonsterView): void {
+    view.attackPlaying = false;
     view.frame = -1;
     view.animationKey = '';
     view.animTime = 0;
@@ -242,10 +247,8 @@ export class MonsterRenderer {
     const loaded = this.spriteSheets.get(view.type);
     if (!loaded || !view.sprite) return;
 
-    const attackActive = view.attackAnimationRemaining > 0;
-    const animationFacing = attackActive ? view.attackFacing : view.facing;
-    const selection = selectAnimationFrames(loaded, view.state, animationFacing, moving, attackActive);
-    const animating = selection.animate;
+    const animationFacing = view.attackPlaying ? view.attackFacing : view.facing;
+    const selection = selectAnimationFrames(loaded, view.state, animationFacing, moving, view.attackPlaying);
     const nextAnimationKey = selection.key;
 
     if (nextAnimationKey !== view.animationKey) {
@@ -254,13 +257,17 @@ export class MonsterRenderer {
       view.animTime = 0;
     }
 
-    if (animating) {
+    if (selection.animate) {
       view.animTime += dt;
     }
 
-    const frame = animating
-      ? Math.floor(view.animTime * loaded.config.fps) % loaded.config.frameCount
-      : 0;
+    const frame = getAnimationFrame(view, loaded, selection.once);
+
+    if (selection.once && view.animTime >= getAnimationDurationSeconds(loaded)) {
+      this.stopAttackAnimation(view);
+      this.updateSpriteAnimation(view, 0, moving);
+      return;
+    }
 
     if (frame !== view.frame) {
       view.frame = frame;
@@ -273,13 +280,13 @@ export class MonsterRenderer {
     view.body.clear();
 
     if (view.type === 'sheep') {
-      drawSheepFallback(view.body, view.state === 'chase' || view.attackAnimationRemaining > 0);
+      drawSheepFallback(view.body, view.state === 'chase' || view.attackPlaying);
       return;
     }
 
     view.body
       .circle(0, 0, config.fallback.radius)
-      .fill({ color: view.state === 'chase' || view.attackAnimationRemaining > 0 ? config.fallback.chaseColor : config.fallback.idleColor });
+      .fill({ color: view.state === 'chase' || view.attackPlaying ? config.fallback.chaseColor : config.fallback.idleColor });
   }
 }
 
@@ -359,30 +366,40 @@ function getInitialTexture(loaded: LoadedSpriteSheet): Texture {
   return loaded.actionFrames?.idle[0] ?? loaded.frames.down[0];
 }
 
+function getAnimationDurationSeconds(loaded: LoadedSpriteSheet): number {
+  return loaded.config.frameCount / loaded.config.fps;
+}
+
+function getAnimationFrame(view: MonsterView, loaded: LoadedSpriteSheet, once: boolean): number {
+  const frame = Math.floor(view.animTime * loaded.config.fps);
+  if (once) return Math.min(loaded.config.frameCount - 1, frame);
+  return frame % loaded.config.frameCount;
+}
+
 function selectAnimationFrames(
   loaded: LoadedSpriteSheet,
   state: MonsterStateName,
   facing: Facing,
   moving: boolean,
   attackActive: boolean,
-): { key: string; frames: Texture[]; animate: boolean } {
+): { key: string; frames: Texture[]; animate: boolean; once: boolean } {
   if (loaded.actionFrames) {
     if (attackActive && loaded.actionFrames.attack) {
-      return { key: `attack:${facing}`, frames: loaded.actionFrames.attack[facing], animate: true };
+      return { key: `attack:${facing}`, frames: loaded.actionFrames.attack[facing], animate: true, once: true };
     }
 
     if (moving || state === 'chase') {
-      return { key: `walk:${facing}`, frames: loaded.actionFrames.walk[facing], animate: true };
+      return { key: `walk:${facing}`, frames: loaded.actionFrames.walk[facing], animate: true, once: false };
     }
 
-    return { key: 'idle', frames: loaded.actionFrames.idle, animate: true };
+    return { key: 'idle', frames: loaded.actionFrames.idle, animate: true, once: false };
   }
 
   if (moving || state === 'chase') {
-    return { key: `walk:${facing}`, frames: loaded.frames[facing], animate: true };
+    return { key: `walk:${facing}`, frames: loaded.frames[facing], animate: true, once: false };
   }
 
-  return { key: `idle:${facing}`, frames: loaded.frames[facing], animate: false };
+  return { key: `idle:${facing}`, frames: loaded.frames[facing], animate: false, once: false };
 }
 
 function drawSheepFallback(body: Graphics, chasing: boolean): void {
