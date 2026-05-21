@@ -3,7 +3,7 @@ import type {
   ServerToClientMessage,
   WorldInfo,
   PublicGameplayConfig,
-  CraftingServerEvent,
+  CraftingInventoryEvent,
   CombatServerEvent,
   CombatHitEvent,
   ServerEvent,
@@ -37,7 +37,7 @@ export type ServerMessageRouterContext = {
   redrawWorld: () => void;
   reloadWorldMap: () => void;
   onBuildingEvent?: (event: BuildingServerEvent) => void;
-  onCraftingEvent?: (event: CraftingServerEvent) => void;
+  onCraftingEvent?: (event: CraftingInventoryEvent) => void;
   onCombatEvent?: (event: CombatServerEvent | CombatHitEvent) => void;
 };
 
