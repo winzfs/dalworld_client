@@ -4,6 +4,7 @@ import './ui/gameWindowsGlobalHelpers';
 import { EditorApp } from './editor/EditorApp';
 import { installItemEditorFeature } from './editor/ItemEditorFeature';
 import { BootOverlay, installGlobalErrorOverlay } from './utils/bootOverlay';
+import { EditorBootProbe } from './utils/editorBootProbe';
 
 const bootOverlay = new BootOverlay();
 installGlobalErrorOverlay(bootOverlay);
@@ -17,11 +18,23 @@ async function bootEditor(): Promise<void> {
   }
 
   await waitForEditorStartGesture();
-  bootOverlay.setMessage('Starting map editor...');
+
+  // Remove the full-screen boot overlay BEFORE starting Pixi. On certain
+  // mobile GPU drivers, having an opaque fixed overlay (z-index 99999)
+  // covering the viewport during WebGL renderer setup blocks the main
+  // thread indefinitely - the timeout in EditorApp can't fire because the
+  // event loop is frozen. The game's bootGame() removes the overlay before
+  // GameApp.start for the same reason and runs fine on the same device.
+  bootOverlay.remove();
+
+  // Use a small corner status banner for the rest of boot so we still
+  // surface progress without re-introducing a full-screen overlay over
+  // the canvas.
+  const probe = new EditorBootProbe();
+  probe.log('Starting map editor...');
 
   const editor = new EditorApp();
-  await editor.start(mount, (message) => bootOverlay.setMessage(message));
-  bootOverlay.remove();
+  await editor.start(mount, (message) => probe.log(message));
 
   try {
     installItemEditorFeature(document.body);
