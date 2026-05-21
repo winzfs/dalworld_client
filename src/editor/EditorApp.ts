@@ -74,26 +74,18 @@ export class EditorApp {
   }
 
   private async initializePixiApplication(onStatus: EditorBootStatus): Promise<void> {
-    try {
-      onStatus('Trying Pixi WebGL init...');
-      await withTimeout(
-        this.app.init({
-          background: '#1d2b34',
-          antialias: false,
-          resizeTo: window,
-          autoDensity: true,
-          resolution: getRenderResolution(),
-          preference: 'webgl',
-          powerPreference: 'low-power',
-        }),
-        PIXI_INIT_TIMEOUT_MS,
-        'Pixi WebGL initialization timed out.',
-      );
-      return;
-    } catch (error) {
-      onStatus(`Pixi WebGL init failed: ${formatErrorMessage(error)}`);
-      throw error;
-    }
+    onStatus('Trying Pixi init with game app options...');
+    await withTimeout(
+      this.app.init({
+        background: '#1d2b34',
+        antialias: false,
+        resizeTo: window,
+        autoDensity: true,
+        resolution: getRenderResolution(),
+      }),
+      PIXI_INIT_TIMEOUT_MS,
+      'Pixi initialization timed out.',
+    );
   }
 
   private update(dt: number): void {
@@ -162,9 +154,4 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
 
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
-}
-
-function formatErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
 }
