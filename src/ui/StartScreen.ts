@@ -2,6 +2,7 @@ import type { GameConnectionProfile } from '../net/network';
 
 const DEFAULT_CHARACTER_NAME = '테스트 생존자';
 const AUTH_USERNAME_STORAGE_KEY = 'dalworld:last-username';
+const AUTH_SESSION_STORAGE_KEY = 'dalworld:session-token';
 
 type AuthCharacterProfile = {
   id: string;
@@ -129,6 +130,7 @@ export async function showStartScreen(parent: HTMLElement): Promise<StartScreenR
         return;
       }
 
+      saveSessionToken(token);
       saveLastUsername(profile.username);
       overlay.remove();
       resolve({ sessionToken: token, accountId: profile.accountId, characterName: character.name });
@@ -262,6 +264,14 @@ function loadLastUsername(): string {
 function saveLastUsername(username: string): void {
   try {
     window.localStorage.setItem(AUTH_USERNAME_STORAGE_KEY, username);
+  } catch {
+    // localStorage may be unavailable.
+  }
+}
+
+function saveSessionToken(token: string): void {
+  try {
+    window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, token);
   } catch {
     // localStorage may be unavailable.
   }
