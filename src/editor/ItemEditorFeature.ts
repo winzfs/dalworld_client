@@ -4,6 +4,7 @@ import {
   type ItemCategory,
   type ItemDefinition,
 } from '../systems/inventory/ItemDefinitions';
+import { saveItemTabToServer } from './EditorTabServerSaves';
 import { loadEditorItemOverrides, saveEditorItemOverrides } from './ItemEditorStorage';
 import type { EditorItemOverride } from './types';
 
@@ -198,7 +199,7 @@ class ItemEditorFeature {
   private createHeader(): HTMLElement {
     const header = document.createElement('div');
     header.className = 'map-editor-item-header';
-    header.innerHTML = '<b>아이템 편집</b><span>월드맵 저장 시 서버 manifest에 함께 업로드됩니다.</span>';
+    header.innerHTML = '<b>아이템 편집</b><span>저장 버튼을 누르면 아이템 설정만 서버에 바로 반영됩니다.</span>';
     return header;
   }
 
@@ -291,7 +292,7 @@ class ItemEditorFeature {
     const itemDef = this.getEffectiveDefinition(this.selectedItemId);
     const fields = CATEGORY_FIELDS[itemDef.category] ?? [];
     const children = fields.map((field) => this.createCategoryField(field));
-    return this.createSection(`${getCategoryLabel(itemDef.category)} 전용 기능`, children, '서버는 이 값을 world map itemOverrides로 수신합니다. 현재 서버 제작 시간은 제작 건물의 craftSpeedMultiplier를 반영합니다.');
+    return this.createSection(`${getCategoryLabel(itemDef.category)} 전용 기능`, children, '서버는 저장된 itemOverrides를 즉시 런타임에 반영합니다.');
   }
 
   private createCategoryField(field: FieldDefinition): HTMLElement {
@@ -316,6 +317,11 @@ class ItemEditorFeature {
     const buttons = document.createElement('div');
     buttons.className = 'map-editor-item-actions';
 
+    const saveButton = document.createElement('button');
+    saveButton.type = 'button';
+    saveButton.textContent = '서버 저장';
+    saveButton.onclick = () => void this.saveItemsToServer(saveButton);
+
     const copyButton = document.createElement('button');
     copyButton.type = 'button';
     copyButton.textContent = 'JSON 복사';
@@ -330,9 +336,31 @@ class ItemEditorFeature {
       this.render();
     };
 
-    buttons.append(copyButton, resetButton);
+    buttons.append(saveButton, copyButton, resetButton);
     section.appendChild(buttons);
     return section;
+  }
+
+  private async saveItemsToServer(button: HTMLButtonElement): Promise<void> {
+    const previousText = button.textContent ?? '서버 저장';
+    button.disabled = true;
+    button.textContent = '저장 중...';
+
+    try {
+      const count = await saveItemTabToServer();
+      button.textContent = `저장 완료 ${count}개`;
+      window.setTimeout(() => {
+        if (button.isConnected) button.textContent = previousText;
+      }, 2000);
+    } catch (error) {
+      console.error('[ItemEditor] Item tab save failed.', error);
+      button.textContent = '저장 실패';
+      window.setTimeout(() => {
+        if (button.isConnected) button.textContent = previousText;
+      }, 3000);
+    } finally {
+      button.disabled = false;
+    }
   }
 
   private createSection(titleText: string, children: HTMLElement[], noteText?: string): HTMLElement {
