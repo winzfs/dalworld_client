@@ -3,6 +3,7 @@ import './timeOfDay.css';
 import './combat.css';
 import './runtimeMinimap.css';
 import './editor/monsterEditor.css';
+import './ui/gameWindowsGlobalHelpers';
 import { GameApp } from './game/GameApp';
 import { installCombatClientFeature } from './game/installCombatClientFeature';
 import { installStationClientFeature } from './game/installStationClientFeature';
