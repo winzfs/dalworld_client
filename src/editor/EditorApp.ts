@@ -7,6 +7,9 @@ import { EditorCameraSystem } from './EditorCameraSystem';
 import { EditorMinimap } from './EditorMinimap';
 
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
+const PIXI_INIT_TIMEOUT_MS = 8_000;
+
+type EditorBootStatus = (message: string) => void;
 
 export class EditorApp {
   private readonly app = new Application();
@@ -32,28 +35,45 @@ export class EditorApp {
 
   private transitioning = false;
 
-  async start(mount: HTMLElement): Promise<void> {
+  async start(mount: HTMLElement, onStatus: EditorBootStatus = () => undefined): Promise<void> {
+    onStatus('EditorApp.start entered');
     document.body.classList.add('is-map-editor-mode');
 
-    await this.app.init({
-      background: '#1d2b34',
-      antialias: false,
-      resizeTo: window,
-      autoDensity: true,
-      resolution: getRenderResolution(),
-    });
+    onStatus('Initializing Pixi application...');
+    await withTimeout(
+      this.app.init({
+        background: '#1d2b34',
+        antialias: false,
+        resizeTo: window,
+        autoDensity: true,
+        resolution: getRenderResolution(),
+        preference: 'webgl',
+      }),
+      PIXI_INIT_TIMEOUT_MS,
+      'Pixi application initialization timed out.',
+    );
+    onStatus('Pixi application initialized');
 
+    onStatus('Mounting canvas...');
     mount.appendChild(this.app.canvas);
     this.input.attach();
     this.world.sortableChildren = true;
     this.world.addChild(this.background);
     this.app.stage.addChild(this.world);
+
+    onStatus('Drawing editor background...');
     this.drawBackground(DEFAULT_WORLD);
     this.cameraSystem.setWorldSize(DEFAULT_WORLD);
 
+    onStatus('Starting MapEditor UI...');
     this.mapEditor.start();
+
+    onStatus('Mounting editor minimap...');
     this.minimap.mount(document.body);
+
+    onStatus('Starting editor ticker...');
     this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
+    onStatus('EditorApp.start completed');
   }
 
   private update(dt: number): void {
@@ -80,24 +100,40 @@ export class EditorApp {
 
   private drawBackground(world: WorldInfo): void {
     this.background.clear();
-    this.background.rect(0, 0, world.width, world.height);
-    this.background.fill({ color: 0x1d2b34 });
+    this.background
+      .rect(0, 0, world.width, world.height)
+      .fill({ color: 0x1d2b34 });
 
     const gridSize = 128;
-    this.background.setStrokeStyle({ width: 1, color: 0x2d3f4f, alpha: 0.28 });
     for (let x = 0; x <= world.width; x += gridSize) {
-      this.background.moveTo(x, 0);
-      this.background.lineTo(x, world.height);
+      this.background
+        .moveTo(x, 0)
+        .lineTo(x, world.height)
+        .stroke({ width: 1, color: 0x2d3f4f, alpha: 0.28 });
     }
     for (let y = 0; y <= world.height; y += gridSize) {
-      this.background.moveTo(0, y);
-      this.background.lineTo(world.width, y);
+      this.background
+        .moveTo(0, y)
+        .lineTo(world.width, y)
+        .stroke({ width: 1, color: 0x2d3f4f, alpha: 0.28 });
     }
-    this.background.stroke();
   }
 }
 
 function getRenderResolution(): number {
   const raw = window.devicePixelRatio || 1;
   return Math.max(1, Math.min(2, raw));
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: number | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
+  }
 }
