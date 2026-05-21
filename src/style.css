@@ -126,6 +126,14 @@ input {
   filter: brightness(1.06);
 }
 
+.start-screen button:disabled,
+.start-screen input:disabled,
+.start-screen.is-busy button,
+.start-screen.is-busy input {
+  opacity: 0.58;
+  cursor: wait;
+}
+
 .start-screen__account-icon {
   display: grid;
   place-items: center;
@@ -274,6 +282,8 @@ body.is-map-editor-mode .building-edit-controls {
 .system-window-body { padding: 12px; }
 .placeholder-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
 .placeholder-card { min-height: 44px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.72); font-weight: 900; cursor: pointer; }
+.ui-logout-button { width: 100%; min-height: 30px; margin-top: 8px; border: 1px solid rgba(239,71,111,.52); border-radius: 10px; background: rgba(239,71,111,.14); color: #ffb3c1; font-size: 12px; font-weight: 900; cursor: pointer; }
+.ui-logout-button:hover { background: rgba(239,71,111,.24); color: #ffd3dc; }
 
 .building-edit-controls { position: fixed; z-index: 80; display: flex; align-items: center; gap: 5px; padding: 5px; border: 1px solid rgba(126,231,255,.42); border-radius: 999px; background: rgba(9, 16, 22, 0.88); box-shadow: 0 12px 32px rgba(0,0,0,.42); pointer-events: auto; touch-action: none; }
 .building-edit-controls[hidden] { display: none !important; }
