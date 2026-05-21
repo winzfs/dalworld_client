@@ -20,15 +20,7 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: true,
     rollupOptions: {
-      output: {
-        // Cloudflare Pages can briefly serve an older HTML document while hashed
-        // dynamic chunks from a newer deployment are not available to that page.
-        // The Pixi/Vite runtime then fails before the game can boot with messages
-        // like "Failed to fetch dynamically imported module: /assets/browserAll-*.js".
-        // DalWorld is a single-entry game client, so inlining dynamic imports is a
-        // safer trade-off than risking a broken boot screen from missing chunks.
-        inlineDynamicImports: true,
-      },
+      input: ['index.html', 'editor.html'],
     },
   },
 });
