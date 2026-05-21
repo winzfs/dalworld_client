@@ -16,6 +16,9 @@ type StationFeatureGameApp = {
   setBuildingGridVisible(visible: boolean): void;
 };
 
+let activeCraftingTier = 'all';
+let activeCraftingCategory = 'all';
+
 export function installStationClientFeature(game: unknown): void {
   const app = game as StationFeatureGameApp;
   const renderer = new StationPlacementRenderer(app.world);
@@ -94,7 +97,9 @@ function openCraftingWindowForStation(partId: string): void {
 
 function applyStationCategoryPreset(partId: string): void {
   if (partId !== 'station_workbench') return;
-  applyCraftingFilter('all', 'all');
+  activeCraftingTier = 'all';
+  activeCraftingCategory = 'all';
+  applyCraftingFilter(activeCraftingTier, activeCraftingCategory);
 }
 
 function installCraftingCategoryFallbackFilter(): void {
@@ -104,12 +109,18 @@ function installCraftingCategoryFallbackFilter(): void {
     const categoryButton = target?.closest<HTMLButtonElement>('[data-crafting-category]');
     if (!tierButton && !categoryButton) return;
 
-    window.setTimeout(() => {
-      const activeTier = getActiveFilterValue('[data-crafting-tier]', 'craftingTier') ?? 'all';
-      const activeCategory = getActiveFilterValue('[data-crafting-category]', 'craftingCategory') ?? 'all';
-      applyCraftingFilter(activeTier, activeCategory);
-    }, 0);
-  });
+    const craftingWindow = target?.closest<HTMLElement>('[data-window="crafting"]');
+    if (!craftingWindow) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if ('stopImmediatePropagation' in event) event.stopImmediatePropagation();
+
+    if (tierButton) activeCraftingTier = tierButton.dataset.craftingTier ?? 'all';
+    if (categoryButton) activeCraftingCategory = categoryButton.dataset.craftingCategory ?? 'all';
+
+    applyCraftingFilter(activeCraftingTier, activeCraftingCategory);
+  }, true);
 }
 
 function applyCraftingFilter(tier: string, category: string): void {
@@ -124,6 +135,8 @@ function applyCraftingFilter(tier: string, category: string): void {
     const cardCategory = card.dataset.craftCategoryValue ?? 'all';
     const visible = (tier === 'all' || cardTier === tier) && (category === 'all' || cardCategory === category);
     card.hidden = !visible;
+    card.style.display = visible ? 'grid' : 'none';
+    card.setAttribute('aria-hidden', visible ? 'false' : 'true');
     if (visible) visibleCount += 1;
   }
 
@@ -135,11 +148,6 @@ function applyCraftingFilter(tier: string, category: string): void {
     const craftableVisibleCount = cards.filter((card) => !card.hidden && !card.classList.contains('is-disabled-by-cost')).length;
     summary.textContent = `표시 ${visibleCount}개 · 제작 가능 ${craftableVisibleCount}개 · 전체 ${cards.length}개`;
   }
-}
-
-function getActiveFilterValue(selector: string, datasetKey: 'craftingTier' | 'craftingCategory'): string | null {
-  const active = document.querySelector<HTMLElement>(`${selector}.is-active`);
-  return active?.dataset[datasetKey] ?? null;
 }
 
 function setActivePill(root: HTMLElement, selector: string, datasetKey: 'craftingTier' | 'craftingCategory', value: string): void {
