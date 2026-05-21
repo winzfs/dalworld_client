@@ -1,6 +1,19 @@
 import './style.css';
+import './timeOfDay.css';
+import './combat.css';
+import './runtimeMinimap.css';
+import './questTracker.css';
+import './questStory.css';
 import './editor/monsterEditor.css';
 import './ui/gameWindowsGlobalHelpers';
+import { EditorApp } from './editor/EditorApp';
+import { GameApp } from './game/GameApp';
+import { installCombatClientFeature } from './game/installCombatClientFeature';
+import { installStationClientFeature } from './game/installStationClientFeature';
+import { installItemEditorFeature } from './editor/ItemEditorFeature';
+import { installTimeOfDayClientFeature } from './systems/timeOfDay/TimeOfDayClientFeature';
+import { installSystemLogHud } from './ui/SystemLogHud';
+import { showStartScreen } from './ui/StartScreen';
 import { BootOverlay, installGlobalErrorOverlay } from './utils/bootOverlay';
 import { EditorBootProbe } from './utils/editorBootProbe';
 import { isEditorEnabled } from './utils/editorMode';
@@ -15,9 +28,7 @@ async function boot(): Promise<void> {
   probe?.log('main boot entered');
 
   const mount = document.querySelector<HTMLDivElement>('#app');
-  if (!mount) {
-    throw new Error('Missing #app mount element');
-  }
+  if (!mount) throw new Error('Missing #app mount element');
   probe?.log('#app mount found');
 
   if (editorMode) {
@@ -29,20 +40,17 @@ async function boot(): Promise<void> {
 }
 
 async function bootEditor(mount: HTMLElement, probe: EditorBootProbe | null): Promise<void> {
-  probe?.log('loading GameApp for editor mode');
-  const [{ GameApp }, { installItemEditorFeature }] = await Promise.all([
-    import('./game/GameApp'),
-    import('./editor/ItemEditorFeature'),
-  ]);
-
   bootOverlay.setMessage('Starting map editor...');
-  probe?.log('creating GameApp');
-  const game = new GameApp();
-  probe?.log('GameApp created');
+  probe?.log('creating EditorApp');
+  const editor = new EditorApp();
+  probe?.log('EditorApp created');
 
-  probe?.log('starting GameApp');
-  await game.start(mount);
-  probe?.log('GameApp.start resolved');
+  probe?.log('starting EditorApp');
+  await editor.start(mount, (message) => {
+    bootOverlay.setMessage(message);
+    probe?.log(message);
+  });
+  probe?.log('EditorApp.start resolved');
 
   bootOverlay.remove();
   probe?.log('BootOverlay removed');
@@ -58,30 +66,6 @@ async function bootEditor(mount: HTMLElement, probe: EditorBootProbe | null): Pr
 }
 
 async function bootGame(mount: HTMLElement): Promise<void> {
-  await Promise.all([
-    import('./timeOfDay.css'),
-    import('./combat.css'),
-    import('./runtimeMinimap.css'),
-    import('./questTracker.css'),
-    import('./questStory.css'),
-  ]);
-
-  const [
-    { GameApp },
-    { installCombatClientFeature },
-    { installStationClientFeature },
-    { installTimeOfDayClientFeature },
-    { installSystemLogHud },
-    { showStartScreen },
-  ] = await Promise.all([
-    import('./game/GameApp'),
-    import('./game/installCombatClientFeature'),
-    import('./game/installStationClientFeature'),
-    import('./systems/timeOfDay/TimeOfDayClientFeature'),
-    import('./ui/SystemLogHud'),
-    import('./ui/StartScreen'),
-  ]);
-
   bootOverlay.remove();
   const profile = await showStartScreen(document.body);
 
@@ -93,8 +77,6 @@ async function bootGame(mount: HTMLElement): Promise<void> {
   await game.start(mount);
   installCombatClientFeature(game);
   installStationClientFeature(game);
-
-  bootOverlay.remove();
 }
 
 boot().catch((error: unknown) => {
