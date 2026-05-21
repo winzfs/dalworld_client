@@ -17,7 +17,7 @@ async function bootEditor(): Promise<void> {
   }
 
   const editor = new EditorApp();
-  await editor.start(mount);
+  await editor.start(mount, (message) => bootOverlay.setMessage(message));
   bootOverlay.remove();
 
   try {
