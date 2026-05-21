@@ -235,7 +235,7 @@ export class GameApp {
       antialias: false,
       resizeTo: window,
       autoDensity: true,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      resolution: getRenderResolution(),
     });
 
     mount.appendChild(this.app.canvas);
@@ -704,6 +704,17 @@ export class GameApp {
   private findMe(): PlayerSnapshot | null {
     return this.snapshotSystem.findMe(this.myPlayerId);
   }
+}
+
+function getRenderResolution(): number {
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  const isTouchDevice = navigator.maxTouchPoints > 0;
+  const isSmallScreen = Math.min(window.innerWidth, window.innerHeight) <= 900;
+  const isMobileLike = isTouchDevice || isSmallScreen;
+
+  return isMobileLike
+    ? 1
+    : Math.min(devicePixelRatio, 1.5);
 }
 
 function isEditorEnabled(): boolean {
