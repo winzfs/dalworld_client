@@ -5,7 +5,8 @@ import type { BuildingModeSnapshot } from '../systems/building/BuildingModeState
 import type { BuildPartDefinition, BuildPartId } from '../systems/building/BuildingTypes';
 import type { CraftingRecipeCategory, CraftingRecipeId, CraftingTier } from '../systems/crafting/CraftingTypes';
 import { getCraftingCategories } from '../systems/crafting/CraftingViewModel';
-import { BASE_ITEM_DEFINITIONS, type ItemDefinition } from '../systems/inventory/ItemDefinitions';
+import { type ItemDefinition } from '../systems/inventory/ItemDefinitions';
+import { getRuntimeItemDefinition } from '../systems/inventory/ItemRuntimeOverrides';
 import {
   getInventorySlotsForTab,
   INVENTORY_TABS,
@@ -122,6 +123,7 @@ export class GameWindows {
     this.installInventoryInteractions();
     this.installCraftingInteractions();
     this.installBuildingInteractions();
+    window.addEventListener('dalworld:item-overrides-updated', () => this.renderInventory(this.lastInventory));
     this.renderCharacter(null);
     this.renderBuildingMode(this.buildingMode);
     this.renderCraftingAvailability();
@@ -434,7 +436,7 @@ export class GameWindows {
 
         this.selectedBuildPart = null;
         this.selectedItem = itemType;
-        const definition = BASE_ITEM_DEFINITIONS[itemType];
+        const definition = getRuntimeItemDefinition(itemType);
         const countText = slot.querySelector('.inventory-item-count')?.textContent ?? '0';
         if (!definition) return;
         this.renderItemDetail({ kind: 'resource', itemId: itemType, definition, amount: Number(countText) });
@@ -876,13 +878,13 @@ function getBuildCostLabel(itemId: string): string {
 }
 
 function getItemLabel(itemId: string): string {
-  const definition = BASE_ITEM_DEFINITIONS[itemId];
+  const definition = getRuntimeItemDefinition(itemId);
   if (definition) return definition.label;
   return itemId;
 }
 
 function getRecipeTooltip(inputs: Array<{ itemId: string; quantity: number; definition: ItemDefinition | null }>): string {
-  return inputs.map((input) => `${input.definition?.label ?? input.itemId} ${input.quantity}`).join(' · ');
+  return inputs.map((input) => `${input.definition?.label ?? getItemLabel(input.itemId)} ${input.quantity}`).join(' · ');
 }
 
 function getRecipeOutputText(view: CraftingRecipeView): string {
@@ -922,32 +924,21 @@ function isPlayerSnapshot(value: InventorySource): value is PlayerSnapshot {
     !Array.isArray(value) &&
     'id' in value &&
     'hp' in value &&
-    'maxHp' in value &&
-    'stamina' in value &&
-    'maxStamina' in value &&
-    'alive' in value;
+    'inventory' in value;
 }
 
-function setScaleX(el: HTMLElement, ratio: number): void {
-  const safeRatio = Number.isFinite(ratio) ? clamp(ratio, 0, 1) : 0;
-  el.style.transform = `scaleX(${safeRatio})`;
-}
-
-function formatFacing(facing: PlayerSnapshot['facing']): string {
+function formatFacing(facing: string): string {
   switch (facing) {
-    case 'up':
-      return '위';
-    case 'down':
-      return '아래';
-    case 'left':
-      return '왼쪽';
-    case 'right':
-      return '오른쪽';
+    case 'up': return '위';
+    case 'down': return '아래';
+    case 'left': return '왼쪽';
+    case 'right': return '오른쪽';
+    default: return facing;
   }
 }
 
 function getRespawnText(respawnAt: number): string {
+  if (respawnAt <= 0) return '쓰러짐';
   const remainingMs = Math.max(0, respawnAt - Date.now());
-  if (remainingMs <= 0) return '리스폰 대기';
-  return `리스폰 ${Math.ceil(remainingMs / 1000)}초`;
+  return `부활 대기 ${Math.ceil(remainingMs / 1000)}초`;
 }
