@@ -26,11 +26,13 @@ async function boot(): Promise<void> {
   }
 
   const editorMode = isEditorEnabled();
-  bootOverlay.remove();
+  if (editorMode) {
+    await bootEditor(mount);
+    return;
+  }
 
-  const profile = editorMode
-    ? undefined
-    : await showStartScreen(document.body);
+  bootOverlay.remove();
+  const profile = await showStartScreen(document.body);
 
   bootOverlay.setMessage('Starting Pixi.js application...');
   installTimeOfDayClientFeature(document.body);
@@ -38,21 +40,24 @@ async function boot(): Promise<void> {
 
   const game = new GameApp(profile);
   await game.start(mount);
-
-  if (editorMode) {
-    bootOverlay.remove();
-    try {
-      installItemEditorFeature(document.body);
-    } catch (error) {
-      console.warn('[Editor] Optional item editor feature failed to install.', error);
-    }
-    return;
-  }
-
   installCombatClientFeature(game);
   installStationClientFeature(game);
 
   bootOverlay.remove();
+}
+
+async function bootEditor(mount: HTMLElement): Promise<void> {
+  bootOverlay.setMessage('Starting map editor...');
+  const { EditorApp } = await import('./editor/EditorApp');
+  const editor = new EditorApp();
+  await editor.start(mount);
+  bootOverlay.remove();
+
+  try {
+    installItemEditorFeature(document.body);
+  } catch (error) {
+    console.warn('[Editor] Optional item editor feature failed to install.', error);
+  }
 }
 
 function isEditorEnabled(): boolean {
