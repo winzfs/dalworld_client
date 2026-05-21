@@ -181,17 +181,71 @@ export type MonsterKilledEvent = {
   y: number;
 };
 
+export type CombatRewardGrantedEvent = {
+  type: 'COMBAT_REWARD_GRANTED';
+  requestId: string;
+  playerId: string;
+  monsterId: string;
+  itemId: InventoryItemId;
+  amount: number;
+};
+
+export type PlayerExperienceGainedEvent = {
+  type: 'PLAYER_EXPERIENCE_GAINED';
+  requestId: string;
+  playerId: string;
+  sourceType: 'monster';
+  sourceId: string;
+  amount: number;
+  level: number;
+  exp: number;
+  expToNextLevel: number;
+};
+
+export type PlayerLevelUpEvent = {
+  type: 'PLAYER_LEVEL_UP';
+  requestId: string;
+  playerId: string;
+  previousLevel: number;
+  level: number;
+  maxHp: number;
+  maxStamina: number;
+};
+
+export type CombatServerEvent =
+  | CombatAttackConfirmedEvent
+  | CombatHitEvent
+  | CombatMissedEvent
+  | CombatRejectedEvent
+  | MonsterKilledEvent
+  | CombatRewardGrantedEvent
+  | PlayerExperienceGainedEvent
+  | PlayerLevelUpEvent;
+
+export type LegacyCombatHitEvent = {
+  type: 'combat_hit';
+  requestId: string;
+  attackerId: string;
+  targetId: string;
+  targetType: 'monster' | 'player';
+  damage: number;
+  hpRemaining: number;
+  maxHp: number;
+  x: number;
+  y: number;
+};
+
 export type ServerEvent =
   | { type: 'player_joined'; playerId: string }
   | { type: 'player_left'; playerId: string }
   | { type: 'resource_gathered'; playerId: string; resourceId: string; gained: Inventory; resourceHp: number }
   | { type: 'resource_depleted'; resourceId: string; respawnAt: number }
   | { type: 'resource_respawned'; resourceId: string }
-  | CombatAttackConfirmedEvent
-  | CombatHitEvent
-  | CombatMissedEvent
-  | CombatRejectedEvent
-  | MonsterKilledEvent
+  | { type: 'resource_hit'; resourceId: string; resourceType: ResourceType; hpRemaining: number }
+  | { type: 'resource_destroyed'; resourceId: string; resourceType: ResourceType }
+  | { type: 'item_gained'; playerId: string; item: ItemType; amount: number }
+  | LegacyCombatHitEvent
+  | CombatServerEvent
   | BuildingServerEvent;
 
 export type SnapshotMessage = {
@@ -206,11 +260,11 @@ export type SnapshotMessage = {
 
 export type WelcomeMessage = {
   type: 'welcome';
-  protocolVersion: string;
+  protocolVersion: string | number;
   playerId: string;
   world: WorldInfo;
   gameplay: PublicGameplayConfig;
-  map: GameWorldMap | null;
+  map?: GameWorldMap | null;
   timeOfDay?: TimeOfDayState;
   serverTime: number;
 };
@@ -233,7 +287,8 @@ export type ServerToClientMessage =
   | CraftingCompletedEvent
   | CraftingRejectedEvent
   | InventorySnapshotMessage
-  | BuildingServerEvent;
+  | BuildingServerEvent
+  | CombatServerEvent;
 
 export type InputMessage = {
   type: 'input';
