@@ -24,7 +24,7 @@ async function boot(): Promise<void> {
 }
 
 async function bootEditor(mount: HTMLElement): Promise<void> {
-  bootOverlay.setMessage('Loading editor modules...');
+  bootOverlay.setMessage(`Loading editor modules...\nURL: ${window.location.href}`);
   const [{ EditorApp }, { installItemEditorFeature }] = await Promise.all([
     import('./editor/EditorApp'),
     import('./editor/ItemEditorFeature'),
@@ -87,7 +87,19 @@ async function bootGame(mount: HTMLElement): Promise<void> {
 }
 
 function isEditorEnabled(): boolean {
-  return new URLSearchParams(window.location.search).get('editor') === '1';
+  const params = new URLSearchParams(window.location.search);
+  const path = window.location.pathname.toLowerCase();
+  const hash = window.location.hash.toLowerCase();
+
+  return params.get('editor') === '1' ||
+    params.get('editor') === 'true' ||
+    params.get('mode') === 'editor' ||
+    params.get('mapEditor') === '1' ||
+    params.get('mapEditor') === 'true' ||
+    path === '/editor' ||
+    path === '/editor/' ||
+    hash === '#editor' ||
+    hash === '#/editor';
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
