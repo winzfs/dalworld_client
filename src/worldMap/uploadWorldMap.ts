@@ -19,7 +19,7 @@ export type UploadedWorldMapReport = {
   monsterSpawnRules: {
     enabled: number;
     total: number;
-    spawnsPerHour: number;
+    spawnsPerMinute: number;
   };
 };
 
@@ -242,7 +242,7 @@ function createMapSignature(map: GameWorldMap | null | undefined): string {
     .sort()
     .join('|');
   const rules = (map.monsterSpawnRules ?? [])
-    .map((rule) => `${rule.id}:${rule.enabled}:${rule.monsterType}:${rule.scope}:${rule.maxAlive}:${rule.spawnsPerHour}`)
+    .map((rule) => `${rule.id}:${rule.enabled}:${rule.monsterType}:${rule.scope}:${rule.maxAlive}:${rule.spawnsPerMinute}`)
     .sort()
     .join('|');
 
@@ -297,7 +297,7 @@ function createUploadReport(map: GameWorldMap): UploadedWorldMapReport {
     monsterSpawnRules: {
       enabled: enabledRules.length,
       total: rules.length,
-      spawnsPerHour: enabledRules.reduce((sum, rule) => sum + rule.spawnsPerHour, 0),
+      spawnsPerMinute: enabledRules.reduce((sum, rule) => sum + rule.spawnsPerMinute, 0),
     },
   };
 }
