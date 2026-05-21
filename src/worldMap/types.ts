@@ -19,7 +19,9 @@ export type WorldMapMonsterSpawnRule = {
   monsterType: WorldMapMonsterType;
   scope: 'world' | 'region';
   maxAlive: number;
-  spawnsPerHour: number;
+  spawnsPerMinute: number;
+  /** @deprecated older maps may still provide this. */
+  spawnsPerHour?: number;
   spec?: WorldMapMonsterSpecOverrides;
 };
 
@@ -37,6 +39,8 @@ export type WorldMapPlacementGameplay =
       spawnRadius: number;
       maxAlive: number;
       respawnMs: number;
+      spawnsPerMinute?: number;
+      /** @deprecated older maps may still provide this. */
       spawnsPerHour?: number;
       spec?: WorldMapMonsterSpecOverrides;
     };
