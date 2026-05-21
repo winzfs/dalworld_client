@@ -38,7 +38,13 @@ async function boot(): Promise<void> {
 
   const game = new GameApp(profile);
   await game.start(mount);
-  if (editorMode) installItemEditorFeature(document.body);
+
+  if (editorMode) {
+    installItemEditorFeature(document.body);
+    bootOverlay.remove();
+    return;
+  }
+
   installCombatClientFeature(game);
   installStationClientFeature(game);
 
