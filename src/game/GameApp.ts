@@ -46,6 +46,7 @@ const INPUT_SEND_HZ = 30;
 const HUD_UPDATE_INTERVAL_SECONDS = 1 / 12;
 const MINIMAP_UPDATE_INTERVAL_SECONDS = 1 / 6;
 const OCCLUSION_UPDATE_INTERVAL_SECONDS = 1 / 10;
+const MAP_VIEWPORT_UPDATE_INTERVAL_SECONDS = 1 / 12;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, playerSpeed: 220, gatherRange: 80 };
 const CELL_TRANSFER_TRIGGER_PADDING = 32;
@@ -99,6 +100,7 @@ export class GameApp {
   private hudUpdateAccumulator = HUD_UPDATE_INTERVAL_SECONDS;
   private minimapUpdateAccumulator = MINIMAP_UPDATE_INTERVAL_SECONDS;
   private occlusionUpdateAccumulator = OCCLUSION_UPDATE_INTERVAL_SECONDS;
+  private mapViewportUpdateAccumulator = MAP_VIEWPORT_UPDATE_INTERVAL_SECONDS;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
   private gameplayConfig: PublicGameplayConfig = DEFAULT_GAMEPLAY;
@@ -312,6 +314,7 @@ export class GameApp {
 
     this.updateOcclusion(dt, me);
     this.cameraSystem.update({ player: me, world: this.worldInfo, screenWidth: this.app.renderer.width, screenHeight: this.app.renderer.height });
+    this.updateMapViewport(dt, me);
     this.updateRuntimeMinimap(dt, me);
     this.updateHud(dt, me);
     this.syncBuildingControlsPosition();
@@ -339,6 +342,20 @@ export class GameApp {
 
     this.buildingPlacementRenderer.applyOcclusionFocus(me ? { worldX: me.x, worldY: me.y } : null);
     this.monsterRenderer.applyOcclusion((x, y) => this.buildingPlacementRenderer.isOccludingFocus({ worldX: x, worldY: y }));
+  }
+
+  private updateMapViewport(dt: number, me: PlayerSnapshot | null): void {
+    this.mapViewportUpdateAccumulator += dt;
+    if (this.mapViewportUpdateAccumulator < MAP_VIEWPORT_UPDATE_INTERVAL_SECONDS) return;
+    this.mapViewportUpdateAccumulator = 0;
+
+    this.worldMapRenderer.updateViewport({
+      centerX: me?.x ?? this.camera.x,
+      centerY: me?.y ?? this.camera.y,
+      screenWidth: this.app.renderer.width,
+      screenHeight: this.app.renderer.height,
+      zoom: this.camera.zoom,
+    });
   }
 
   private updateRuntimeMinimap(dt: number, me: PlayerSnapshot | null): void {
