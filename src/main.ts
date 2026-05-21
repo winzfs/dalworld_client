@@ -27,21 +27,23 @@ async function boot(): Promise<void> {
   }
 
   const editorMode = isEditorEnabled();
-  bootOverlay.remove();
-
   const profile = editorMode
     ? undefined
     : await showStartScreen(document.body);
 
   bootOverlay.setMessage(editorMode ? 'Starting map editor...' : 'Starting Pixi.js application...');
-  installTimeOfDayClientFeature(document.body);
-  installSystemLogHud(document.body);
+
+  if (!editorMode) {
+    installTimeOfDayClientFeature(document.body);
+    installSystemLogHud(document.body);
+  }
 
   const game = new GameApp(profile);
   await game.start(mount);
 
+  bootOverlay.remove();
+
   if (editorMode) {
-    bootOverlay.remove();
     try {
       installItemEditorFeature(document.body);
     } catch (error) {
@@ -52,8 +54,6 @@ async function boot(): Promise<void> {
 
   installCombatClientFeature(game);
   installStationClientFeature(game);
-
-  bootOverlay.remove();
 }
 
 boot().catch((error: unknown) => {
