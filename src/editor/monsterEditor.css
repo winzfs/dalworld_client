@@ -1,8 +1,35 @@
+:root {
+  --map-editor-safe-top: max(12px, env(safe-area-inset-top));
+  --map-editor-safe-bottom: max(12px, env(safe-area-inset-bottom));
+  --map-editor-safe-left: max(12px, env(safe-area-inset-left));
+  --map-editor-safe-right: max(12px, env(safe-area-inset-right));
+  --map-editor-panel-max-height: calc(100vh - var(--map-editor-safe-top) - var(--map-editor-safe-bottom));
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --map-editor-panel-max-height: calc(100dvh - var(--map-editor-safe-top) - var(--map-editor-safe-bottom));
+  }
+}
+
+@supports (height: 100svh) {
+  :root {
+    --map-editor-panel-max-height: min(
+      calc(100dvh - var(--map-editor-safe-top) - var(--map-editor-safe-bottom)),
+      calc(100svh - var(--map-editor-safe-top) - var(--map-editor-safe-bottom))
+    );
+  }
+}
+
 .map-editor-panel {
-  max-height: calc(100vh - 32px);
+  max-width: min(380px, calc(100vw - var(--map-editor-safe-left) - var(--map-editor-safe-right)));
+  max-height: var(--map-editor-panel-max-height);
+  box-sizing: border-box;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
 }
 
 .map-editor-panel::-webkit-scrollbar {
@@ -276,4 +303,47 @@
 .map-editor-asset.is-monster-spawn.is-selected {
   border-color: rgba(126, 223, 242, 0.95);
   box-shadow: 0 0 0 2px rgba(126, 223, 242, .2) inset;
+}
+
+@media (max-width: 900px), (max-height: 760px) {
+  .map-editor-panel {
+    left: var(--map-editor-safe-left) !important;
+    top: var(--map-editor-safe-top) !important;
+    width: min(360px, calc(100vw - var(--map-editor-safe-left) - var(--map-editor-safe-right)));
+    max-height: var(--map-editor-panel-max-height);
+  }
+
+  .map-editor-monster-editor {
+    margin-inline: 8px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 640px) {
+  .map-editor-panel {
+    width: min(340px, 42vw);
+  }
+
+  .map-editor-tabs {
+    padding-top: 6px;
+  }
+
+  .map-editor-monster-section {
+    padding: 8px;
+    margin-top: 8px;
+  }
+}
+
+@media (max-width: 520px) {
+  .map-editor-panel {
+    width: calc(100vw - var(--map-editor-safe-left) - var(--map-editor-safe-right));
+  }
+
+  .map-editor-monster-spec-field {
+    grid-template-columns: 78px minmax(0, 1fr);
+  }
+
+  .map-editor-monster-default-hint {
+    grid-column: 2;
+    justify-self: start;
+  }
 }
