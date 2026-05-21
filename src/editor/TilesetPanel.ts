@@ -10,11 +10,8 @@ import type {
 import { EditorState, BLACK_SOLID_ASSET } from './EditorState';
 import { MonsterSpawnControls } from './MonsterSpawnControls';
 import {
-  EDITOR_MONSTER_ANIMATION_LABELS,
   EDITOR_MONSTER_STAT_LABELS,
-  getEditorMonsterAnimationDefaults,
   getEditorMonsterDefaultStats,
-  type EditorMonsterAnimationDefaults,
   type EditorMonsterDefaultStats,
 } from './MonsterDefaultStats';
 
@@ -52,9 +49,6 @@ const SPEC_KEYS: Array<keyof EditorMonsterDefaultStats> = [
   'attackRange',
   'attackDamage',
   'attackCooldownMs',
-];
-const ANIMATION_KEYS: Array<keyof EditorMonsterAnimationDefaults> = [
-  'attackAnimationMs',
 ];
 
 type PanelTab = 'tiles' | 'monsters';
@@ -376,10 +370,10 @@ export class TilesetPanel {
         this.createNumberField('최대 유지', worldRule.maxAlive, 0, 500, 1, (value) => {
           this.patchSelectedWorldRule({ maxAlive: Math.round(value) });
         }),
-        this.createNumberField('시간당', worldRule.spawnsPerHour, 1, 36000, 1, (value) => {
-          this.patchSelectedWorldRule({ spawnsPerHour: Math.round(value) });
+        this.createNumberField('분당', getRuleSpawnsPerMinute(worldRule), 1, 600, 1, (value) => {
+          this.patchSelectedWorldRule({ spawnsPerMinute: Math.round(value), spawnsPerHour: undefined });
         }),
-      ], '체크하면 이 몬스터가 전체 월드맵에서 자동으로 보충됩니다.'),
+      ], '체크하면 시작 시 최대 유지 수만큼 즉시 스폰되고, 이후 분당 설정에 맞춰 보충됩니다.'),
       this.createMonsterSection('스폰지역 배치', [
         this.createNumberField('반경', region.spawnRadius, 16, 2000, 10, (value) => {
           this.patchSelectedRegion({ spawnRadius: value });
@@ -390,8 +384,8 @@ export class TilesetPanel {
         this.createNumberField('리스폰(ms)', region.respawnMs, 1000, 3600000, 1000, (value) => {
           this.patchSelectedRegion({ respawnMs: value });
         }),
-        this.createNumberField('시간당', region.spawnsPerHour ?? 120, 1, 3600, 1, (value) => {
-          this.patchSelectedRegion({ spawnsPerHour: Math.round(value) });
+        this.createNumberField('분당', getRegionSpawnsPerMinute(region), 1, 600, 1, (value) => {
+          this.patchSelectedRegion({ spawnsPerMinute: Math.round(value), spawnsPerHour: undefined });
         }),
         this.createSpawnRegionButton(selectedOption),
       ], '버튼을 누른 뒤 맵에 클릭하면 해당 몬스터 스폰지역이 배치됩니다.'),
@@ -403,7 +397,7 @@ export class TilesetPanel {
         this.createSpecField('공격범위', 'attackRange'),
         this.createSpecField('공격력', 'attackDamage'),
         this.createSpecField('공격쿨(ms)', 'attackCooldownMs'),
-      ], '비워두면 위의 서버 기본 스펙을 사용합니다. 입력한 값은 전체스폰과 새로 배치하는 스폰지역에 같이 적용됩니다.'),
+      ], '비워두면 위의 서버 기본 스펙을 사용합니다. 공격 애니메이션 시간은 공격쿨(ms)과 같은 값으로 자동 적용됩니다.'),
     );
   }
 
@@ -473,9 +467,13 @@ export class TilesetPanel {
   }
 
   private createAnimationDefaultsSection(): HTMLElement {
-    const stats = getEditorMonsterAnimationDefaults(this.selectedMonsterType);
-    const rows = ANIMATION_KEYS.map((key) => this.createDefaultStatRow(EDITOR_MONSTER_ANIMATION_LABELS[key], stats[key]));
-    return this.createMonsterSection('클라이언트 애니메이션 설정', rows, '표현용 표시 시간입니다. 실제 공격 판정/쿨타임은 서버 스펙을 따릅니다.');
+    const attackCooldown = this.getSelectedSpec().attackCooldownMs
+      ?? getEditorMonsterDefaultStats(this.selectedMonsterType).attackCooldownMs;
+    return this.createMonsterSection(
+      '클라이언트 애니메이션 설정',
+      [this.createDefaultStatRow('공격 애니메이션(ms)', attackCooldown)],
+      '공격쿨(ms)과 동일하게 자동 적용됩니다. 별도 값으로 분리하지 않습니다.',
+    );
   }
 
   private createDefaultStatRow(labelText: string, value: number): HTMLElement {
@@ -599,15 +597,26 @@ export class TilesetPanel {
   }
 
   private getSelectedWorldRule(): EditorMonsterSpawnRule {
-    return this.actions.getMonsterSpawnRules().find((rule) => rule.monsterType === this.selectedMonsterType && rule.scope === 'world')
-      ?? createDefaultWorldRule(this.selectedMonsterType);
+    const stored = this.actions.getMonsterSpawnRules().find((rule) => rule.monsterType === this.selectedMonsterType && rule.scope === 'world');
+    const rule = stored ?? createDefaultWorldRule(this.selectedMonsterType);
+    return {
+      ...rule,
+      spawnsPerMinute: getRuleSpawnsPerMinute(rule),
+    };
   }
 
   private patchSelectedWorldRule(patch: Partial<EditorMonsterSpawnRule>): void {
     const rules = this.actions.getMonsterSpawnRules();
     const index = rules.findIndex((rule) => rule.monsterType === this.selectedMonsterType && rule.scope === 'world');
     const current = index >= 0 ? rules[index] : createDefaultWorldRule(this.selectedMonsterType);
-    const next = { ...current, ...patch, monsterType: this.selectedMonsterType, scope: 'world' as const };
+    const next = {
+      ...current,
+      ...patch,
+      monsterType: this.selectedMonsterType,
+      scope: 'world' as const,
+      spawnsPerMinute: getRuleSpawnsPerMinute({ ...current, ...patch }),
+    };
+    if (patch.spawnsPerHour === undefined && 'spawnsPerHour' in patch) delete next.spawnsPerHour;
     const nextRules = index >= 0 ? rules.map((rule, i) => (i === index ? next : rule)) : [...rules, next];
     this.actions.setMonsterSpawnRules(nextRules);
     this.render();
@@ -615,17 +624,24 @@ export class TilesetPanel {
 
   private getSelectedRegionDefaults(): MonsterRegionSpawnDefaults {
     const current = this.regionSpawnDefaults.get(this.selectedMonsterType) ?? createDefaultRegionSpawn(this.selectedMonsterType);
-    return { ...current, spec: current.spec ? { ...current.spec } : undefined };
+    return {
+      ...current,
+      spawnsPerMinute: getRegionSpawnsPerMinute(current),
+      spec: current.spec ? { ...current.spec } : undefined,
+    };
   }
 
   private patchSelectedRegion(patch: Partial<MonsterRegionSpawnDefaults>): void {
     const current = this.getSelectedRegionDefaults();
-    this.regionSpawnDefaults.set(this.selectedMonsterType, {
+    const next = {
       ...current,
       ...patch,
-      kind: 'monsterSpawn',
+      kind: 'monsterSpawn' as const,
       monsterType: this.selectedMonsterType,
-    });
+      spawnsPerMinute: getRegionSpawnsPerMinute({ ...current, ...patch }),
+    };
+    if (patch.spawnsPerHour === undefined && 'spawnsPerHour' in patch) delete next.spawnsPerHour;
+    this.regionSpawnDefaults.set(this.selectedMonsterType, next);
     this.render();
   }
 
@@ -735,7 +751,7 @@ function createDefaultWorldRule(monsterType: EditorMonsterType): EditorMonsterSp
     monsterType,
     scope: 'world',
     maxAlive: monsterType === 'sheep' ? 8 : 12,
-    spawnsPerHour: monsterType === 'sheep' ? 30 : 60,
+    spawnsPerMinute: 1,
   };
 }
 
@@ -746,7 +762,7 @@ function createDefaultRegionSpawn(monsterType: EditorMonsterType): MonsterRegion
     spawnRadius: 160,
     maxAlive: 3,
     respawnMs: 30_000,
-    spawnsPerHour: 120,
+    spawnsPerMinute: 2,
   };
 }
 
@@ -758,7 +774,9 @@ function createSpawnRegionAsset(
   const gameplayDefaults: MonsterRegionSpawnDefaults = {
     ...region,
     monsterType: option.id,
+    spawnsPerMinute: getRegionSpawnsPerMinute(region),
   };
+  delete gameplayDefaults.spawnsPerHour;
   if (Object.keys(spec).length > 0) gameplayDefaults.spec = { ...spec };
 
   return {
@@ -775,6 +793,26 @@ function createSpawnRegionAsset(
 
 function getMonsterOption(type: EditorMonsterType): { id: EditorMonsterType; label: string; color: number } {
   return MONSTER_OPTIONS.find((option) => option.id === type) ?? MONSTER_OPTIONS[0];
+}
+
+function getRuleSpawnsPerMinute(rule: Pick<EditorMonsterSpawnRule, 'spawnsPerMinute' | 'spawnsPerHour'>): number {
+  return normalizeSpawnRatePerMinute(rule.spawnsPerMinute, rule.spawnsPerHour, 1);
+}
+
+function getRegionSpawnsPerMinute(region: Pick<MonsterRegionSpawnDefaults, 'spawnsPerMinute' | 'spawnsPerHour'>): number {
+  return normalizeSpawnRatePerMinute(region.spawnsPerMinute, region.spawnsPerHour, 2);
+}
+
+function normalizeSpawnRatePerMinute(
+  spawnsPerMinute: number | undefined,
+  legacySpawnsPerHour: number | undefined,
+  fallback: number,
+): number {
+  if (Number.isFinite(spawnsPerMinute) && (spawnsPerMinute as number) > 0) return Math.round(spawnsPerMinute as number);
+  if (Number.isFinite(legacySpawnsPerHour) && (legacySpawnsPerHour as number) > 0) {
+    return Math.max(1, Math.round((legacySpawnsPerHour as number) / 60));
+  }
+  return fallback;
 }
 
 function normalizeChance(value: number): number {
