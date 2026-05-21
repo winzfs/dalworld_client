@@ -30,6 +30,7 @@ type MonsterView = {
   attackAnimationRemaining: number;
   attackFacing: Facing;
   attackCooldownMs: number;
+  lastAttackSeq: number;
 };
 
 type DirectionalFrames = Record<Facing, Texture[]>;
@@ -83,22 +84,23 @@ export class MonsterRenderer {
       view.interp.setTarget(monster.x, monster.y);
       view.attackCooldownMs = resolveAttackCooldownMs(monster);
 
+      const attackSeq = resolveAttackSeq(monster);
+      if (attackSeq > view.lastAttackSeq) {
+        view.lastAttackSeq = attackSeq;
+        this.startAttackAnimation(view);
+      }
+
       if (view.state !== monster.state) {
         view.state = monster.state;
         view.frame = -1;
         view.animationKey = '';
-
-        if (monster.state === 'attack') {
-          view.attackAnimationRemaining = view.attackCooldownMs;
-          view.attackFacing = view.facing;
-        }
-
         this.drawFallback(view);
       }
 
       if (view.type !== monster.type) {
         view.type = monster.type;
         view.attackCooldownMs = resolveAttackCooldownMs(monster);
+        view.lastAttackSeq = attackSeq;
         view.frame = -1;
         view.animationKey = '';
         view.attackAnimationRemaining = 0;
@@ -173,6 +175,7 @@ export class MonsterRenderer {
     const container = new Container();
     const body = new Graphics();
     const attackCooldownMs = resolveAttackCooldownMs(monster);
+    const attackSeq = resolveAttackSeq(monster);
     container.position.set(monster.x, monster.y);
     container.zIndex = getWorldEntityZIndex(monster.y, MONSTER_DEPTH_OFFSET);
 
@@ -189,15 +192,24 @@ export class MonsterRenderer {
       animTime: Math.random(),
       frame: -1,
       animationKey: '',
-      attackAnimationRemaining: monster.state === 'attack' ? attackCooldownMs : 0,
+      attackAnimationRemaining: 0,
       attackFacing: 'down',
       attackCooldownMs,
+      lastAttackSeq: attackSeq,
     };
 
     container.addChild(body);
     this.layer.addChild(container);
     this.applyMonsterVisual(view);
     return view;
+  }
+
+  private startAttackAnimation(view: MonsterView): void {
+    view.attackAnimationRemaining = view.attackCooldownMs;
+    view.attackFacing = view.facing;
+    view.frame = -1;
+    view.animationKey = '';
+    view.animTime = 0;
   }
 
   private applyMonsterVisual(view: MonsterView): void {
@@ -355,7 +367,7 @@ function selectAnimationFrames(
   attackActive: boolean,
 ): { key: string; frames: Texture[]; animate: boolean } {
   if (loaded.actionFrames) {
-    if ((attackActive || state === 'attack') && loaded.actionFrames.attack) {
+    if (attackActive && loaded.actionFrames.attack) {
       return { key: `attack:${facing}`, frames: loaded.actionFrames.attack[facing], animate: true };
     }
 
@@ -411,6 +423,11 @@ function resolveAttackCooldownMs(monster: MonsterSnapshot): number {
   const serverCooldown = monster.attackCooldownMs;
   if (Number.isFinite(serverCooldown) && (serverCooldown as number) > 0) return serverCooldown as number;
   return getMonsterConfig(monster.type).timing.attackCooldownMs;
+}
+
+function resolveAttackSeq(monster: MonsterSnapshot): number {
+  const attackSeq = monster.attackSeq;
+  return Number.isFinite(attackSeq) && (attackSeq as number) >= 0 ? attackSeq as number : 0;
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
