@@ -169,7 +169,7 @@ function createDefaultMonsterSpawnRules(): EditorMonsterSpawnRule[] {
       monsterType: 'wild_slime',
       scope: 'world',
       maxAlive: 12,
-      spawnsPerHour: 60,
+      spawnsPerMinute: 1,
     },
     {
       id: 'world-spawn-sheep',
@@ -177,22 +177,26 @@ function createDefaultMonsterSpawnRules(): EditorMonsterSpawnRule[] {
       monsterType: 'sheep',
       scope: 'world',
       maxAlive: 8,
-      spawnsPerHour: 30,
+      spawnsPerMinute: 1,
     },
   ];
 }
 
 function normalizeSpawnRules(rules: EditorMonsterSpawnRule[] | undefined): EditorMonsterSpawnRule[] {
   const source = rules && rules.length > 0 ? rules : createDefaultMonsterSpawnRules();
-  return source.map((rule) => ({
-    id: rule.id || crypto.randomUUID(),
-    enabled: rule.enabled === true,
-    monsterType: rule.monsterType === 'sheep' ? 'sheep' : 'wild_slime',
-    scope: rule.scope === 'region' ? 'region' : 'world',
-    maxAlive: clampInteger(rule.maxAlive, 0, 500, 10),
-    spawnsPerHour: clampInteger(rule.spawnsPerHour, 1, 36000, 60),
-    spec: rule.spec ? { ...rule.spec } : undefined,
-  }));
+  return source.map((rule) => {
+    const spawnsPerMinute = normalizeSpawnRatePerMinute(rule.spawnsPerMinute, rule.spawnsPerHour, 1);
+    const normalized: EditorMonsterSpawnRule = {
+      id: rule.id || crypto.randomUUID(),
+      enabled: rule.enabled === true,
+      monsterType: rule.monsterType === 'sheep' ? 'sheep' : 'wild_slime',
+      scope: rule.scope === 'region' ? 'region' : 'world',
+      maxAlive: clampInteger(rule.maxAlive, 0, 500, 10),
+      spawnsPerMinute,
+      spec: rule.spec ? { ...rule.spec } : undefined,
+    };
+    return normalized;
+  });
 }
 
 function cloneSpawnRules(rules: EditorMonsterSpawnRule[]): EditorMonsterSpawnRule[] {
@@ -200,6 +204,22 @@ function cloneSpawnRules(rules: EditorMonsterSpawnRule[]): EditorMonsterSpawnRul
     ...rule,
     spec: rule.spec ? { ...rule.spec } : undefined,
   }));
+}
+
+function normalizeSpawnRatePerMinute(
+  spawnsPerMinute: number | undefined,
+  legacySpawnsPerHour: number | undefined,
+  fallback: number,
+): number {
+  if (Number.isFinite(spawnsPerMinute) && (spawnsPerMinute as number) > 0) {
+    return clampInteger(spawnsPerMinute as number, 1, 600, fallback);
+  }
+
+  if (Number.isFinite(legacySpawnsPerHour) && (legacySpawnsPerHour as number) > 0) {
+    return clampInteger(Math.max(1, Math.round((legacySpawnsPerHour as number) / 60)), 1, 600, fallback);
+  }
+
+  return fallback;
 }
 
 function clampInteger(value: number, min: number, max: number, fallback: number): number {
