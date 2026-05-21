@@ -17,9 +17,11 @@ async function bootEditor(): Promise<void> {
     throw new Error('Missing #app mount element');
   }
 
+  document.getElementById('editor-html-build-marker')?.remove();
+  bootOverlay.remove();
+
   const editor = new EditorApp();
   await editor.start(mount);
-  bootOverlay.remove();
 
   try {
     installItemEditorFeature(document.body);
