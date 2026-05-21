@@ -103,8 +103,9 @@ function compileGameplay(gameplay: EditorPlacementGameplay | undefined): WorldMa
       spawnRadius: clamp(normalizePositiveNumber(gameplay.spawnRadius, 160), 16, 2000),
       maxAlive: clamp(normalizeInteger(gameplay.maxAlive, 1), 1, 50),
       respawnMs: clamp(normalizePositiveNumber(gameplay.respawnMs, 30_000), 1_000, 3_600_000),
-      spawnsPerHour: clamp(normalizePositiveNumber(gameplay.spawnsPerHour, 120), 1, 3600),
+      spawnsPerMinute: clamp(resolveSpawnsPerMinute(gameplay.spawnsPerMinute, gameplay.spawnsPerHour, 2), 1, 600),
     };
+    if (gameplay.spawnsPerHour !== undefined) compiled.spawnsPerHour = clamp(normalizePositiveNumber(gameplay.spawnsPerHour, 120), 1, 36000);
     if (spec && Object.keys(spec).length > 0) compiled.spec = spec;
     return compiled;
   }
@@ -126,8 +127,9 @@ function compileMonsterSpawnRules(rules: EditorMonsterSpawnRule[] | undefined): 
       monsterType: rule.monsterType,
       scope: rule.scope === 'region' ? 'region' : 'world',
       maxAlive: clamp(normalizeInteger(rule.maxAlive, 10), 0, 500),
-      spawnsPerHour: clamp(normalizePositiveNumber(rule.spawnsPerHour, 60), 1, 36000),
+      spawnsPerMinute: clamp(resolveSpawnsPerMinute(rule.spawnsPerMinute, rule.spawnsPerHour, 1), 1, 600),
     };
+    if (rule.spawnsPerHour !== undefined) compiledRule.spawnsPerHour = clamp(normalizePositiveNumber(rule.spawnsPerHour, 60), 1, 36000);
     if (spec && Object.keys(spec).length > 0) compiledRule.spec = spec;
     compiled.push(compiledRule);
   }
@@ -240,6 +242,18 @@ function normalizeOptionalDisplayNumber(value: number | undefined): number | und
   const normalized = normalizeOptionalPositiveNumber(value);
   if (!normalized) return undefined;
   return Math.min(Math.floor(normalized), MAX_DISPLAY_SIZE);
+}
+
+function resolveSpawnsPerMinute(
+  spawnsPerMinute: number | undefined,
+  legacySpawnsPerHour: number | undefined,
+  fallback: number,
+): number {
+  if (Number.isFinite(spawnsPerMinute) && (spawnsPerMinute as number) > 0) return spawnsPerMinute as number;
+  if (Number.isFinite(legacySpawnsPerHour) && (legacySpawnsPerHour as number) > 0) {
+    return Math.max(1, Math.round((legacySpawnsPerHour as number) / 60));
+  }
+  return fallback;
 }
 
 function removeUndefinedFields<T extends Record<string, unknown>>(value: T): T {
