@@ -17,6 +17,7 @@ import { GameWorldMapRenderer } from '../render/GameWorldMapRenderer';
 import { GameHud } from '../ui/GameHud';
 import { GameWindows } from '../ui/GameWindows';
 import { RuntimeMinimap } from '../ui/RuntimeMinimap';
+import { QuestTrackerUI } from '../ui/QuestTrackerUI';
 import { BuildingEditControls } from '../systems/building/BuildingEditControls';
 import { BuildingEditCoordinator } from '../systems/building/BuildingEditCoordinator';
 import type { BuildingEditDraft } from '../systems/building/BuildingEditTypes';
@@ -61,6 +62,7 @@ export class GameApp {
   private readonly cameraSystem: CameraSystem;
   private readonly editorCameraSystem: EditorCameraSystem;
   private readonly hudSystem: HudSystem;
+  private readonly questTracker = new QuestTrackerUI();
   private readonly messageRouter: ServerMessageRouter;
   private readonly playerRenderer: PlayerRenderer;
   private readonly resourceRenderer: ResourceRenderer;
@@ -390,6 +392,7 @@ export class GameApp {
       latencyMs: this.network.latencyMs,
       buildingMode: this.buildingModeState.getSnapshot(),
     });
+    this.questTracker.render(me?.questState);
   }
 
   private handleCanvasPointerMove(event: PointerEvent): void {
