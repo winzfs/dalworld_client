@@ -1,5 +1,6 @@
 import type { Application, Container } from 'pixi.js';
 import { EditorState, BLACK_SOLID_ASSET } from './EditorState';
+import { installMonsterTabSaveInterceptor } from './EditorTabServerSaves';
 import { TilesetPanel } from './TilesetPanel';
 import { TilePlacementSystem } from './TilePlacementSystem';
 import { MapStorage } from './MapStorage';
@@ -146,6 +147,12 @@ export class MapEditor {
       onToggleWorldMap: () => this.worldMapPanel.toggle(),
       getMonsterSpawnRules: () => this.worldMapGrid.monsterSpawnRules,
       setMonsterSpawnRules: (rules) => this.worldMapGrid.setMonsterSpawnRules(rules),
+    });
+
+    installMonsterTabSaveInterceptor({
+      panel: this.panel.element,
+      getRules: () => this.worldMapGrid.monsterSpawnRules,
+      notify: (message, kind, durationMs) => this.showToast(message, kind, durationMs),
     });
   }
 
@@ -521,140 +528,4 @@ export class MapEditor {
       this.worldMapGrid.load(worldSave.worldMap);
       this.cellDrafts.clear();
 
-      for (const cell of worldSave.cells) {
-        this.cellDrafts.set(cellKey(cell.gridX, cell.gridY), this.normalizeCellDraft(cell.gridX, cell.gridY, cell.draft));
-      }
-
-      const current = this.worldMapGrid.current;
-      const currentDraft = this.cellDrafts.get(cellKey(current.gridX, current.gridY))
-        ?? this.createCellDraft(current.gridX, current.gridY);
-
-      await this.placement.loadDraft(this.normalizeCellDraft(current.gridX, current.gridY, currentDraft));
-      console.info('[MapEditor] Loaded saved world.', {
-        cells: worldSave.cells.length,
-      });
-      return;
-    }
-
-    const draft = this.storage.load();
-    if (!draft) {
-      await this.placement.loadDraft(this.createCellDraft(0, 0));
-      return;
-    }
-
-    this.worldMapGrid.load(draft.worldMap);
-    this.cellDrafts.clear();
-
-    const current = this.worldMapGrid.current;
-
-    this.cellDrafts.set(
-      cellKey(current.gridX, current.gridY),
-      this.normalizeCellDraft(current.gridX, current.gridY, draft),
-    );
-
-    await this.placement.loadDraft(this.normalizeCellDraft(current.gridX, current.gridY, draft));
-  }
-
-  private exportJson(): void {
-    this.storage.downloadWorldJson(this.createWorldSave());
-  }
-
-  private clearAll(): void {
-    const ok = window.confirm('현재 배치된 타일을 전부 삭제할까요?');
-    if (!ok) return;
-
-    const current = this.worldMapGrid.current;
-    const draft = this.createCellDraft(current.gridX, current.gridY);
-    this.placement.clear();
-    this.cellDrafts.set(cellKey(current.gridX, current.gridY), draft);
-    void this.placement.replaceDraft(draft);
-  }
-
-  private screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
-    const rect = this.options.app.canvas.getBoundingClientRect();
-    const screenX = clientX - rect.left;
-    const screenY = clientY - rect.top;
-    const transform = this.options.world.worldTransform;
-
-    return {
-      x: (screenX - transform.tx) / transform.a,
-      y: (screenY - transform.ty) / transform.d,
-    };
-  }
-
-  private clampWorldPoint(point: { x: number; y: number }): { x: number; y: number } {
-    return {
-      x: clamp(point.x, 0, Math.max(0, this.worldWidth - 1)),
-      y: clamp(point.y, 0, Math.max(0, this.worldHeight - 1)),
-    };
-  }
-
-  private showToast(message: string, kind: ToastKind, durationMs = 2_500): void {
-    if (this.toastHideTimeout !== null) {
-      window.clearTimeout(this.toastHideTimeout);
-      this.toastHideTimeout = null;
-    }
-
-    this.toast.textContent = message;
-    this.toast.dataset.kind = kind;
-    this.toast.style.opacity = '1';
-    this.toast.style.transform = 'translateY(0)';
-
-    if (durationMs > 0) {
-      this.toastHideTimeout = window.setTimeout(() => {
-        this.toast.style.opacity = '0';
-        this.toast.style.transform = 'translateY(-8px)';
-        this.toastHideTimeout = null;
-      }, durationMs);
-    }
-  }
-}
-
-function createEditorToast(): HTMLDivElement {
-  const toast = document.createElement('div');
-  toast.className = 'map-editor-toast';
-  toast.style.position = 'fixed';
-  toast.style.top = '18px';
-  toast.style.left = '50%';
-  toast.style.transform = 'translate(-50%, -8px)';
-  toast.style.zIndex = '10000';
-  toast.style.padding = '10px 14px';
-  toast.style.borderRadius = '12px';
-  toast.style.background = 'rgba(17, 24, 39, 0.94)';
-  toast.style.color = '#ffffff';
-  toast.style.fontSize = '14px';
-  toast.style.fontWeight = '700';
-  toast.style.letterSpacing = '-0.01em';
-  toast.style.boxShadow = '0 10px 28px rgba(0, 0, 0, 0.35)';
-  toast.style.pointerEvents = 'none';
-  toast.style.opacity = '0';
-  toast.style.transition = 'opacity 160ms ease, transform 160ms ease, background 160ms ease';
-  return toast;
-}
-
-function isEditorUiTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
-  return Boolean(target.closest('.map-editor-panel, .tile-picker-window, .world-map-panel'));
-}
-
-function cellKey(gridX: number, gridY: number): string {
-  return `${gridX}:${gridY}`;
-}
-
-function parseCellKey(key: string): [number, number] {
-  const [x, y] = key.split(':').map((value) => Number(value));
-  return [Number.isFinite(x) ? x : 0, Number.isFinite(y) ? y : 0];
-}
-
-function loadImageSize(url: string): Promise<{ width: number; height: number } | null> {
-  return new Promise((resolve) => {
-    const image = new Image();
-    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
-    image.onerror = () => resolve(null);
-    image.src = url;
-  });
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
+    ... (truncated due to tool response token budget)
