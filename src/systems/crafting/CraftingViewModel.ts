@@ -1,5 +1,6 @@
 import { BUILD_PART_ITEM_DEFINITIONS } from '../building/BuildPartInventoryCatalog';
-import { BASE_ITEM_DEFINITIONS, type ItemDefinition } from '../inventory/ItemDefinitions';
+import { type ItemDefinition } from '../inventory/ItemDefinitions';
+import { getRuntimeItemDefinition } from '../inventory/ItemRuntimeOverrides';
 import { CRAFTING_RECIPES } from './CraftingRecipes';
 import type { CraftingRecipeCategory, CraftingRecipeDefinition, CraftingTier } from './CraftingTypes';
 
@@ -77,5 +78,5 @@ export function toRecipeView(recipe: CraftingRecipeDefinition): CraftingRecipeVi
 }
 
 function getItemDefinition(itemId: string): ItemDefinition | null {
-  return BASE_ITEM_DEFINITIONS[itemId] ?? BUILD_PART_ITEM_DEFINITIONS[itemId] ?? null;
+  return getRuntimeItemDefinition(itemId) ?? BUILD_PART_ITEM_DEFINITIONS[itemId] ?? null;
 }
