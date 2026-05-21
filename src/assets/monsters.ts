@@ -10,8 +10,10 @@ export type MonsterActionRows = {
 
 export type MonsterSpriteSheetConfig = {
   src: string;
-  frameWidth: number;
-  frameHeight: number;
+  frameWidth?: number;
+  frameHeight?: number;
+  columns?: number;
+  rowsCount?: number;
   frameCount: number;
   fps: number;
   scale: number;
@@ -66,9 +68,9 @@ export const MONSTER_CONFIGS = {
   wild_slime: {
     type: 'wild_slime',
     spriteSheet: {
-      src: '/assets/characters/monsters/slime01.png?v=1',
-      frameWidth: 32,
-      frameHeight: 32,
+      src: '/assets/characters/monsters/slime01.png?v=2',
+      columns: 6,
+      rowsCount: 9,
       frameCount: 6,
       fps: 8,
       scale: 1.35,
