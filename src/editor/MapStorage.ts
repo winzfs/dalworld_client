@@ -1,7 +1,8 @@
-import type { EditorMapDraft, EditorPlacementGameplay, EditorTilePlacement, EditorWorldMapDraft, EditorWorldSave } from './types';
+import { saveEditorItemOverrides } from './ItemEditorStorage';
+import type { EditorItemOverride, EditorMapDraft, EditorPlacementGameplay, EditorTilePlacement, EditorWorldMapDraft, EditorWorldSave } from './types';
 import { uploadWorldMap, type UploadedWorldMapReport } from '../worldMap/uploadWorldMap';
 import { fetchRuntimeWorldMap } from '../worldMap/fetchRuntimeWorldMap';
-import type { GameWorldMap, WorldMapPlacement, WorldMapPlacementGameplay } from '../worldMap/types';
+import type { GameWorldMap, WorldMapItemOverride, WorldMapPlacement, WorldMapPlacementGameplay } from '../worldMap/types';
 
 const STORAGE_PREFIX = 'dalworld:editor-map:';
 const WORLD_STORAGE_PREFIX = 'dalworld:editor-world:';
@@ -91,10 +92,12 @@ export class MapStorage {
       if (!runtimeMap || runtimeMap.cells.length === 0) return null;
 
       const world = convertRuntimeMapToEditorWorldSave(runtimeMap, this.mapName);
+      if (world.worldMap.itemOverrides) saveEditorItemOverrides(world.worldMap.itemOverrides);
       if (options.writeLocalBackup !== false) this.writeJson(this.worldKey, world);
       console.info('[MapStorage] Restored editor world from server map backup.', {
         cells: world.cells.length,
         placements: world.cells.reduce((sum, cell) => sum + cell.draft.placements.length, 0),
+        itemOverrides: world.worldMap.itemOverrides?.length ?? 0,
       });
       return world;
     } catch (error) {
@@ -199,6 +202,7 @@ function createEditorWorldMapDraft(map: GameWorldMap): EditorWorldMapDraft {
     ...rule,
     ...(rule.spec ? { spec: { ...rule.spec } } : {}),
   }));
+  const itemOverrides = convertRuntimeItemOverrides(map.itemOverrides);
 
   return {
     version: 1,
@@ -211,7 +215,22 @@ function createEditorWorldMapDraft(map: GameWorldMap): EditorWorldMapDraft {
       gridY: cell.gridY,
     })),
     ...(monsterSpawnRules ? { monsterSpawnRules } : {}),
+    ...(itemOverrides ? { itemOverrides } : {}),
   };
+}
+
+function convertRuntimeItemOverrides(overrides: WorldMapItemOverride[] | undefined): EditorItemOverride[] | undefined {
+  if (!overrides || overrides.length === 0) return undefined;
+  return overrides.map((override) => ({
+    id: override.id,
+    label: override.label,
+    description: override.description,
+    icon: override.icon,
+    category: override.category,
+    stackable: override.stackable,
+    maxStack: override.maxStack,
+    fields: override.fields ? { ...override.fields } : undefined,
+  }));
 }
 
 function convertRuntimePlacementToEditorPlacement(placement: WorldMapPlacement): EditorTilePlacement {
@@ -258,6 +277,7 @@ function convertRuntimeGameplayToEditorGameplay(
     spawnRadius: gameplay.spawnRadius,
     maxAlive: gameplay.maxAlive,
     respawnMs: gameplay.respawnMs,
+    spawnsPerMinute: gameplay.spawnsPerMinute,
     spawnsPerHour: gameplay.spawnsPerHour,
   };
 
@@ -269,7 +289,8 @@ function getWorldSaveContentScore(world: EditorWorldSave | null): number {
   if (!world) return 0;
   const placementScore = world.cells.reduce((sum, cell) => sum + countUserPlacements(cell.draft.placements), 0);
   const spawnRuleScore = world.worldMap.monsterSpawnRules?.length ?? 0;
-  return placementScore + spawnRuleScore;
+  const itemScore = world.worldMap.itemOverrides?.length ?? 0;
+  return placementScore + spawnRuleScore + itemScore;
 }
 
 function countUserPlacements(placements: EditorTilePlacement[]): number {
