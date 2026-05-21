@@ -1,3 +1,5 @@
+import { getDefaultHttpApiUrl } from '../net/network';
+
 export const AUTH_SESSION_STORAGE_KEY = 'dalworld:session-token';
 export const AUTH_USERNAME_STORAGE_KEY = 'dalworld:last-username';
 
@@ -54,7 +56,7 @@ export function logoutAndReload(): void {
   clearSessionToken();
 
   if (sessionToken) {
-    void fetch('/auth/logout', {
+    void fetch(getDefaultHttpApiUrl('/auth/logout'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionToken }),
