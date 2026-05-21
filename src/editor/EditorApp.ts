@@ -75,14 +75,17 @@ export class EditorApp {
   }
 
   private async initializePixiApplication(onStatus: EditorBootStatus): Promise<void> {
-    const size = getViewportSize();
-    onStatus(`Trying Pixi init with explicit size ${size.width}x${size.height}...`);
+    // No diagnostic probe before init - creating and releasing a WebGL2
+    // context via WEBGL_lose_context immediately before app.init() appears
+    // to leave some mobile GPU drivers in a state where Pixi's own context
+    // request blocks the main thread. The game runs the same init call
+    // without any pre-probe, so match that exactly.
+    onStatus('Calling app.init() with game-app options...');
     await withTimeout(
       this.app.init({
         background: '#1d2b34',
         antialias: false,
-        width: size.width,
-        height: size.height,
+        resizeTo: window,
         autoDensity: true,
         resolution: getRenderResolution(),
       }),
