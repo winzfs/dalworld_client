@@ -1,5 +1,6 @@
 import type { NetworkStatus } from '../net/network';
 import type { PlayerSnapshot } from '../protocol/messages';
+import { logoutAndReload } from './AuthSessionStorage';
 
 export type GameHudState = {
   status: NetworkStatus;
@@ -26,6 +27,7 @@ type HudRefs = {
   networkText: HTMLSpanElement;
   pingText: HTMLSpanElement;
   tickText: HTMLSpanElement;
+  logoutButton: HTMLButtonElement;
 };
 
 export class GameHud {
@@ -33,6 +35,9 @@ export class GameHud {
 
   constructor() {
     this.refs = createOrGetHud();
+    this.refs.logoutButton.addEventListener('click', () => {
+      logoutAndReload();
+    });
   }
 
   render(state: GameHudState): void {
@@ -100,6 +105,7 @@ function createOrGetHud(): HudRefs {
     networkText: query(root, '[data-ui="network"]'),
     pingText: query(root, '[data-ui="ping"]'),
     tickText: query(root, '[data-ui="tick"]'),
+    logoutButton: query(root, '[data-ui="logout"]'),
   };
 }
 
@@ -125,6 +131,7 @@ function getHudMarkup(): string {
       <div class="ui-debug-row"><span>Ping</span><b data-ui="ping">—</b></div>
       <div class="ui-debug-row"><span>Tick</span><b data-ui="tick">0</b></div>
       <div class="ui-debug-row"><span>Pos</span><b data-ui="pos">—</b></div>
+      <button class="ui-logout-button" type="button" data-ui="logout">로그아웃</button>
     </section>
   `;
 }
