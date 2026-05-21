@@ -2,13 +2,32 @@ import { Assets, Container, Graphics, Rectangle, SCALE_MODES, Sprite, Texture, t
 import type { GameWorldMap, WorldMapPlacement, WorldMapSourceRect } from '../worldMap/types';
 import { createTransparentBlackTexture } from '../editor/createTransparentBlackTexture';
 
+type WorldMapDisplay = {
+  display: Sprite | Graphics;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+export type WorldMapViewport = {
+  centerX: number;
+  centerY: number;
+  screenWidth: number;
+  screenHeight: number;
+  zoom: number;
+  padding?: number;
+};
+
+const VIEWPORT_CULL_PADDING = 384;
+
 export class GameWorldMapRenderer {
   readonly layer = new Container();
 
   private readonly textureCache = new Map<string, Promise<PixiTexture | null>>();
   private readonly transparentTextureCache = new Map<string, Promise<PixiTexture | null>>();
   private readonly ownedTextures: PixiTexture[] = [];
-  private readonly displays: Array<Sprite | Graphics> = [];
+  private readonly displays: WorldMapDisplay[] = [];
   private renderGeneration = 0;
 
   constructor(private readonly world: Container) {
@@ -47,8 +66,25 @@ export class GameWorldMapRenderer {
       }
 
       display.zIndex = placementZIndex(placement);
-      this.displays.push(display);
+      this.displays.push({ display, ...getPlacementBounds(placement) });
       this.layer.addChild(display);
+    }
+  }
+
+  updateViewport(viewport: WorldMapViewport): void {
+    if (this.displays.length === 0) return;
+
+    const zoom = Number.isFinite(viewport.zoom) && viewport.zoom > 0 ? viewport.zoom : 1;
+    const padding = viewport.padding ?? VIEWPORT_CULL_PADDING;
+    const halfW = viewport.screenWidth / 2 / zoom;
+    const halfH = viewport.screenHeight / 2 / zoom;
+    const minX = viewport.centerX - halfW - padding;
+    const maxX = viewport.centerX + halfW + padding;
+    const minY = viewport.centerY - halfH - padding;
+    const maxY = viewport.centerY + halfH + padding;
+
+    for (const entry of this.displays) {
+      entry.display.visible = entry.maxX >= minX && entry.minX <= maxX && entry.maxY >= minY && entry.minY <= maxY;
     }
   }
 
@@ -66,8 +102,8 @@ export class GameWorldMapRenderer {
   }
 
   private clear(): void {
-    for (const display of this.displays) {
-      destroyDisplayOnly(display);
+    for (const entry of this.displays) {
+      destroyDisplayOnly(entry.display);
     }
     this.displays.length = 0;
     this.layer.removeChildren();
@@ -197,6 +233,20 @@ function getPlacementFootY(placement: WorldMapPlacement): number {
   const scale = normalizeScale(placement.scale);
   const height = (placement.displayHeight ?? placement.sourceRect?.height ?? 32) * scale;
   return placement.y + height;
+}
+
+function getPlacementBounds(placement: WorldMapPlacement): Omit<WorldMapDisplay, 'display'> {
+  const scale = normalizeScale(placement.scale);
+  const width = (placement.displayWidth ?? placement.sourceRect?.width ?? 32) * scale;
+  const height = (placement.displayHeight ?? placement.sourceRect?.height ?? 32) * scale;
+  const padding = Math.max(64, Math.max(width, height) * 0.15);
+
+  return {
+    minX: placement.x - padding,
+    minY: placement.y - padding,
+    maxX: placement.x + width + padding,
+    maxY: placement.y + height + padding,
+  };
 }
 
 function getLayerZ(layer: WorldMapPlacement['layer']): number {
