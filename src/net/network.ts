@@ -4,6 +4,7 @@ type NetworkStatus = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
 type Listener<T> = (payload: T) => void;
 
 export type GameConnectionProfile = {
+  sessionToken?: string;
   accountId?: string;
   characterName?: string;
 };
@@ -182,6 +183,7 @@ export function getDefaultWebSocketUrl(profile: GameConnectionProfile = {}): str
 function appendConnectionParams(rawUrl: string, clientId: string, profile: GameConnectionProfile): string {
   const url = new URL(rawUrl, window.location.href);
   url.searchParams.set('clientId', clientId);
+  if (profile.sessionToken) url.searchParams.set('sessionToken', profile.sessionToken);
   if (profile.accountId) url.searchParams.set('accountId', profile.accountId);
   if (profile.characterName) url.searchParams.set('name', profile.characterName);
   return url.toString();
