@@ -1,15 +1,44 @@
-import type { EditorMonsterSpecOverrides, EditorMonsterSpawnRule, EditorPlacementGameplay, EditorTilePlacement, EditorWorldSave } from '../editor/types';
-import type { GameWorldMap, WorldMapMonsterSpawnRule, WorldMapPlacement, WorldMapPlacementGameplay, WorldMapSourceRect } from './types';
+import type {
+  EditorItemOverride,
+  EditorMonsterSpecOverrides,
+  EditorMonsterSpawnRule,
+  EditorPlacementGameplay,
+  EditorTilePlacement,
+  EditorWorldSave,
+} from '../editor/types';
+import type {
+  GameWorldMap,
+  WorldMapItemOverride,
+  WorldMapMonsterSpawnRule,
+  WorldMapPlacement,
+  WorldMapPlacementGameplay,
+  WorldMapSourceRect,
+} from './types';
 
 const DEFAULT_CELL_SIZE = 3000;
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 8;
 const MAX_DISPLAY_SIZE = 4096;
 const MAX_STRING_LENGTH = 512;
+const MAX_ITEM_FIELD_LENGTH = 128;
+const MAX_ITEM_OVERRIDES = 500;
+const MAX_ITEM_FIELDS = 32;
 const EDITOR_ONLY_PLACEMENT_IDS = new Set(['editor-black-base']);
 const VALID_LAYERS = new Set(['ground', 'object', 'collision']);
 const VALID_RESOURCE_TYPES = new Set(['tree', 'stone']);
 const VALID_MONSTER_TYPES = new Set(['wild_slime', 'sheep']);
+const VALID_ITEM_CATEGORIES = new Set([
+  'resource',
+  'consumable',
+  'equipment',
+  'weapon',
+  'tool',
+  'crafting_material',
+  'crafting_station',
+  'building_part',
+  'capture',
+  'pet',
+]);
 
 export function compileRuntimeWorldMap(world: EditorWorldSave): GameWorldMap {
   return {
@@ -26,6 +55,7 @@ export function compileRuntimeWorldMap(world: EditorWorldSave): GameWorldMap {
         .filter((placement): placement is WorldMapPlacement => placement !== null),
     })),
     monsterSpawnRules: compileMonsterSpawnRules(world.worldMap?.monsterSpawnRules),
+    itemOverrides: compileItemOverrides(world.worldMap?.itemOverrides),
   };
 }
 
@@ -137,6 +167,60 @@ function compileMonsterSpawnRules(rules: EditorMonsterSpawnRule[] | undefined): 
   return compiled.length > 0 ? compiled : undefined;
 }
 
+function compileItemOverrides(overrides: EditorItemOverride[] | undefined): WorldMapItemOverride[] | undefined {
+  if (!overrides || overrides.length === 0) return undefined;
+
+  const compiled: WorldMapItemOverride[] = [];
+  const seen = new Set<string>();
+
+  for (const override of overrides.slice(0, MAX_ITEM_OVERRIDES)) {
+    const id = sanitizeString(override.id, '');
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+
+    const next: WorldMapItemOverride = { id };
+    const label = sanitizeOptionalString(override.label, 96);
+    const description = sanitizeOptionalString(override.description, MAX_STRING_LENGTH);
+    const icon = sanitizeOptionalString(override.icon, 16);
+    if (label) next.label = label;
+    if (description) next.description = description;
+    if (icon) next.icon = icon;
+    if (override.category && VALID_ITEM_CATEGORIES.has(override.category)) next.category = override.category;
+    if (typeof override.stackable === 'boolean') next.stackable = override.stackable;
+    if (Number.isFinite(override.maxStack)) next.maxStack = clamp(normalizeInteger(override.maxStack as number, 1), 1, 9999);
+
+    const fields = compileItemFields(override.fields);
+    if (fields) next.fields = fields;
+
+    if (Object.keys(next).length > 1) compiled.push(next);
+  }
+
+  return compiled.length > 0 ? compiled : undefined;
+}
+
+function compileItemFields(fields: EditorItemOverride['fields']): WorldMapItemOverride['fields'] | undefined {
+  if (!fields) return undefined;
+
+  const entries = Object.entries(fields).slice(0, MAX_ITEM_FIELDS);
+  const compiled: NonNullable<WorldMapItemOverride['fields']> = {};
+
+  for (const [rawKey, value] of entries) {
+    const key = sanitizeString(rawKey, '').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 64);
+    if (!key) continue;
+
+    if (typeof value === 'boolean') {
+      compiled[key] = value;
+    } else if (typeof value === 'number' && Number.isFinite(value)) {
+      compiled[key] = Math.round(value * 1000) / 1000;
+    } else if (typeof value === 'string') {
+      const text = sanitizeOptionalString(value, MAX_ITEM_FIELD_LENGTH);
+      if (text) compiled[key] = text;
+    }
+  }
+
+  return Object.keys(compiled).length > 0 ? compiled : undefined;
+}
+
 function compileMonsterSpec(spec: EditorMonsterSpecOverrides | undefined): NonNullable<Extract<WorldMapPlacementGameplay, { kind: 'monsterSpawn' }>['spec']> | undefined {
   if (!spec) return undefined;
 
@@ -214,6 +298,12 @@ function sanitizeString(value: string | undefined, fallback: string): string {
   const trimmed = value.trim();
   if (!trimmed) return fallback;
   return trimmed.slice(0, MAX_STRING_LENGTH);
+}
+
+function sanitizeOptionalString(value: string | undefined, maxLength: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, maxLength) : undefined;
 }
 
 function isValidColor(value: number | undefined): boolean {
