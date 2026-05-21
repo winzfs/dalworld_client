@@ -5,6 +5,7 @@ import './runtimeMinimap.css';
 import './editor/monsterEditor.css';
 import { GameApp } from './game/GameApp';
 import { installCombatClientFeature } from './game/installCombatClientFeature';
+import { installStationClientFeature } from './game/installStationClientFeature';
 import { installTimeOfDayClientFeature } from './systems/timeOfDay/TimeOfDayClientFeature';
 import { installSystemLogHud } from './ui/SystemLogHud';
 import { BootOverlay, installGlobalErrorOverlay } from './utils/bootOverlay';
@@ -26,6 +27,7 @@ async function boot(): Promise<void> {
   const game = new GameApp();
   await game.start(mount);
   installCombatClientFeature(game);
+  installStationClientFeature(game);
 
   bootOverlay.remove();
 }
