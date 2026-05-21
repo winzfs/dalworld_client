@@ -20,6 +20,8 @@ export type UploadedWorldMapReport = {
     enabled: number;
     total: number;
     spawnsPerMinute: number;
+    /** @deprecated for older editor summary code. */
+    spawnsPerHour: number;
   };
 };
 
@@ -280,6 +282,7 @@ function createUploadReport(map: GameWorldMap): UploadedWorldMapReport {
 
   const rules = map.monsterSpawnRules ?? [];
   const enabledRules = rules.filter((rule) => rule.enabled);
+  const spawnsPerMinute = enabledRules.reduce((sum, rule) => sum + rule.spawnsPerMinute, 0);
 
   return {
     cells: map.cells.length,
@@ -297,7 +300,8 @@ function createUploadReport(map: GameWorldMap): UploadedWorldMapReport {
     monsterSpawnRules: {
       enabled: enabledRules.length,
       total: rules.length,
-      spawnsPerMinute: enabledRules.reduce((sum, rule) => sum + rule.spawnsPerMinute, 0),
+      spawnsPerMinute,
+      spawnsPerHour: spawnsPerMinute * 60,
     },
   };
 }
@@ -327,7 +331,7 @@ function estimateJsonBytes(value: unknown): number {
 }
 
 function withCacheBuster(url: string): string {
-  const separator = url.includes('?') ? '&' : '?';
+  const separator = url.includes('?') ? '&';
   return `${url}${separator}t=${Date.now()}`;
 }
 
