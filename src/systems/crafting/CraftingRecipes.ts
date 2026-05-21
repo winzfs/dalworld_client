@@ -17,16 +17,13 @@ const EARLY_RECIPES: CraftingRecipeDefinition[] = [
   recipe('craft:wall_kit_bundle', '벽 키트 묶음', 'early', 'material', [{ itemId: 'plank', quantity: 10 }, { itemId: 'rope', quantity: 1 }], [{ itemId: 'wall_kit', quantity: 6 }], 61, 'workbench'),
   recipe('craft:roof_kit', '지붕 키트', 'early', 'material', [{ itemId: 'plank', quantity: 2 }, { itemId: 'stone_block', quantity: 1 }], [{ itemId: 'roof_kit', quantity: 1 }], 70, 'workbench'),
   recipe('craft:roof_kit_bundle', '지붕 키트 묶음', 'early', 'material', [{ itemId: 'plank', quantity: 10 }, { itemId: 'stone_block', quantity: 5 }, { itemId: 'rope', quantity: 1 }], [{ itemId: 'roof_kit', quantity: 6 }], 71, 'workbench'),
-
   recipe('craft:workbench', '작업대', 'early', 'station', [{ itemId: 'wood', quantity: 8 }, { itemId: 'stone', quantity: 4 }], [{ itemId: 'workbench', quantity: 1 }], 100),
   recipe('craft:campfire', '모닥불', 'early', 'station', [{ itemId: 'stone', quantity: 6 }, { itemId: 'wood', quantity: 3 }], [{ itemId: 'campfire', quantity: 1 }], 110),
   recipe('craft:loom', '직조대', 'early', 'station', [{ itemId: 'plank', quantity: 6 }, { itemId: 'rope', quantity: 3 }], [{ itemId: 'loom', quantity: 1 }], 120, 'workbench'),
-
   recipe('craft:wood_pickaxe', '나무 곡괭이', 'early', 'tool', [{ itemId: 'wood', quantity: 4 }, { itemId: 'fiber', quantity: 2 }], [{ itemId: 'wood_pickaxe', quantity: 1 }], 200),
   recipe('craft:stone_pickaxe', '돌 곡괭이', 'early', 'tool', [{ itemId: 'wood', quantity: 3 }, { itemId: 'stone', quantity: 6 }, { itemId: 'rope', quantity: 1 }], [{ itemId: 'stone_pickaxe', quantity: 1 }], 210, 'workbench'),
   recipe('craft:wood_axe', '나무 도끼', 'early', 'tool', [{ itemId: 'wood', quantity: 4 }, { itemId: 'fiber', quantity: 2 }], [{ itemId: 'wood_axe', quantity: 1 }], 220),
   recipe('craft:stone_axe', '돌 도끼', 'early', 'tool', [{ itemId: 'wood', quantity: 3 }, { itemId: 'stone', quantity: 5 }, { itemId: 'rope', quantity: 1 }], [{ itemId: 'stone_axe', quantity: 1 }], 230, 'workbench'),
-
   recipe('craft:wood_sword', '나무 검', 'early', 'weapon', [{ itemId: 'wood', quantity: 5 }, { itemId: 'fiber', quantity: 2 }], [{ itemId: 'wood_sword', quantity: 1 }], 300),
   recipe('craft:stone_spear', '돌 창', 'early', 'weapon', [{ itemId: 'wood', quantity: 4 }, { itemId: 'stone', quantity: 4 }, { itemId: 'rope', quantity: 1 }], [{ itemId: 'stone_spear', quantity: 1 }], 310, 'workbench'),
   recipe('craft:basic_bow', '기초 활', 'early', 'weapon', [{ itemId: 'wood', quantity: 5 }, { itemId: 'rope', quantity: 2 }], [{ itemId: 'basic_bow', quantity: 1 }], 320, 'workbench'),
@@ -45,14 +42,12 @@ const MID_RECIPES: CraftingRecipeDefinition[] = [
   recipe('craft:stone_forge', '석재 화로', 'mid', 'station', [{ itemId: 'stone_block', quantity: 12 }, { itemId: 'coal', quantity: 4 }], [{ itemId: 'stone_forge', quantity: 1 }], 1000, 'workbench'),
   recipe('craft:advanced_workbench', '고급 작업대', 'mid', 'station', [{ itemId: 'plank', quantity: 12 }, { itemId: 'copper_ingot', quantity: 4 }, { itemId: 'stone_block', quantity: 6 }], [{ itemId: 'advanced_workbench', quantity: 1 }], 1010, 'stone_forge'),
   recipe('craft:alchemy_table', '연금 작업대', 'mid', 'station', [{ itemId: 'plank', quantity: 8 }, { itemId: 'crystal', quantity: 3 }, { itemId: 'cloth', quantity: 4 }], [{ itemId: 'alchemy_table', quantity: 1 }], 1020, 'advanced_workbench'),
-
   recipe('craft:copper_ingot', '구리 주괴', 'mid', 'material', [{ itemId: 'ore_copper', quantity: 3 }, { itemId: 'coal', quantity: 1 }], [{ itemId: 'copper_ingot', quantity: 1 }], 1100, 'stone_forge'),
   recipe('craft:copper_ingot_batch', '구리 주괴 대량 제련', 'mid', 'material', [{ itemId: 'ore_copper', quantity: 24 }, { itemId: 'coal', quantity: 6 }], [{ itemId: 'copper_ingot', quantity: 10 }], 1101, 'stone_forge'),
   recipe('craft:iron_ingot', '철 주괴', 'mid', 'material', [{ itemId: 'ore_iron', quantity: 3 }, { itemId: 'coal', quantity: 2 }], [{ itemId: 'iron_ingot', quantity: 1 }], 1110, 'stone_forge'),
   recipe('craft:iron_ingot_batch', '철 주괴 대량 제련', 'mid', 'material', [{ itemId: 'ore_iron', quantity: 24 }, { itemId: 'coal', quantity: 12 }], [{ itemId: 'iron_ingot', quantity: 10 }], 1111, 'stone_forge'),
   recipe('craft:mana_thread', '마나 실', 'mid', 'material', [{ itemId: 'fiber', quantity: 4 }, { itemId: 'ore_mana', quantity: 1 }], [{ itemId: 'mana_thread', quantity: 1 }], 1120, 'alchemy_table'),
   recipe('craft:mana_thread_spool', '마나 실타래', 'mid', 'material', [{ itemId: 'fiber', quantity: 18 }, { itemId: 'ore_mana', quantity: 5 }, { itemId: 'crystal', quantity: 1 }], [{ itemId: 'mana_thread', quantity: 6 }], 1121, 'alchemy_table'),
-
   recipe('craft:iron_pickaxe', '철 곡괭이', 'mid', 'tool', [{ itemId: 'iron_ingot', quantity: 4 }, { itemId: 'plank', quantity: 3 }, { itemId: 'rope', quantity: 2 }], [{ itemId: 'iron_pickaxe', quantity: 1 }], 1200, 'advanced_workbench'),
   recipe('craft:iron_axe', '철 도끼', 'mid', 'tool', [{ itemId: 'iron_ingot', quantity: 4 }, { itemId: 'plank', quantity: 3 }, { itemId: 'rope', quantity: 2 }], [{ itemId: 'iron_axe', quantity: 1 }], 1210, 'advanced_workbench'),
   recipe('craft:iron_sword', '철 검', 'mid', 'weapon', [{ itemId: 'iron_ingot', quantity: 5 }, { itemId: 'plank', quantity: 2 }, { itemId: 'hide', quantity: 2 }], [{ itemId: 'iron_sword', quantity: 1 }], 1300, 'advanced_workbench'),
@@ -81,18 +76,22 @@ const LATE_RECIPES: CraftingRecipeDefinition[] = [
   recipe('craft:capture_orb_elite_pack', '엘리트 포획구 꾸러미', 'late', 'capture', [{ itemId: 'capture_orb_refined', quantity: 5 }, { itemId: 'energy_cell', quantity: 4 }, { itemId: 'ancient_core', quantity: 3 }], [{ itemId: 'capture_orb_elite', quantity: 5 }], 2401, 'energy_assembler'),
 ];
 
-const BUILD_PART_RECIPES: CraftingRecipeDefinition[] = BUILD_PART_LIST.map((part, index): CraftingRecipeDefinition => ({
-  id: `craft:build_part:${part.id}`,
-  label: `${part.label} 제작`,
-  description: '건설 모드에서 배치할 수 있는 건설 부품을 제작합니다.',
-  tier: part.id.includes('stone') ? 'mid' : 'early',
-  category: getBuildPartRecipeCategory(part.category),
-  inputs: part.placementCost,
-  outputs: [{ itemId: createBuildPartItemId(part.id), quantity: 1 }],
-  requiredStation: part.id.includes('stone') ? 'advanced_workbench' : 'workbench',
-  craftSeconds: 1,
-  sortOrder: 3000 + index,
-}));
+const BUILD_PART_RECIPES: CraftingRecipeDefinition[] = BUILD_PART_LIST.map((part, index): CraftingRecipeDefinition => {
+  const tier: CraftingTier = part.id.includes('stone') ? 'mid' : 'early';
+  const category = getBuildPartRecipeCategory(part.category);
+  return {
+    id: `craft:build_part:${part.id}`,
+    label: `${part.label} 제작`,
+    description: '건설 모드에서 배치할 수 있는 건설 부품을 제작합니다.',
+    tier,
+    category,
+    inputs: part.placementCost,
+    outputs: [{ itemId: createBuildPartItemId(part.id), quantity: 1 }],
+    requiredStation: part.id.includes('stone') ? 'advanced_workbench' : 'workbench',
+    craftSeconds: getCraftSeconds(tier, category, `craft:build_part:${part.id}`),
+    sortOrder: 3000 + index,
+  };
+});
 
 export const CRAFTING_RECIPES: CraftingRecipeDefinition[] = [
   ...EARLY_RECIPES,
@@ -124,7 +123,7 @@ function recipe(
     inputs,
     outputs,
     requiredStation,
-    craftSeconds: getCraftSeconds(tier),
+    craftSeconds: getCraftSeconds(tier, category, id),
     sortOrder,
   };
 }
@@ -152,15 +151,54 @@ function getRecipeDescription(tier: CraftingTier, category: CraftingRecipeCatego
   return `${getTierLabel(tier)} ${getCategoryLabel(category)} 제작법입니다.`;
 }
 
-function getCraftSeconds(tier: CraftingTier): number {
+function getCraftSeconds(tier: CraftingTier, category: CraftingRecipeCategory, recipeId: string): number {
+  const base = getTierBaseCraftSeconds(tier);
+  const categoryMultiplier = getCategoryCraftMultiplier(category);
+  const batchMultiplier = isBatchRecipe(recipeId) ? 1.75 : 1;
+  return roundCraftSeconds(base * categoryMultiplier * batchMultiplier);
+}
+
+function getTierBaseCraftSeconds(tier: CraftingTier): number {
   switch (tier) {
     case 'early':
-      return 1;
+      return 1.2;
     case 'mid':
-      return 2;
+      return 3;
     case 'late':
-      return 4;
+      return 6;
   }
+}
+
+function getCategoryCraftMultiplier(category: CraftingRecipeCategory): number {
+  switch (category) {
+    case 'material':
+      return 0.75;
+    case 'consumable':
+      return 0.8;
+    case 'building_floor':
+    case 'building_wall':
+    case 'building_support':
+    case 'building_roof':
+    case 'building_door':
+    case 'building_window':
+      return 0.9;
+    case 'tool':
+    case 'weapon':
+    case 'equipment':
+      return 1.25;
+    case 'capture':
+      return 1.35;
+    case 'station':
+      return 1.6;
+  }
+}
+
+function isBatchRecipe(recipeId: string): boolean {
+  return recipeId.includes('bundle') || recipeId.includes('batch') || recipeId.includes('pack') || recipeId.includes('roll') || recipeId.includes('spool');
+}
+
+function roundCraftSeconds(value: number): number {
+  return Math.max(0.5, Math.round(value * 10) / 10);
 }
 
 function getTierLabel(tier: CraftingTier): string {
