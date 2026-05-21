@@ -40,8 +40,12 @@ async function boot(): Promise<void> {
   await game.start(mount);
 
   if (editorMode) {
-    installItemEditorFeature(document.body);
     bootOverlay.remove();
+    try {
+      installItemEditorFeature(document.body);
+    } catch (error) {
+      console.warn('[Editor] Optional item editor feature failed to install.', error);
+    }
     return;
   }
 
