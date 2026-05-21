@@ -53,7 +53,8 @@ export type BuildPartId =
   | "door"
   | "stone_door"
   | "window"
-  | "wide_window";
+  | "wide_window"
+  | "station_workbench";
 
 export type BuildCategory =
   | "floor"
