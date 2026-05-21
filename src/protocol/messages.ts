@@ -144,7 +144,7 @@ export type CraftingRejectedEvent = {
   reason: string;
 };
 
-export type CraftingServerEvent = CraftingStartedEvent | CraftingCompletedEvent | CraftingRejectedEvent;
+export type CraftingServerEvent = CraftingCompletedEvent | CraftingRejectedEvent;
 
 export type CombatAttackConfirmedEvent = {
   type: 'COMBAT_ATTACK_CONFIRMED';
