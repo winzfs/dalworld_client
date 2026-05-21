@@ -1,18 +1,6 @@
 import './style.css';
-import './timeOfDay.css';
-import './combat.css';
-import './runtimeMinimap.css';
-import './questTracker.css';
-import './questStory.css';
 import './editor/monsterEditor.css';
 import './ui/gameWindowsGlobalHelpers';
-import { GameApp } from './game/GameApp';
-import { installCombatClientFeature } from './game/installCombatClientFeature';
-import { installStationClientFeature } from './game/installStationClientFeature';
-import { installItemEditorFeature } from './editor/ItemEditorFeature';
-import { installTimeOfDayClientFeature } from './systems/timeOfDay/TimeOfDayClientFeature';
-import { installSystemLogHud } from './ui/SystemLogHud';
-import { showStartScreen } from './ui/StartScreen';
 import { BootOverlay, installGlobalErrorOverlay } from './utils/bootOverlay';
 import { EditorBootProbe } from './utils/editorBootProbe';
 import { isEditorEnabled } from './utils/editorMode';
@@ -32,22 +20,24 @@ async function boot(): Promise<void> {
   }
   probe?.log('#app mount found');
 
-  const profile = editorMode
-    ? undefined
-    : await showStartScreen(document.body);
-  probe?.log(editorMode ? 'start screen skipped for editor mode' : 'start screen completed');
-
-  bootOverlay.setMessage(editorMode ? 'Starting map editor...' : 'Starting Pixi.js application...');
-
-  if (!editorMode) {
-    installTimeOfDayClientFeature(document.body);
-    installSystemLogHud(document.body);
-  } else {
-    probe?.log('game-only global HUD installers skipped');
+  if (editorMode) {
+    await bootEditor(mount, probe);
+    return;
   }
 
+  await bootGame(mount);
+}
+
+async function bootEditor(mount: HTMLElement, probe: EditorBootProbe | null): Promise<void> {
+  probe?.log('loading GameApp for editor mode');
+  const [{ GameApp }, { installItemEditorFeature }] = await Promise.all([
+    import('./game/GameApp'),
+    import('./editor/ItemEditorFeature'),
+  ]);
+
+  bootOverlay.setMessage('Starting map editor...');
   probe?.log('creating GameApp');
-  const game = new GameApp(profile);
+  const game = new GameApp();
   probe?.log('GameApp created');
 
   probe?.log('starting GameApp');
@@ -57,20 +47,54 @@ async function boot(): Promise<void> {
   bootOverlay.remove();
   probe?.log('BootOverlay removed');
 
-  if (editorMode) {
-    try {
-      probe?.log('installing optional ItemEditorFeature');
-      installItemEditorFeature(document.body);
-      probe?.log('ItemEditorFeature installed');
-    } catch (error) {
-      probe?.error(error);
-      console.warn('[Editor] Optional item editor feature failed to install.', error);
-    }
-    return;
+  try {
+    probe?.log('installing optional ItemEditorFeature');
+    installItemEditorFeature(document.body);
+    probe?.log('ItemEditorFeature installed');
+  } catch (error) {
+    probe?.error(error);
+    console.warn('[Editor] Optional item editor feature failed to install.', error);
   }
+}
 
+async function bootGame(mount: HTMLElement): Promise<void> {
+  await Promise.all([
+    import('./timeOfDay.css'),
+    import('./combat.css'),
+    import('./runtimeMinimap.css'),
+    import('./questTracker.css'),
+    import('./questStory.css'),
+  ]);
+
+  const [
+    { GameApp },
+    { installCombatClientFeature },
+    { installStationClientFeature },
+    { installTimeOfDayClientFeature },
+    { installSystemLogHud },
+    { showStartScreen },
+  ] = await Promise.all([
+    import('./game/GameApp'),
+    import('./game/installCombatClientFeature'),
+    import('./game/installStationClientFeature'),
+    import('./systems/timeOfDay/TimeOfDayClientFeature'),
+    import('./ui/SystemLogHud'),
+    import('./ui/StartScreen'),
+  ]);
+
+  bootOverlay.remove();
+  const profile = await showStartScreen(document.body);
+
+  bootOverlay.setMessage('Starting Pixi.js application...');
+  installTimeOfDayClientFeature(document.body);
+  installSystemLogHud(document.body);
+
+  const game = new GameApp(profile);
+  await game.start(mount);
   installCombatClientFeature(game);
   installStationClientFeature(game);
+
+  bootOverlay.remove();
 }
 
 boot().catch((error: unknown) => {
