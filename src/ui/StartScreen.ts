@@ -28,7 +28,7 @@ type AuthFailure = {
 
 type AuthResult = AuthSuccess | AuthFailure;
 
-export type StartScreenResult = Required<Pick<GameConnectionProfile, 'accountId' | 'characterName'>>;
+export type StartScreenResult = Required<Pick<GameConnectionProfile, 'sessionToken' | 'accountId' | 'characterName'>>;
 
 export async function showStartScreen(parent: HTMLElement): Promise<StartScreenResult> {
   const overlay = document.createElement('div');
@@ -121,7 +121,7 @@ export async function showStartScreen(parent: HTMLElement): Promise<StartScreenR
       if (step === 'character') characterNameInput?.focus();
     };
 
-    const finish = (profile: AuthUserProfile) => {
+    const finish = (profile: AuthUserProfile, token = currentToken) => {
       const character = profile.character;
       if (!character) {
         currentProfile = profile;
@@ -131,7 +131,7 @@ export async function showStartScreen(parent: HTMLElement): Promise<StartScreenR
 
       saveLastUsername(profile.username);
       overlay.remove();
-      resolve({ accountId: profile.accountId, characterName: character.name });
+      resolve({ sessionToken: token, accountId: profile.accountId, characterName: character.name });
     };
 
     overlay.addEventListener('click', (event) => {
@@ -184,7 +184,7 @@ export async function showStartScreen(parent: HTMLElement): Promise<StartScreenR
       }
       currentToken = result.token;
       currentProfile = result.profile;
-      finish(result.profile);
+      finish(result.profile, result.token);
     }
 
     async function submitRegister(): Promise<void> {
@@ -205,7 +205,7 @@ export async function showStartScreen(parent: HTMLElement): Promise<StartScreenR
       }
       currentToken = result.token;
       currentProfile = result.profile;
-      finish(result.profile);
+      finish(result.profile, result.token);
     }
 
     async function submitCharacter(): Promise<void> {
@@ -224,7 +224,7 @@ export async function showStartScreen(parent: HTMLElement): Promise<StartScreenR
         setMessage(characterMessage, result.reason);
         return;
       }
-      finish(result.profile);
+      finish(result.profile, result.token);
     }
   });
 }
