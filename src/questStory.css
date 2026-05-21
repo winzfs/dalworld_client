@@ -1,0 +1,138 @@
+#dalworld-quest-story {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  box-sizing: border-box;
+  pointer-events: auto;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#dalworld-quest-story[hidden] {
+  display: none !important;
+}
+
+.quest-story__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255, 232, 180, 0.1), transparent 34%),
+    rgba(0, 0, 0, 0.48);
+  animation: quest-story-scrim-in 240ms ease-out both;
+}
+
+.quest-story__card {
+  position: relative;
+  width: min(560px, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid rgba(255, 232, 180, 0.36);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(46, 34, 24, 0.96), rgba(14, 20, 25, 0.94));
+  color: #f7f0dd;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.62);
+  animation: quest-story-card-in 360ms cubic-bezier(.2, .9, .22, 1) both;
+}
+
+.quest-story__eyebrow {
+  margin-bottom: 10px;
+  color: #55d6be;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+}
+
+.quest-story__card h2 {
+  margin: 0 0 12px;
+  color: #ffe4a3;
+  font-size: clamp(26px, 5vw, 40px);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+}
+
+.quest-story__card p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.65;
+}
+
+.quest-story__hint {
+  display: block;
+  margin-top: 18px;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 12px;
+  font-weight: 850;
+  text-align: right;
+}
+
+.quest-story--wake .quest-story__card {
+  border-color: rgba(85, 214, 190, 0.44);
+}
+
+.quest-story--build .quest-story__card {
+  border-color: rgba(255, 209, 102, 0.48);
+}
+
+.quest-story--focus .quest-story__card {
+  border-color: rgba(126, 231, 255, 0.4);
+}
+
+.quest-story--danger .quest-story__card {
+  border-color: rgba(239, 71, 111, 0.5);
+}
+
+body.quest-camera-wake canvas,
+body.quest-camera-focus canvas,
+body.quest-camera-build canvas,
+body.quest-camera-danger canvas {
+  animation: quest-camera-pulse 520ms ease-out both;
+}
+
+body.quest-camera-danger canvas {
+  animation-name: quest-camera-danger-pulse;
+}
+
+@keyframes quest-story-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes quest-story-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes quest-camera-pulse {
+  0% { filter: brightness(1) saturate(1); transform: scale(1); }
+  35% { filter: brightness(1.14) saturate(1.12); transform: scale(1.012); }
+  100% { filter: brightness(1) saturate(1); transform: scale(1); }
+}
+
+@keyframes quest-camera-danger-pulse {
+  0% { filter: brightness(1) saturate(1); transform: scale(1); }
+  35% { filter: brightness(0.88) saturate(1.28); transform: scale(1.012); }
+  100% { filter: brightness(1) saturate(1); transform: scale(1); }
+}
+
+@media (max-width: 720px) {
+  #dalworld-quest-story {
+    padding: 16px;
+  }
+
+  .quest-story__card {
+    padding: 20px;
+  }
+
+  .quest-story__card p {
+    font-size: 14px;
+  }
+}
