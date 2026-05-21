@@ -1,6 +1,6 @@
 # DalWorld Client Architecture Guide
 
-Last updated: 2026-05-20
+Last updated: 2026-05-21
 
 이 문서는 DalWorld 클라이언트의 전체 구조를 설명한다.
 AI 작업자는 새 기능을 추가하기 전에 이 문서를 기준으로 어느 계층을 수정해야 하는지 판단한다.
@@ -21,6 +21,7 @@ AI 작업자는 새 기능을 추가하기 전에 이 문서를 기준으로 어
 - 서버 snapshot/event 반영
 - 월드맵 렌더링
 - 맵 에디터
+- 맵 에디터 탭별 저장 요청
 - 건설 미리보기
 - 건설 드래프트 편집
 
@@ -49,6 +50,25 @@ User Input
   -> SnapshotSystem / Renderers / UI
 ```
 
+맵 에디터 저장 흐름:
+
+```txt
+Tiles tab 저장
+  -> compileRuntimeWorldMap(world)
+  -> uploadWorldMap(world)
+  -> /maps/default/cell
+  -> /maps/default/manifest
+
+Monsters tab 저장
+  -> EditorTabServerSaves.saveMonsterTabToServer()
+  -> /maps/default/monsters
+
+Items tab 저장
+  -> ItemEditorStorage.loadEditorItemOverrides()
+  -> EditorTabServerSaves.saveItemTabToServer()
+  -> /maps/default/items
+```
+
 ## 3. 주요 계층
 
 ### 3.1 Entry
@@ -56,6 +76,7 @@ User Input
 - `src/main.ts`
 
 브라우저 진입점이다. GameApp을 생성하고 DOM에 mount한다.
+`?editor=1`에서는 맵 에디터와 Items 탭 보조 기능을 활성화한다.
 
 ### 3.2 Game assembly
 
@@ -97,6 +118,7 @@ Pixi DisplayObject를 생성하고 업데이트한다.
 
 HUD, 창, 버튼 등 DOM 또는 UI 레이어를 담당한다.
 게임 판정을 확정하지 않는다.
+인벤토리/제작 UI는 `ItemRuntimeOverrides`를 통해 서버 월드맵에서 내려온 아이템 표시 override를 반영한다.
 
 ### 3.8 Building
 
@@ -111,6 +133,15 @@ HUD, 창, 버튼 등 DOM 또는 UI 레이어를 담당한다.
 
 `?editor=1`에서만 활성화되는 월드맵 편집 기능이다.
 일반 게임 모드와 입력/UI를 섞지 않는다.
+
+관련 주요 파일:
+
+- `src/editor/MapEditor.ts`: 에디터 조립, 셀 드래프트, Tiles 저장 흐름
+- `src/editor/TilesetPanel.ts`: Tiles/Monsters 탭 UI
+- `src/editor/EditorTabServerSaves.ts`: Monsters/Items 탭 서버 저장 보조
+- `src/editor/ItemEditorFeature.ts`: Items 탭 UI 설치와 편집 UI
+- `src/editor/ItemEditorStorage.ts`: Items 탭 로컬 override 저장소
+- `src/worldMap/uploadWorldMap.ts`: 셀/manifest/monsters/items 업로드 함수
 
 ## 4. GameApp 분리 기준
 
@@ -166,6 +197,33 @@ HUD, 창, 버튼 등 DOM 또는 UI 레이어를 담당한다.
 - 일반 게임 모드와 에디터 모드의 입력을 섞지 않는다.
 - 저장 API는 서버의 `/maps/default` 계열 엔드포인트와 맞춰야 한다.
 - 대형 맵을 고려해 셀 기반 구조를 유지한다.
+- payload 실패 범위를 줄이기 위해 탭별 저장을 사용한다.
+
+### 탭별 저장 정책
+
+```txt
+Tiles 저장
+  -> 맵 배치/cell/manifest만 서버 저장
+  -> /maps/default/cell
+  -> /maps/default/manifest
+
+Monsters 저장
+  -> monsterSpawnRules만 서버 저장
+  -> /maps/default/monsters
+
+Items 저장
+  -> itemOverrides만 서버 저장
+  -> /maps/default/items
+```
+
+`uploadWorldMap()`은 더 이상 monster rules와 item overrides를 manifest에 함께 묶지 않는다.
+몬스터와 아이템은 `EditorTabServerSaves.ts`를 통해 각각 작은 payload로 저장한다.
+
+### Items 탭 원칙
+
+Items 탭은 에디터 패널에 보조 탭으로 설치된다.
+편집값은 `ItemEditorStorage`에 로컬 백업되고, `서버 저장` 버튼을 누를 때 `/maps/default/items`로 업로드한다.
+서버에서 다시 받은 월드맵의 `itemOverrides`는 `runtimeMapStore`를 통해 `ItemRuntimeOverrides`에 적용된다.
 
 ## 8. 프로토콜 변경 원칙
 
@@ -220,6 +278,20 @@ HUD, 창, 버튼 등 DOM 또는 UI 레이어를 담당한다.
 
 - 클라이언트에만 partId 추가
 - 서버 검증 없이 렌더링만 추가
+
+### 에디터 탭 저장 추가
+
+권장 위치:
+
+- 탭 UI: `src/editor/*`
+- 서버 저장 helper: `src/editor/EditorTabServerSaves.ts`
+- HTTP 업로드 함수: `src/worldMap/uploadWorldMap.ts`
+- 서버 endpoint: `dalworld_server/src/rooms/GameRoom.ts` 또는 향후 `WorldMapStorageService`
+
+피해야 할 것:
+
+- 대형 맵 payload에 모든 설정을 계속 묶기
+- 클라이언트 로컬 저장만 하고 서버 런타임 반영을 누락하기
 
 ## 10. 작업 체크리스트
 
