@@ -227,6 +227,12 @@ export class GameApp {
       : null;
   }
 
+  beginStationBuildPlacement(partId: BuildPartId): void {
+    this.setBuildingGridVisible(true);
+    this.buildingModeState.enter(partId);
+    this.beginNewBuildingDraft(partId);
+  }
+
   async start(mount: HTMLElement): Promise<void> {
     document.body.classList.toggle('is-map-editor-mode', this.editorMode);
 
