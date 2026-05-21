@@ -34,8 +34,6 @@ type WorldMapManifest = {
   tileSize: number;
   cellSize: number;
   cells: Array<{ gridX: number; gridY: number }>;
-  monsterSpawnRules?: WorldMapMonsterSpawnRule[];
-  itemOverrides?: WorldMapItemOverride[];
 };
 
 type CompactWorldMapAsset = Omit<WorldMapPlacement, 'id' | 'x' | 'y' | 'layer' | 'scale'>;
@@ -68,11 +66,11 @@ export async function uploadWorldMap(world: EditorWorldSave): Promise<UploadedWo
 
   try {
     const verified = await fetchWorldMap(getServerHttpPath('/maps/default'));
-    const expectedSignature = createMapSignature(payload);
-    const actualSignature = createMapSignature(verified);
+    const expectedSignature = createMapOnlySignature(payload);
+    const actualSignature = createMapOnlySignature(verified);
 
     if (expectedSignature !== actualSignature) {
-      console.warn('[WorldMap] Upload verification mismatch after successful chunk upload.', {
+      console.warn('[WorldMap] Map upload verification mismatch after successful chunk upload.', {
         expectedSignature,
         actualSignature,
         report,
@@ -84,13 +82,21 @@ export async function uploadWorldMap(world: EditorWorldSave): Promise<UploadedWo
       });
     }
   } catch (error) {
-    console.warn('[WorldMap] Upload succeeded, but post-upload verification failed.', {
+    console.warn('[WorldMap] Map upload succeeded, but post-upload verification failed.', {
       error,
       report,
     });
   }
 
   return report;
+}
+
+export async function uploadMonsterSpawnRules(rules: WorldMapMonsterSpawnRule[]): Promise<void> {
+  await putJsonWithRetry(getServerHttpPath('/maps/default/monsters'), rules, 'monster spawn rules');
+}
+
+export async function uploadItemOverrides(overrides: WorldMapItemOverride[]): Promise<void> {
+  await putJsonWithRetry(getServerHttpPath('/maps/default/items'), overrides, 'item overrides');
 }
 
 async function uploadWorldMapByCell(map: GameWorldMap): Promise<void> {
@@ -109,8 +115,6 @@ async function uploadWorldMapByCell(map: GameWorldMap): Promise<void> {
     tileSize: map.tileSize,
     cellSize: map.cellSize,
     cells: map.cells.map((cell) => ({ gridX: cell.gridX, gridY: cell.gridY })),
-    monsterSpawnRules: map.monsterSpawnRules,
-    itemOverrides: map.itemOverrides,
   };
 
   await putJsonWithRetry(getServerHttpPath('/maps/default/manifest'), manifest, 'manifest');
@@ -241,23 +245,15 @@ async function fetchWorldMap(url: string): Promise<GameWorldMap | null> {
   return await response.json() as GameWorldMap | null;
 }
 
-function createMapSignature(map: GameWorldMap | null | undefined): string {
+function createMapOnlySignature(map: GameWorldMap | null | undefined): string {
   if (!map) return 'null';
 
   const cells = map.cells
     .map((cell) => `${cell.gridX}:${cell.gridY}:${cell.placements.length}:${createCellSignature(cell)}`)
     .sort()
     .join('|');
-  const rules = (map.monsterSpawnRules ?? [])
-    .map((rule) => `${rule.id}:${rule.enabled}:${rule.monsterType}:${rule.scope}:${rule.maxAlive}:${rule.spawnsPerMinute}`)
-    .sort()
-    .join('|');
-  const itemOverrides = (map.itemOverrides ?? [])
-    .map((override) => `${override.id}:${stableStringify(override)}`)
-    .sort()
-    .join('|');
 
-  return `${map.version}:${map.name}:${map.tileSize}:${map.cellSize}:${cells}:${rules}:${itemOverrides}`;
+  return `${map.version}:${map.name}:${map.tileSize}:${map.cellSize}:${cells}`;
 }
 
 function createCellSignature(cell: WorldMapCell): string {
