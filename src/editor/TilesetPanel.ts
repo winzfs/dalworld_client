@@ -9,6 +9,11 @@ import type {
 } from './types';
 import { EditorState, BLACK_SOLID_ASSET } from './EditorState';
 import { MonsterSpawnControls } from './MonsterSpawnControls';
+import {
+  EDITOR_MONSTER_STAT_LABELS,
+  getEditorMonsterDefaultStats,
+  type EditorMonsterDefaultStats,
+} from './MonsterDefaultStats';
 
 export type TilesetPanelActions = {
   onSave: () => void;
@@ -36,9 +41,18 @@ const MONSTER_OPTIONS: Array<{ id: EditorMonsterType; label: string; color: numb
 
 const GRID_SIZE_OPTIONS = [16, 32, 64];
 const MONSTER_CATEGORY_ID = 'monsters';
+const SPEC_KEYS: Array<keyof EditorMonsterDefaultStats> = [
+  'maxHp',
+  'moveSpeed',
+  'detectRange',
+  'loseRange',
+  'attackRange',
+  'attackDamage',
+  'attackCooldownMs',
+];
+
 type PanelTab = 'tiles' | 'monsters';
 type MonsterRegionSpawnDefaults = Extract<EditorPlacementGameplay, { kind: 'monsterSpawn' }>;
-
 type SpecKey = keyof EditorMonsterSpecOverrides;
 
 export class TilesetPanel {
@@ -347,6 +361,7 @@ export class TilesetPanel {
 
     this.monsterEditorContainer.append(
       this.createMonsterSelect(),
+      this.createDefaultStatsSection(),
       this.createMonsterSection('전체맵 스폰', [
         this.createCheckboxField('전체맵에 스폰', worldRule.enabled, (checked) => {
           this.patchSelectedWorldRule({ enabled: checked });
@@ -373,7 +388,7 @@ export class TilesetPanel {
         }),
         this.createSpawnRegionButton(selectedOption),
       ], '버튼을 누른 뒤 맵에 클릭하면 해당 몬스터 스폰지역이 배치됩니다.'),
-      this.createMonsterSection('몬스터 스펙', [
+      this.createMonsterSection('몬스터 스펙 오버라이드', [
         this.createSpecField('HP', 'maxHp'),
         this.createSpecField('이동속도', 'moveSpeed'),
         this.createSpecField('감지범위', 'detectRange'),
@@ -381,7 +396,7 @@ export class TilesetPanel {
         this.createSpecField('공격범위', 'attackRange'),
         this.createSpecField('공격력', 'attackDamage'),
         this.createSpecField('공격쿨(ms)', 'attackCooldownMs'),
-      ], '비워두면 서버 몬스터 기본값을 사용합니다. 입력한 값은 전체스폰과 새로 배치하는 스폰지역에 같이 적용됩니다.'),
+      ], '비워두면 위의 서버 기본 스펙을 사용합니다. 입력한 값은 전체스폰과 새로 배치하는 스폰지역에 같이 적용됩니다.'),
     );
   }
 
@@ -442,6 +457,26 @@ export class TilesetPanel {
     }
 
     return list;
+  }
+
+  private createDefaultStatsSection(): HTMLElement {
+    const stats = getEditorMonsterDefaultStats(this.selectedMonsterType);
+    const rows = SPEC_KEYS.map((key) => this.createDefaultStatRow(key, stats[key]));
+    return this.createMonsterSection('서버 기본 스펙', rows, '서버 MonsterDefinitions 기준 표시값입니다. 실제 판정은 서버가 확정합니다.');
+  }
+
+  private createDefaultStatRow(key: keyof EditorMonsterDefaultStats, value: number): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'map-editor-monster-default-stat';
+
+    const label = document.createElement('span');
+    label.textContent = EDITOR_MONSTER_STAT_LABELS[key];
+
+    const number = document.createElement('b');
+    number.textContent = String(value);
+
+    row.append(label, number);
+    return row;
   }
 
   private createMonsterSection(titleText: string, children: HTMLElement[], noteText?: string): HTMLElement {
@@ -508,8 +543,9 @@ export class TilesetPanel {
 
   private createSpecField(labelText: string, key: SpecKey): HTMLElement {
     const value = this.getSelectedSpec()[key];
+    const defaultValue = getEditorMonsterDefaultStats(this.selectedMonsterType)[key as keyof EditorMonsterDefaultStats];
     const label = document.createElement('label');
-    label.className = 'map-editor-monster-field';
+    label.className = 'map-editor-monster-field map-editor-monster-spec-field';
 
     const span = document.createElement('span');
     span.textContent = labelText;
@@ -518,8 +554,9 @@ export class TilesetPanel {
     input.type = 'number';
     input.min = '1';
     input.step = '1';
-    input.placeholder = '기본값';
+    input.placeholder = `기본 ${defaultValue}`;
     input.value = value === undefined ? '' : String(value);
+    input.title = `비우면 서버 기본값 ${defaultValue} 사용`;
     input.onchange = () => {
       const raw = input.value.trim();
       const nextSpec = { ...this.getSelectedSpec() };
@@ -528,7 +565,11 @@ export class TilesetPanel {
       this.patchSelectedSpec(Object.keys(nextSpec).length > 0 ? nextSpec : undefined);
     };
 
-    label.append(span, input);
+    const hint = document.createElement('small');
+    hint.className = 'map-editor-monster-default-hint';
+    hint.textContent = `기본 ${defaultValue}`;
+
+    label.append(span, input, hint);
     return label;
   }
 
