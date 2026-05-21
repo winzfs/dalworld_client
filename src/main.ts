@@ -6,6 +6,7 @@ import './editor/monsterEditor.css';
 import { GameApp } from './game/GameApp';
 import { installCombatClientFeature } from './game/installCombatClientFeature';
 import { installStationClientFeature } from './game/installStationClientFeature';
+import { installItemEditorFeature } from './editor/ItemEditorFeature';
 import { installTimeOfDayClientFeature } from './systems/timeOfDay/TimeOfDayClientFeature';
 import { installSystemLogHud } from './ui/SystemLogHud';
 import { BootOverlay, installGlobalErrorOverlay } from './utils/bootOverlay';
@@ -26,10 +27,15 @@ async function boot(): Promise<void> {
   bootOverlay.setMessage('Starting Pixi.js application...');
   const game = new GameApp();
   await game.start(mount);
+  if (isEditorEnabled()) installItemEditorFeature(document.body);
   installCombatClientFeature(game);
   installStationClientFeature(game);
 
   bootOverlay.remove();
+}
+
+function isEditorEnabled(): boolean {
+  return new URLSearchParams(window.location.search).get('editor') === '1';
 }
 
 boot().catch((error: unknown) => {
