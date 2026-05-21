@@ -4,6 +4,7 @@ import {
   type ItemCategory,
   type ItemDefinition,
 } from '../systems/inventory/ItemDefinitions';
+import { loadEditorItemOverrides, saveEditorItemOverrides } from './ItemEditorStorage';
 import type { EditorItemOverride } from './types';
 
 const PANEL_SELECTOR = '.map-editor-panel';
@@ -26,11 +27,6 @@ type FieldDefinition = {
   max?: number;
   step?: number;
   note?: string;
-};
-
-type ItemEditorController = {
-  getItemOverrides(): EditorItemOverride[];
-  setItemOverrides(overrides: EditorItemOverride[]): void;
 };
 
 const CATEGORY_OPTIONS: ItemCategoryOption[] = [
@@ -101,8 +97,8 @@ const CATEGORY_FIELDS: Record<ItemCategory, FieldDefinition[]> = {
   ],
 };
 
-export function installItemEditorFeature(controller: ItemEditorController, root: HTMLElement = document.body): void {
-  const feature = new ItemEditorFeature(controller, root);
+export function installItemEditorFeature(root: HTMLElement = document.body): void {
+  const feature = new ItemEditorFeature(root);
   feature.start();
 }
 
@@ -113,10 +109,7 @@ class ItemEditorFeature {
   private selectedItemId: InventoryItemId = getAllItems()[0]?.id ?? 'wood';
   private observer: MutationObserver | null = null;
 
-  constructor(
-    private readonly controller: ItemEditorController,
-    private readonly root: HTMLElement,
-  ) {
+  constructor(private readonly root: HTMLElement) {
     this.container.className = 'map-editor-item-editor';
   }
 
@@ -298,7 +291,7 @@ class ItemEditorFeature {
     const itemDef = this.getEffectiveDefinition(this.selectedItemId);
     const fields = CATEGORY_FIELDS[itemDef.category] ?? [];
     const children = fields.map((field) => this.createCategoryField(field));
-    return this.createSection(`${getCategoryLabel(itemDef.category)} 전용 기능`, children, '서버는 이 값을 world map itemOverrides로 수신합니다. 실제 판정 적용은 각 시스템에서 필요한 필드만 참조합니다.');
+    return this.createSection(`${getCategoryLabel(itemDef.category)} 전용 기능`, children, '서버는 이 값을 world map itemOverrides로 수신합니다. 현재 서버 제작 시간은 제작 건물의 craftSpeedMultiplier를 반영합니다.');
   }
 
   private createCategoryField(field: FieldDefinition): HTMLElement {
@@ -326,14 +319,14 @@ class ItemEditorFeature {
     const copyButton = document.createElement('button');
     copyButton.type = 'button';
     copyButton.textContent = 'JSON 복사';
-    copyButton.onclick = () => void navigator.clipboard?.writeText(JSON.stringify(this.controller.getItemOverrides(), null, 2));
+    copyButton.onclick = () => void navigator.clipboard?.writeText(JSON.stringify(loadEditorItemOverrides(), null, 2));
 
     const resetButton = document.createElement('button');
     resetButton.type = 'button';
     resetButton.textContent = '선택 초기화';
     resetButton.className = 'is-danger';
     resetButton.onclick = () => {
-      this.controller.setItemOverrides(this.controller.getItemOverrides().filter((override) => override.id !== this.selectedItemId));
+      saveEditorItemOverrides(loadEditorItemOverrides().filter((override) => override.id !== this.selectedItemId));
       this.render();
     };
 
@@ -444,17 +437,17 @@ class ItemEditorFeature {
   }
 
   private upsertOverride(next: EditorItemOverride): void {
-    const overrides = this.controller.getItemOverrides();
+    const overrides = loadEditorItemOverrides();
     const index = overrides.findIndex((override) => override.id === next.id);
     const updated = index >= 0
       ? overrides.map((override, i) => (i === index ? next : override))
       : [...overrides, next];
-    this.controller.setItemOverrides(updated);
+    saveEditorItemOverrides(updated);
     this.render();
   }
 
   private getSelectedOverride(): EditorItemOverride {
-    return this.controller.getItemOverrides().find((override) => override.id === this.selectedItemId) ?? { id: this.selectedItemId };
+    return loadEditorItemOverrides().find((override) => override.id === this.selectedItemId) ?? { id: this.selectedItemId };
   }
 
   private getFilteredItems(): ItemDefinition[] {
@@ -465,7 +458,7 @@ class ItemEditorFeature {
 
   private getEffectiveDefinition(itemId: InventoryItemId): ItemDefinition {
     const base = getAllItems().find((item) => item.id === itemId) ?? getAllItems()[0];
-    const override = this.controller.getItemOverrides().find((item) => item.id === itemId);
+    const override = loadEditorItemOverrides().find((item) => item.id === itemId);
     return {
       ...base,
       label: override?.label ?? base.label,
