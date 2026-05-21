@@ -43,6 +43,9 @@ import { getActiveCell } from '../worldMap/activeCellStore';
 import { getRuntimeWorldMap } from '../worldMap/runtimeMapStore';
 
 const INPUT_SEND_HZ = 30;
+const HUD_UPDATE_INTERVAL_SECONDS = 1 / 12;
+const MINIMAP_UPDATE_INTERVAL_SECONDS = 1 / 6;
+const OCCLUSION_UPDATE_INTERVAL_SECONDS = 1 / 10;
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const DEFAULT_GAMEPLAY: PublicGameplayConfig = { playerRadius: 18, playerSpeed: 220, gatherRange: 80 };
 const CELL_TRANSFER_TRIGGER_PADDING = 32;
@@ -93,6 +96,9 @@ export class GameApp {
 
   private editorTransitioning = false;
   private buildingGridVisible = true;
+  private hudUpdateAccumulator = HUD_UPDATE_INTERVAL_SECONDS;
+  private minimapUpdateAccumulator = MINIMAP_UPDATE_INTERVAL_SECONDS;
+  private occlusionUpdateAccumulator = OCCLUSION_UPDATE_INTERVAL_SECONDS;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
   private gameplayConfig: PublicGameplayConfig = DEFAULT_GAMEPLAY;
@@ -291,33 +297,27 @@ export class GameApp {
   }
 
   private update(dt: number): void {
+    let me = this.findMe();
+
     if (!this.runtimeCellTransitionController.isTransitioning) {
-      this.applyLocalMovement(dt);
-      this.runtimeCellTransitionController.tryStart(this.findMe());
-      this.inputSendSystem.update({ input: this.input.state, player: this.findMe() }, dt);
-      this.handleGatherInput();
+      this.applyLocalMovement(dt, me);
+      me = this.findMe();
+      this.runtimeCellTransitionController.tryStart(me);
+      this.inputSendSystem.update({ input: this.input.state, player: me }, dt);
+      this.handleGatherInput(me);
     }
 
     this.playerRenderer.update(dt);
     this.monsterRenderer.update(dt);
 
-    const me = this.findMe();
-    this.buildingPlacementRenderer.applyOcclusionFocus(me ? { worldX: me.x, worldY: me.y } : null);
-    this.monsterRenderer.applyOcclusion((x, y) => this.buildingPlacementRenderer.isOccludingFocus({ worldX: x, worldY: y }));
+    this.updateOcclusion(dt, me);
     this.cameraSystem.update({ player: me, world: this.worldInfo, screenWidth: this.app.renderer.width, screenHeight: this.app.renderer.height });
-    this.runtimeMinimap.render({
-      map: getRuntimeWorldMap(),
-      players: this.snapshotSystem.snapshot.players,
-      resources: this.snapshotSystem.snapshot.resources,
-      monsters: this.snapshotSystem.snapshot.monsters,
-      localPlayer: me,
-    });
-    this.hudSystem.update({ status: this.status, tick: this.snapshotSystem.snapshot.tick, player: me, latencyMs: this.network.latencyMs, buildingMode: this.buildingModeState.getSnapshot() });
+    this.updateRuntimeMinimap(dt, me);
+    this.updateHud(dt, me);
     this.syncBuildingControlsPosition();
   }
 
-  private applyLocalMovement(dt: number): void {
-    const me = this.findMe();
+  private applyLocalMovement(dt: number, me: PlayerSnapshot | null): void {
     if (!me) return;
     this.snapshotSystem.setLocalPlayer(me);
     this.movementSystem.update({
@@ -330,6 +330,43 @@ export class GameApp {
       buildingOccupancy: this.buildingOccupancy,
     }, dt);
     this.playerRenderer.sync(this.snapshotSystem.snapshot.players, this.myPlayerId);
+  }
+
+  private updateOcclusion(dt: number, me: PlayerSnapshot | null): void {
+    this.occlusionUpdateAccumulator += dt;
+    if (this.occlusionUpdateAccumulator < OCCLUSION_UPDATE_INTERVAL_SECONDS) return;
+    this.occlusionUpdateAccumulator = 0;
+
+    this.buildingPlacementRenderer.applyOcclusionFocus(me ? { worldX: me.x, worldY: me.y } : null);
+    this.monsterRenderer.applyOcclusion((x, y) => this.buildingPlacementRenderer.isOccludingFocus({ worldX: x, worldY: y }));
+  }
+
+  private updateRuntimeMinimap(dt: number, me: PlayerSnapshot | null): void {
+    this.minimapUpdateAccumulator += dt;
+    if (this.minimapUpdateAccumulator < MINIMAP_UPDATE_INTERVAL_SECONDS) return;
+    this.minimapUpdateAccumulator = 0;
+
+    this.runtimeMinimap.render({
+      map: getRuntimeWorldMap(),
+      players: this.snapshotSystem.snapshot.players,
+      resources: this.snapshotSystem.snapshot.resources,
+      monsters: this.snapshotSystem.snapshot.monsters,
+      localPlayer: me,
+    });
+  }
+
+  private updateHud(dt: number, me: PlayerSnapshot | null): void {
+    this.hudUpdateAccumulator += dt;
+    if (this.hudUpdateAccumulator < HUD_UPDATE_INTERVAL_SECONDS) return;
+    this.hudUpdateAccumulator = 0;
+
+    this.hudSystem.update({
+      status: this.status,
+      tick: this.snapshotSystem.snapshot.tick,
+      player: me,
+      latencyMs: this.network.latencyMs,
+      buildingMode: this.buildingModeState.getSnapshot(),
+    });
   }
 
   private handleCanvasPointerMove(event: PointerEvent): void {
@@ -630,9 +667,8 @@ export class GameApp {
     return this.world.toLocal({ x: event.clientX - rect.left, y: event.clientY - rect.top });
   }
 
-  private handleGatherInput(): void {
+  private handleGatherInput(me: PlayerSnapshot | null): void {
     if (!this.input.consumeGather()) return;
-    const me = this.findMe();
     if (!me) return;
     const target = this.resourceRenderer.getClosestAlive(this.getCurrentCellResources(), me.x, me.y, this.gameplayConfig.gatherRange);
     this.inputSendSystem.sendGather(target?.id);
