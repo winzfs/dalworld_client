@@ -3,6 +3,8 @@ import './editor/monsterEditor.css';
 import './ui/gameWindowsGlobalHelpers';
 import { BootOverlay, installGlobalErrorOverlay } from './utils/bootOverlay';
 
+const EDITOR_BOOT_TIMEOUT_MS = 8_000;
+
 const bootOverlay = new BootOverlay();
 installGlobalErrorOverlay(bootOverlay);
 
@@ -14,7 +16,7 @@ async function boot(): Promise<void> {
   }
 
   if (isEditorEnabled()) {
-    await bootEditor(mount);
+    await withTimeout(bootEditor(mount), EDITOR_BOOT_TIMEOUT_MS, '맵에디터 부팅이 시간 초과되었습니다. Pixi 초기화 또는 에디터 모듈 로딩이 멈췄습니다.');
     return;
   }
 
@@ -22,14 +24,19 @@ async function boot(): Promise<void> {
 }
 
 async function bootEditor(mount: HTMLElement): Promise<void> {
-  bootOverlay.setMessage('Starting map editor...');
+  bootOverlay.setMessage('Loading editor modules...');
   const [{ EditorApp }, { installItemEditorFeature }] = await Promise.all([
     import('./editor/EditorApp'),
     import('./editor/ItemEditorFeature'),
   ]);
 
+  bootOverlay.setMessage('Creating editor app...');
   const editor = new EditorApp();
+
+  bootOverlay.setMessage('Starting map editor Pixi app...');
   await editor.start(mount);
+
+  bootOverlay.setMessage('Map editor ready. Installing optional item editor...');
   bootOverlay.remove();
 
   try {
@@ -81,6 +88,19 @@ async function bootGame(mount: HTMLElement): Promise<void> {
 
 function isEditorEnabled(): boolean {
   return new URLSearchParams(window.location.search).get('editor') === '1';
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: number | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
+  }
 }
 
 boot().catch((error: unknown) => {
