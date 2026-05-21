@@ -39,7 +39,6 @@ import { RuntimeCellTransitionController } from './systems/RuntimeCellTransition
 import { MapEditor } from '../editor/MapEditor';
 import { EditorCameraSystem } from '../editor/EditorCameraSystem';
 import { EditorMinimap } from '../editor/EditorMinimap';
-import { getActiveCell } from '../worldMap/activeCellStore';
 import { getRuntimeWorldMap } from '../worldMap/runtimeMapStore';
 
 const INPUT_SEND_HZ = 30;
@@ -101,6 +100,7 @@ export class GameApp {
   private minimapUpdateAccumulator = MINIMAP_UPDATE_INTERVAL_SECONDS;
   private occlusionUpdateAccumulator = OCCLUSION_UPDATE_INTERVAL_SECONDS;
   private mapViewportUpdateAccumulator = MAP_VIEWPORT_UPDATE_INTERVAL_SECONDS;
+  private gatherSeq = 0;
 
   private worldInfo: WorldInfo = DEFAULT_WORLD;
   private gameplayConfig: PublicGameplayConfig = DEFAULT_GAMEPLAY;
@@ -523,21 +523,17 @@ export class GameApp {
         this.cancelBuildingDraftIfEntity(event.entityId);
         return;
       case 'BUILD_DOOR_UPDATED':
-        this.buildingOccupancy.addOrUpdate(event.part);
-        this.buildingPlacementRenderer.addOrUpdate(event.part);
+        this.buildingOccupancy.updateDoor(event.entityId, event.open);
+        this.buildingPlacementRenderer.updateDoor(event.entityId, event.open);
         return;
       case 'BUILD_REJECTED':
-        return;
       case 'INVENTORY_SNAPSHOT':
-        this.hudSystem.updateInventorySnapshot(event);
         return;
     }
   }
 
-  private handleCraftingEvent(event: CraftingInventoryEvent): void {
-    if (event.type === 'CRAFT_COMPLETED') {
-      this.hudSystem.updateInventorySnapshot(event.inventory);
-    }
+  private handleCraftingEvent(_event: CraftingInventoryEvent): void {
+    // Crafting and inventory snapshots are reflected through authoritative player snapshots.
   }
 
   private beginNewBuildingDraft(partId: BuildPartId): void {
@@ -554,29 +550,31 @@ export class GameApp {
   }
 
   private renderBuildingDraft(draft: BuildingEditDraft): void {
-    this.buildingGhostPreviewRenderer.hide();
-    this.buildingPlacementRenderer.renderDraft(draft);
-    const center = gridToScreen(draft.x, draft.y, draft.z);
-    this.buildingEditControls.show({
-      screenX: center.x + this.world.x,
-      screenY: center.y + this.world.y - 46,
+    const validation = this.buildingEdit.validate(draft);
+    this.buildingGhostPreviewRenderer.show({
+      partId: draft.partId,
+      x: draft.x,
+      y: draft.y,
+      z: draft.z,
       rotation: draft.rotation,
-      layer: draft.z,
-      canConfirm: draft.isValid,
-      gridVisible: this.buildingGridVisible,
+      canPlace: validation.ok,
     });
+    const center = gridToScreen(draft.x, draft.y, draft.z);
+    this.buildingEditControls.showAt(center.x + this.world.x, center.y + this.world.y - 46);
+    this.buildingEditControls.setValid(validation.ok);
+    this.buildingEditControls.setGridVisible(this.buildingGridVisible);
   }
 
   private syncBuildingControlsPosition(): void {
     const draft = this.buildingEdit.getDraft();
     if (!draft) return;
     const center = gridToScreen(draft.x, draft.y, draft.z);
-    this.buildingEditControls.setPosition(center.x + this.world.x, center.y + this.world.y - 46);
+    this.buildingEditControls.showAt(center.x + this.world.x, center.y + this.world.y - 46);
   }
 
   private cancelBuildingDraft(): void {
-    const draft = this.buildingEdit.cancel();
-    this.buildingPlacementRenderer.clearDraft(draft?.entityId);
+    this.buildingEdit.clear();
+    this.buildingGhostPreviewRenderer.hide();
     this.buildingEditControls.hide();
   }
 
@@ -589,25 +587,25 @@ export class GameApp {
     const draft = this.buildingEdit.getDraft();
     if (!draft) return;
     if (draft.entityId && draft.entityId !== part.entityId) return;
-    this.buildingEdit.commit();
-    this.buildingPlacementRenderer.clearDraft(draft.entityId);
+    this.buildingEdit.clear();
+    this.buildingGhostPreviewRenderer.hide();
     this.buildingEditControls.hide();
   }
 
   private confirmBuildingDraft(): void {
-    const request = this.buildingEdit.createRequest();
+    const request = this.buildingEdit.createConfirmCommand();
     if (!request) return;
     this.network.send(request);
   }
 
   private rotateBuildingDraftOrMode(): void {
-    const draft = this.buildingEdit.rotateClockwise();
+    const draft = this.buildingEdit.rotate();
     if (draft) {
       this.renderBuildingDraft(draft);
       return;
     }
 
-    this.buildingModeState.rotateClockwise();
+    this.buildingModeState.rotateNext();
   }
 
   private setBuildingDraftOrModeLayer(z: number): void {
@@ -622,32 +620,29 @@ export class GameApp {
   }
 
   private installBuildingEditControls(): void {
-    this.buildingEditControls.on('confirm', () => this.confirmBuildingDraft());
-    this.buildingEditControls.on('cancel', () => {
-      this.cancelBuildingDraft();
-      this.buildingModeState.exit();
-    });
-    this.buildingEditControls.on('rotate', () => this.rotateBuildingDraftOrMode());
-    this.buildingEditControls.on('layerUp', () => {
-      const draft = this.buildingEdit.getDraft();
-      this.setBuildingDraftOrModeLayer((draft?.z ?? this.buildingModeState.getSnapshot().currentZ) + 1);
-    });
-    this.buildingEditControls.on('layerDown', () => {
-      const draft = this.buildingEdit.getDraft();
-      this.setBuildingDraftOrModeLayer(Math.max(0, (draft?.z ?? this.buildingModeState.getSnapshot().currentZ) - 1));
-    });
-    this.buildingEditControls.on('grid', () => this.toggleBuildingGridVisible());
-    this.buildingEditControls.on('dragStart', (event) => {
-      const draft = this.buildingEdit.getDraft();
-      if (!draft) return;
-      this.buildingEdit.startDrag(event.pointerId, draft.z);
-      (event.target as Element).setPointerCapture?.(event.pointerId);
+    this.buildingEditControls.bind({
+      onConfirm: () => this.confirmBuildingDraft(),
+      onCancel: () => {
+        this.cancelBuildingDraft();
+        this.buildingModeState.exit();
+      },
+      onRotate: () => this.rotateBuildingDraftOrMode(),
+      onToggleGrid: () => this.toggleBuildingGridVisible(),
+      onMoveStart: (event: PointerEvent) => {
+        const draft = this.buildingEdit.getDraft();
+        if (!draft) return;
+        this.buildingEdit.startDrag({
+          pointerId: event.pointerId,
+          startGrid: this.pointerToBuildingGrid(event, draft.z),
+        });
+        (event.target as Element).setPointerCapture?.(event.pointerId);
+      },
     });
   }
 
   private setBuildingGridVisible(visible: boolean): void {
     this.buildingGridVisible = visible;
-    this.buildingGridOverlay.setVisible(visible);
+    this.buildingGridOverlay.container.visible = visible && this.buildingModeState.getSnapshot().enabled;
   }
 
   private toggleBuildingGridVisible(): void {
@@ -674,21 +669,17 @@ export class GameApp {
   }
 
   private handleGatherInput(me: PlayerSnapshot | null): void {
-    if (!me || !this.input.state.gatherPressed) return;
+    if (!me || !this.input.consumeGather()) return;
     const resource = findNearestAliveResource(me, this.snapshotSystem.snapshot.resources, this.gameplayConfig.gatherRange);
     if (!resource) return;
-    this.network.send({ type: 'gather', seq: this.input.state.seq, resourceId: resource.id });
-    this.input.clearGatherPressed();
+    this.network.send({ type: 'gather', seq: ++this.gatherSeq, resourceId: resource.id });
   }
 
   private async loadWorldMap(): Promise<void> {
-    await this.runtimeWorldSystem.loadWorldMap({
-      onWorldInfo: (world) => {
-        this.worldInfo = world;
-        this.editorCameraSystem.setWorldSize(world);
-        this.editorMinimap?.setWorldSize(world.width, world.height);
-      },
-    });
+    const result = await this.runtimeWorldSystem.load();
+    this.worldInfo = result.worldInfo;
+    this.editorCameraSystem.setWorldSize(result.worldInfo);
+    this.editorMinimap?.setWorldSize(result.worldInfo.width, result.worldInfo.height);
   }
 }
 
