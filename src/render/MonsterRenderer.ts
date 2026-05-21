@@ -29,6 +29,7 @@ type MonsterView = {
   animationKey: string;
   attackAnimationRemaining: number;
   attackFacing: Facing;
+  attackCooldownMs: number;
 };
 
 type DirectionalFrames = Record<Facing, Texture[]>;
@@ -80,6 +81,7 @@ export class MonsterRenderer {
       }
 
       view.interp.setTarget(monster.x, monster.y);
+      view.attackCooldownMs = resolveAttackCooldownMs(monster);
 
       if (view.state !== monster.state) {
         view.state = monster.state;
@@ -87,8 +89,7 @@ export class MonsterRenderer {
         view.animationKey = '';
 
         if (monster.state === 'attack') {
-          const timing = getMonsterConfig(view.type).timing;
-          view.attackAnimationRemaining = Math.min(timing.attackAnimationMs, timing.attackCooldownMs);
+          view.attackAnimationRemaining = view.attackCooldownMs;
           view.attackFacing = view.facing;
         }
 
@@ -97,6 +98,7 @@ export class MonsterRenderer {
 
       if (view.type !== monster.type) {
         view.type = monster.type;
+        view.attackCooldownMs = resolveAttackCooldownMs(monster);
         view.frame = -1;
         view.animationKey = '';
         view.attackAnimationRemaining = 0;
@@ -170,6 +172,7 @@ export class MonsterRenderer {
   private createView(monster: MonsterSnapshot): MonsterView {
     const container = new Container();
     const body = new Graphics();
+    const attackCooldownMs = resolveAttackCooldownMs(monster);
     container.position.set(monster.x, monster.y);
     container.zIndex = getWorldEntityZIndex(monster.y, MONSTER_DEPTH_OFFSET);
 
@@ -186,8 +189,9 @@ export class MonsterRenderer {
       animTime: Math.random(),
       frame: -1,
       animationKey: '',
-      attackAnimationRemaining: monster.state === 'attack' ? getMonsterConfig(monster.type).timing.attackAnimationMs : 0,
+      attackAnimationRemaining: monster.state === 'attack' ? attackCooldownMs : 0,
       attackFacing: 'down',
+      attackCooldownMs,
     };
 
     container.addChild(body);
@@ -401,6 +405,12 @@ function drawSheepFallback(body: Graphics, chasing: boolean): void {
     .fill({ color: outline })
     .roundRect(7, -19, 5, 13, 2)
     .fill({ color: outline });
+}
+
+function resolveAttackCooldownMs(monster: MonsterSnapshot): number {
+  const serverCooldown = monster.attackCooldownMs;
+  if (Number.isFinite(serverCooldown) && (serverCooldown as number) > 0) return serverCooldown as number;
+  return getMonsterConfig(monster.type).timing.attackCooldownMs;
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
