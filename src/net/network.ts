@@ -3,6 +3,11 @@ import type { ClientToServerMessage, ServerToClientMessage } from '../protocol/m
 type NetworkStatus = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
 type Listener<T> = (payload: T) => void;
 
+export type GameConnectionProfile = {
+  accountId?: string;
+  characterName?: string;
+};
+
 const RECONNECT_DELAYS_MS = [2_000, 4_000, 8_000, 16_000, 30_000];
 const PING_INTERVAL_MS = 5_000;
 const CLIENT_ID_STORAGE_KEY = 'dalworld:client-id';
@@ -162,21 +167,23 @@ export class GameNetwork {
   }
 }
 
-export function getDefaultWebSocketUrl(): string {
+export function getDefaultWebSocketUrl(profile: GameConnectionProfile = {}): string {
   const envUrl = import.meta.env.VITE_DALWORLD_WS_URL;
   const clientId = getOrCreateClientId();
 
   if (typeof envUrl === 'string' && envUrl.length > 0) {
-    return appendClientId(envUrl, clientId);
+    return appendConnectionParams(envUrl, clientId, profile);
   }
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return appendClientId(`${protocol}//${window.location.host}/ws`, clientId);
+  return appendConnectionParams(`${protocol}//${window.location.host}/ws`, clientId, profile);
 }
 
-function appendClientId(rawUrl: string, clientId: string): string {
+function appendConnectionParams(rawUrl: string, clientId: string, profile: GameConnectionProfile): string {
   const url = new URL(rawUrl, window.location.href);
   url.searchParams.set('clientId', clientId);
+  if (profile.accountId) url.searchParams.set('accountId', profile.accountId);
+  if (profile.characterName) url.searchParams.set('name', profile.characterName);
   return url.toString();
 }
 
