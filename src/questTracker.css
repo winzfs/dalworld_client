@@ -1,0 +1,100 @@
+body.is-map-editor-mode #dalworld-quest-tracker {
+  display: none !important;
+}
+
+#dalworld-quest-tracker {
+  position: fixed;
+  right: 18px;
+  top: 92px;
+  z-index: 12;
+  width: min(330px, calc(100vw - 36px));
+  pointer-events: none;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#dalworld-quest-tracker[hidden] {
+  display: none !important;
+}
+
+.quest-tracker__panel {
+  box-sizing: border-box;
+  padding: 14px;
+  border: 1px solid rgba(255, 232, 180, 0.24);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(45, 35, 28, 0.9), rgba(14, 20, 25, 0.88));
+  color: #f7f0dd;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
+}
+
+.quest-tracker__eyebrow {
+  margin-bottom: 6px;
+  color: #55d6be;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+}
+
+.quest-tracker__panel h2 {
+  margin: 0 0 6px;
+  color: #ffe4a3;
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.quest-tracker__panel p {
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.quest-tracker__panel ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quest-tracker__objective {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  gap: 7px;
+  align-items: center;
+  min-height: 30px;
+  padding: 7px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 12px;
+}
+
+.quest-tracker__objective strong {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 900;
+}
+
+.quest-tracker__objective em {
+  color: #ffd166;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.quest-tracker__objective.is-complete {
+  border-color: rgba(102, 255, 156, 0.28);
+  background: rgba(18, 45, 33, 0.42);
+}
+
+.quest-tracker__objective.is-complete strong,
+.quest-tracker__objective.is-complete em {
+  color: #c8ffd7;
+}
+
+@media (max-width: 720px) {
+  #dalworld-quest-tracker {
+    right: 12px;
+    top: 78px;
+    width: min(300px, calc(100vw - 24px));
+  }
+}
