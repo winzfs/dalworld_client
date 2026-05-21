@@ -15,6 +15,7 @@ const PLAYER_FALLBACK_Y = -16;
 const PLAYER_HP_Y = -Math.round(PLAYER_RENDER_HEIGHT - 8);
 const PLAYER_DEPTH_OFFSET = 140;
 const PLAYER_LAYER_Z_INDEX = 120;
+const PLAYER_Z_INDEX_BUCKET_SIZE = 4;
 const PLAYER_SHADOW_SOURCES = [
   '/assets/characters/female_adventurer/Shadow.png',
   '/assets/characters/female_adventurer/shadow.png',
@@ -44,6 +45,8 @@ type View = {
   targetX: number;
   targetY: number;
   currentAnim: FemaleAdventurerAnim | null;
+  lastZIndex: number;
+  lastHpSignature: string;
 };
 
 type Frames = Partial<Record<FemaleAdventurerAnim, Partial<Record<Facing, Texture[]>>>>;
@@ -91,7 +94,11 @@ export class PlayerRenderer {
         this.drawFallback(v);
       }
 
-      this.drawHp(v.hp, p.hp, p.maxHp);
+      const hpSignature = `${Math.ceil(p.hp)}:${p.maxHp}`;
+      if (hpSignature !== v.lastHpSignature) {
+        v.lastHpSignature = hpSignature;
+        this.drawHp(v.hp, p.hp, p.maxHp);
+      }
     }
 
     for (const [id, v] of this.views) {
@@ -107,7 +114,11 @@ export class PlayerRenderer {
     for (const v of this.views.values()) {
       const pos = v.interp.update(dt);
       v.c.position.set(Math.round(pos.x), Math.round(pos.y));
-      v.c.zIndex = getWorldEntityZIndex(pos.y, PLAYER_DEPTH_OFFSET);
+      const zIndex = getQuantizedPlayerZIndex(pos.y);
+      if (zIndex !== v.lastZIndex) {
+        v.lastZIndex = zIndex;
+        v.c.zIndex = zIndex;
+      }
 
       const anim = this.selectAnim(v);
 
@@ -168,8 +179,9 @@ export class PlayerRenderer {
     const fallback = new Graphics();
     const hp = new Graphics();
     const shadow = this.makeShadow();
+    const zIndex = getQuantizedPlayerZIndex(p.y);
 
-    c.zIndex = getWorldEntityZIndex(p.y, PLAYER_DEPTH_OFFSET);
+    c.zIndex = zIndex;
     ring.visible = local;
     c.addChild(shadow, fallback, ring, hp);
     c.position.set(p.x, p.y);
@@ -191,6 +203,8 @@ export class PlayerRenderer {
       targetX: p.x,
       targetY: p.y,
       currentAnim: null,
+      lastZIndex: zIndex,
+      lastHpSignature: '',
     };
 
     this.drawFallback(v);
@@ -276,6 +290,11 @@ export class PlayerRenderer {
     g.rect(-width / 2 - 2, PLAYER_HP_Y - 2, width + 4, 7).fill({ color: 0x222831 });
     g.rect(-width / 2, PLAYER_HP_Y, width * ratio, 3).fill({ color: 0xef476f });
   }
+}
+
+function getQuantizedPlayerZIndex(y: number): number {
+  const bucketY = Math.round(y / PLAYER_Z_INDEX_BUCKET_SIZE) * PLAYER_Z_INDEX_BUCKET_SIZE;
+  return getWorldEntityZIndex(bucketY, PLAYER_DEPTH_OFFSET);
 }
 
 async function loadFirstTexture(srcs: string[]): Promise<Texture | null> {
