@@ -27,6 +27,8 @@ type MonsterView = {
   animTime: number;
   frame: number;
   animationKey: string;
+  attackAnimationRemaining: number;
+  attackFacing: Facing;
 };
 
 type DirectionalFrames = Record<Facing, Texture[]>;
@@ -83,6 +85,13 @@ export class MonsterRenderer {
         view.state = monster.state;
         view.frame = -1;
         view.animationKey = '';
+
+        if (monster.state === 'attack') {
+          const timing = getMonsterConfig(view.type).timing;
+          view.attackAnimationRemaining = Math.min(timing.attackAnimationMs, timing.attackCooldownMs);
+          view.attackFacing = view.facing;
+        }
+
         this.drawFallback(view);
       }
 
@@ -90,6 +99,7 @@ export class MonsterRenderer {
         view.type = monster.type;
         view.frame = -1;
         view.animationKey = '';
+        view.attackAnimationRemaining = 0;
         this.applyMonsterVisual(view);
       }
     }
@@ -115,8 +125,12 @@ export class MonsterRenderer {
       view.previousY = pos.y;
 
       const moving = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
-      if (moving) {
+      if (moving && view.attackAnimationRemaining <= 0) {
         view.facing = getFacingFromDelta(dx, dy, view.facing);
+      }
+
+      if (view.attackAnimationRemaining > 0) {
+        view.attackAnimationRemaining = Math.max(0, view.attackAnimationRemaining - dt * 1000);
       }
 
       this.updateSpriteAnimation(view, dt, moving);
@@ -172,6 +186,8 @@ export class MonsterRenderer {
       animTime: Math.random(),
       frame: -1,
       animationKey: '',
+      attackAnimationRemaining: monster.state === 'attack' ? getMonsterConfig(monster.type).timing.attackAnimationMs : 0,
+      attackFacing: 'down',
     };
 
     container.addChild(body);
@@ -210,7 +226,9 @@ export class MonsterRenderer {
     const loaded = this.spriteSheets.get(view.type);
     if (!loaded || !view.sprite) return;
 
-    const selection = selectAnimationFrames(loaded, view.state, view.facing, moving);
+    const attackActive = view.attackAnimationRemaining > 0;
+    const animationFacing = attackActive ? view.attackFacing : view.facing;
+    const selection = selectAnimationFrames(loaded, view.state, animationFacing, moving, attackActive);
     const animating = selection.animate;
     const nextAnimationKey = selection.key;
 
@@ -239,13 +257,13 @@ export class MonsterRenderer {
     view.body.clear();
 
     if (view.type === 'sheep') {
-      drawSheepFallback(view.body, view.state === 'chase');
+      drawSheepFallback(view.body, view.state === 'chase' || view.attackAnimationRemaining > 0);
       return;
     }
 
     view.body
       .circle(0, 0, config.fallback.radius)
-      .fill({ color: view.state === 'chase' ? config.fallback.chaseColor : config.fallback.idleColor });
+      .fill({ color: view.state === 'chase' || view.attackAnimationRemaining > 0 ? config.fallback.chaseColor : config.fallback.idleColor });
   }
 }
 
@@ -330,9 +348,10 @@ function selectAnimationFrames(
   state: MonsterStateName,
   facing: Facing,
   moving: boolean,
+  attackActive: boolean,
 ): { key: string; frames: Texture[]; animate: boolean } {
   if (loaded.actionFrames) {
-    if (state === 'attack' && loaded.actionFrames.attack) {
+    if ((attackActive || state === 'attack') && loaded.actionFrames.attack) {
       return { key: `attack:${facing}`, frames: loaded.actionFrames.attack[facing], animate: true };
     }
 
