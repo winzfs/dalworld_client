@@ -50,6 +50,20 @@ export function clearLastUsername(): void {
 }
 
 export function logoutAndReload(): void {
+  const sessionToken = loadSessionToken();
   clearSessionToken();
+
+  if (sessionToken) {
+    void fetch('/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionToken }),
+      keepalive: true,
+    }).finally(() => {
+      window.location.reload();
+    });
+    return;
+  }
+
   window.location.reload();
 }
