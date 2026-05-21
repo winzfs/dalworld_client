@@ -2,6 +2,12 @@ import type { Facing, MonsterType } from '../protocol/messages';
 
 export type DirectionalRows = Record<Facing, number>;
 
+export type MonsterActionRows = {
+  idle: number;
+  walk: DirectionalRows;
+  attack?: DirectionalRows;
+};
+
 export type MonsterSpriteSheetConfig = {
   src: string;
   frameWidth: number;
@@ -11,6 +17,7 @@ export type MonsterSpriteSheetConfig = {
   scale: number;
   anchor: { x: number; y: number };
   rows: DirectionalRows;
+  actionRows?: MonsterActionRows;
 };
 
 export type MonsterCollisionConfig = {
@@ -39,9 +46,36 @@ const DEFAULT_ROWS: DirectionalRows = {
   right: 3,
 };
 
+const SLIME01_ACTION_ROWS: MonsterActionRows = {
+  idle: 0,
+  walk: {
+    down: 1,
+    up: 2,
+    left: 3,
+    right: 4,
+  },
+  attack: {
+    down: 5,
+    up: 6,
+    left: 7,
+    right: 8,
+  },
+};
+
 export const MONSTER_CONFIGS = {
   wild_slime: {
     type: 'wild_slime',
+    spriteSheet: {
+      src: '/assets/characters/monsters/slime01.png?v=1',
+      frameWidth: 32,
+      frameHeight: 32,
+      frameCount: 6,
+      fps: 8,
+      scale: 1.35,
+      anchor: { x: 0.5, y: 0.92 },
+      rows: SLIME01_ACTION_ROWS.walk,
+      actionRows: SLIME01_ACTION_ROWS,
+    },
     collision: {
       radius: 18,
       offsetX: 0,
