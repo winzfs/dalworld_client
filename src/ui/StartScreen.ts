@@ -236,7 +236,7 @@ async function postAuth(path: string, body: unknown): Promise<AuthResult> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    return await response.json<AuthResult>();
+    return await response.json() as AuthResult;
   } catch {
     return { ok: false, reason: '서버에 연결할 수 없습니다.' };
   }
