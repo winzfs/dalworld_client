@@ -75,11 +75,6 @@ export class EditorApp {
   private async initializePixiApplication(mount: HTMLElement, onStatus: EditorBootStatus): Promise<void> {
     const size = getViewportSize();
 
-    // Mount canvas before Pixi.init. Mobile browsers (Android Chrome / iOS Safari)
-    // are more likely to return a working WebGL context when the canvas is already
-    // attached to the document; an off-DOM canvas can cause getContext to block
-    // the main thread on some devices, which also prevents the timeout below from
-    // firing.
     onStatus(`Mounting canvas (${size.width}x${size.height}) before Pixi init...`);
     const canvas = document.createElement('canvas');
     canvas.width = size.width;
@@ -89,7 +84,14 @@ export class EditorApp {
     canvas.style.height = '100%';
     mount.appendChild(canvas);
 
-    onStatus(`Trying Pixi init with mobile-safe options (${size.width}x${size.height})...`);
+    // Probe WebGL context support manually before calling Pixi.init. If
+    // getContext itself hangs synchronously on a buggy mobile driver, the
+    // onStatus line just before the call tells us exactly which API is at
+    // fault. If WebGL2 returns null but WebGL1 works, we switch Pixi to
+    // WebGL1 instead of having Pixi's auto-detection fail silently.
+    const webglVersion = await this.probeWebGLSupport(onStatus);
+
+    onStatus(`Calling app.init() with WebGL${webglVersion} (${size.width}x${size.height})...`);
     await withTimeout(
       this.app.init({
         canvas,
@@ -100,13 +102,52 @@ export class EditorApp {
         autoDensity: false,
         resolution: 1,
         preference: 'webgl',
-        preferWebGLVersion: 2,
+        preferWebGLVersion: webglVersion,
         failIfMajorPerformanceCaveat: false,
         powerPreference: 'low-power',
       }),
       PIXI_INIT_TIMEOUT_MS,
       'Pixi initialization timed out.',
     );
+  }
+
+  private async probeWebGLSupport(onStatus: EditorBootStatus): Promise<1 | 2> {
+    const probe = document.createElement('canvas');
+    probe.width = 4;
+    probe.height = 4;
+
+    onStatus('Probe step 1: requesting WebGL2 context...');
+    let gl2: RenderingContext | null = null;
+    try {
+      gl2 = probe.getContext('webgl2', { failIfMajorPerformanceCaveat: false } as WebGLContextAttributes);
+    } catch (error) {
+      onStatus(`Probe step 1 threw: ${String(error)}`);
+    }
+    onStatus(`Probe step 1 result: ${gl2 ? 'WebGL2 OK' : 'WebGL2 NOT available'}`);
+
+    if (gl2) {
+      // Release the probe context so the renderer can claim a fresh one.
+      releaseProbeContext(gl2);
+      return 2;
+    }
+
+    onStatus('Probe step 2: requesting WebGL1 context...');
+    let gl1: RenderingContext | null = null;
+    try {
+      gl1 =
+        probe.getContext('webgl', { failIfMajorPerformanceCaveat: false } as WebGLContextAttributes) ??
+        probe.getContext('experimental-webgl' as 'webgl', { failIfMajorPerformanceCaveat: false } as WebGLContextAttributes);
+    } catch (error) {
+      onStatus(`Probe step 2 threw: ${String(error)}`);
+    }
+    onStatus(`Probe step 2 result: ${gl1 ? 'WebGL1 OK' : 'WebGL1 NOT available'}`);
+
+    if (gl1) {
+      releaseProbeContext(gl1);
+      return 1;
+    }
+
+    throw new Error('This device does not appear to support WebGL. Map editor cannot start.');
   }
 
   private resizeRenderer(): void {
@@ -165,6 +206,12 @@ function getViewportSize(): { width: number; height: number } {
     width: Math.max(1, Math.floor(window.innerWidth || document.documentElement.clientWidth || 1)),
     height: Math.max(1, Math.floor(window.innerHeight || document.documentElement.clientHeight || 1)),
   };
+}
+
+function releaseProbeContext(context: RenderingContext): void {
+  const gl = context as WebGLRenderingContext;
+  const ext = gl.getExtension?.('WEBGL_lose_context') as { loseContext?: () => void } | null;
+  ext?.loseContext?.();
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
