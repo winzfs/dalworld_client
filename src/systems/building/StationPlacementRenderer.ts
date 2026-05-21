@@ -9,7 +9,6 @@ const STATION_COLUMNS = 8;
 const STATION_ROWS = 5;
 const STATION_FRAME_COUNT = 35;
 const STATION_FPS = 12;
-const DEFAULT_CRAFTING_SECONDS = 1.2;
 
 type StationView = {
   container: Container;
@@ -72,13 +71,21 @@ export class StationPlacementRenderer {
     this.views.clear();
   }
 
-  playCrafting(seconds = DEFAULT_CRAFTING_SECONDS): void {
-    this.craftingUntilMs = Math.max(this.craftingUntilMs, performance.now() + seconds * 1000);
+  setCraftingWindow(startsAtMs: number, completesAtMs: number): void {
+    if (!Number.isFinite(startsAtMs) || !Number.isFinite(completesAtMs)) return;
+    const now = Date.now();
+    if (completesAtMs <= now) return;
+    this.craftingUntilMs = Math.max(this.craftingUntilMs, completesAtMs);
+    if (now <= startsAtMs + 50) this.animTime = 0;
+  }
+
+  stopCrafting(): void {
+    this.craftingUntilMs = 0;
   }
 
   update(dt: number): void {
     if (this.views.size === 0) return;
-    const crafting = performance.now() < this.craftingUntilMs;
+    const crafting = Date.now() < this.craftingUntilMs;
     if (crafting) this.animTime += dt;
 
     const frame = crafting
