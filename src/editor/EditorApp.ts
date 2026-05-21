@@ -31,9 +31,11 @@ export class EditorApp {
     await nextFrame();
 
     onStatus('Initializing Pixi application...');
-    await this.initializePixiApplication(mount, onStatus);
+    await this.initializePixiApplication(onStatus);
     onStatus('Pixi application initialized');
 
+    onStatus('Mounting canvas...');
+    mount.appendChild(this.app.canvas);
     this.input.attach();
     this.world.sortableChildren = true;
     this.world.addChild(this.background);
@@ -72,82 +74,29 @@ export class EditorApp {
     onStatus('EditorApp.start completed');
   }
 
-  private async initializePixiApplication(mount: HTMLElement, onStatus: EditorBootStatus): Promise<void> {
-    const size = getViewportSize();
+  private async initializePixiApplication(onStatus: EditorBootStatus): Promise<void> {
+    // Diagnostic probe: tells us at status-message level whether WebGL2/1
+    // works on this device. Game uses no explicit preference so we don't
+    // pass the probe result to Pixi; previous attempts that did so
+    // (preferWebGLVersion / powerPreference / failIfMajorPerformanceCaveat)
+    // appear to trigger a buggy Pixi code path on certain mobile GPUs
+    // that blocks the main thread and prevents the timeout below from
+    // firing. Game runs fine with the bare options below, so we match
+    // them exactly.
+    await probeWebGLSupport(onStatus);
 
-    onStatus(`Mounting canvas (${size.width}x${size.height}) before Pixi init...`);
-    const canvas = document.createElement('canvas');
-    canvas.width = size.width;
-    canvas.height = size.height;
-    canvas.style.display = 'block';
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
-    mount.appendChild(canvas);
-
-    // Probe WebGL context support manually before calling Pixi.init. If
-    // getContext itself hangs synchronously on a buggy mobile driver, the
-    // onStatus line just before the call tells us exactly which API is at
-    // fault. If WebGL2 returns null but WebGL1 works, we switch Pixi to
-    // WebGL1 instead of having Pixi's auto-detection fail silently.
-    const webglVersion = await this.probeWebGLSupport(onStatus);
-
-    onStatus(`Calling app.init() with WebGL${webglVersion} (${size.width}x${size.height})...`);
+    onStatus('Calling app.init() with game-app options...');
     await withTimeout(
       this.app.init({
-        canvas,
         background: '#1d2b34',
         antialias: false,
-        width: size.width,
-        height: size.height,
-        autoDensity: false,
-        resolution: 1,
-        preference: 'webgl',
-        preferWebGLVersion: webglVersion,
-        failIfMajorPerformanceCaveat: false,
-        powerPreference: 'low-power',
+        resizeTo: window,
+        autoDensity: true,
+        resolution: getRenderResolution(),
       }),
       PIXI_INIT_TIMEOUT_MS,
       'Pixi initialization timed out.',
     );
-  }
-
-  private async probeWebGLSupport(onStatus: EditorBootStatus): Promise<1 | 2> {
-    const probe = document.createElement('canvas');
-    probe.width = 4;
-    probe.height = 4;
-
-    onStatus('Probe step 1: requesting WebGL2 context...');
-    let gl2: RenderingContext | null = null;
-    try {
-      gl2 = probe.getContext('webgl2', { failIfMajorPerformanceCaveat: false } as WebGLContextAttributes);
-    } catch (error) {
-      onStatus(`Probe step 1 threw: ${String(error)}`);
-    }
-    onStatus(`Probe step 1 result: ${gl2 ? 'WebGL2 OK' : 'WebGL2 NOT available'}`);
-
-    if (gl2) {
-      // Release the probe context so the renderer can claim a fresh one.
-      releaseProbeContext(gl2);
-      return 2;
-    }
-
-    onStatus('Probe step 2: requesting WebGL1 context...');
-    let gl1: RenderingContext | null = null;
-    try {
-      gl1 =
-        probe.getContext('webgl', { failIfMajorPerformanceCaveat: false } as WebGLContextAttributes) ??
-        probe.getContext('experimental-webgl' as 'webgl', { failIfMajorPerformanceCaveat: false } as WebGLContextAttributes);
-    } catch (error) {
-      onStatus(`Probe step 2 threw: ${String(error)}`);
-    }
-    onStatus(`Probe step 2 result: ${gl1 ? 'WebGL1 OK' : 'WebGL1 NOT available'}`);
-
-    if (gl1) {
-      releaseProbeContext(gl1);
-      return 1;
-    }
-
-    throw new Error('This device does not appear to support WebGL. Map editor cannot start.');
   }
 
   private resizeRenderer(): void {
@@ -206,6 +155,49 @@ function getViewportSize(): { width: number; height: number } {
     width: Math.max(1, Math.floor(window.innerWidth || document.documentElement.clientWidth || 1)),
     height: Math.max(1, Math.floor(window.innerHeight || document.documentElement.clientHeight || 1)),
   };
+}
+
+function getRenderResolution(): number {
+  const raw = window.devicePixelRatio || 1;
+  return Math.max(1, Math.min(2, raw));
+}
+
+async function probeWebGLSupport(onStatus: EditorBootStatus): Promise<void> {
+  const probe = document.createElement('canvas');
+  probe.width = 4;
+  probe.height = 4;
+
+  onStatus('Probe step 1: requesting WebGL2 context...');
+  let gl2: RenderingContext | null = null;
+  try {
+    gl2 = probe.getContext('webgl2', { failIfMajorPerformanceCaveat: false } as WebGLContextAttributes);
+  } catch (error) {
+    onStatus(`Probe step 1 threw: ${String(error)}`);
+  }
+  onStatus(`Probe step 1 result: ${gl2 ? 'WebGL2 OK' : 'WebGL2 NOT available'}`);
+
+  if (gl2) {
+    releaseProbeContext(gl2);
+    return;
+  }
+
+  onStatus('Probe step 2: requesting WebGL1 context...');
+  let gl1: RenderingContext | null = null;
+  try {
+    gl1 =
+      probe.getContext('webgl', { failIfMajorPerformanceCaveat: false } as WebGLContextAttributes) ??
+      probe.getContext('experimental-webgl' as 'webgl', { failIfMajorPerformanceCaveat: false } as WebGLContextAttributes);
+  } catch (error) {
+    onStatus(`Probe step 2 threw: ${String(error)}`);
+  }
+  onStatus(`Probe step 2 result: ${gl1 ? 'WebGL1 OK' : 'WebGL1 NOT available'}`);
+
+  if (gl1) {
+    releaseProbeContext(gl1);
+    return;
+  }
+
+  throw new Error('This device does not appear to support WebGL. Map editor cannot start.');
 }
 
 function releaseProbeContext(context: RenderingContext): void {
