@@ -37,8 +37,14 @@ type ActionFrames = {
   attack?: DirectionalFrames;
 };
 
+type SpriteFrameGrid = {
+  frameWidth: number;
+  frameHeight: number;
+};
+
 type LoadedSpriteSheet = {
   config: MonsterSpriteSheetConfig;
+  frameGrid: SpriteFrameGrid;
   frames: DirectionalFrames;
   actionFrames?: ActionFrames;
 };
@@ -251,52 +257,65 @@ async function loadMonsterSpriteSheet(config: MonsterSpriteSheetConfig): Promise
   const image = await loadImage(config.src);
   const sheet = Texture.from(image);
   sheet.source.scaleMode = 'nearest';
+  const frameGrid = resolveFrameGrid(image, config);
 
   const directionalFrames = {
-    down: makeRowTextures(sheet, config.rows.down, config),
-    up: makeRowTextures(sheet, config.rows.up, config),
-    left: makeRowTextures(sheet, config.rows.left, config),
-    right: makeRowTextures(sheet, config.rows.right, config),
+    down: makeRowTextures(sheet, config.rows.down, config, frameGrid),
+    up: makeRowTextures(sheet, config.rows.up, config, frameGrid),
+    left: makeRowTextures(sheet, config.rows.left, config, frameGrid),
+    right: makeRowTextures(sheet, config.rows.right, config, frameGrid),
   };
 
   if (!config.actionRows) {
-    return { config, frames: directionalFrames };
+    return { config, frameGrid, frames: directionalFrames };
   }
 
   const actionFrames: ActionFrames = {
-    idle: makeRowTextures(sheet, config.actionRows.idle, config),
+    idle: makeRowTextures(sheet, config.actionRows.idle, config, frameGrid),
     walk: {
-      down: makeRowTextures(sheet, config.actionRows.walk.down, config),
-      up: makeRowTextures(sheet, config.actionRows.walk.up, config),
-      left: makeRowTextures(sheet, config.actionRows.walk.left, config),
-      right: makeRowTextures(sheet, config.actionRows.walk.right, config),
+      down: makeRowTextures(sheet, config.actionRows.walk.down, config, frameGrid),
+      up: makeRowTextures(sheet, config.actionRows.walk.up, config, frameGrid),
+      left: makeRowTextures(sheet, config.actionRows.walk.left, config, frameGrid),
+      right: makeRowTextures(sheet, config.actionRows.walk.right, config, frameGrid),
     },
     attack: config.actionRows.attack
       ? {
-          down: makeRowTextures(sheet, config.actionRows.attack.down, config),
-          up: makeRowTextures(sheet, config.actionRows.attack.up, config),
-          left: makeRowTextures(sheet, config.actionRows.attack.left, config),
-          right: makeRowTextures(sheet, config.actionRows.attack.right, config),
+          down: makeRowTextures(sheet, config.actionRows.attack.down, config, frameGrid),
+          up: makeRowTextures(sheet, config.actionRows.attack.up, config, frameGrid),
+          left: makeRowTextures(sheet, config.actionRows.attack.left, config, frameGrid),
+          right: makeRowTextures(sheet, config.actionRows.attack.right, config, frameGrid),
         }
       : undefined,
   };
 
-  return { config, frames: directionalFrames, actionFrames };
+  return { config, frameGrid, frames: directionalFrames, actionFrames };
+}
+
+function resolveFrameGrid(image: HTMLImageElement, config: MonsterSpriteSheetConfig): SpriteFrameGrid {
+  const frameWidth = config.frameWidth ?? Math.floor(image.naturalWidth / (config.columns ?? config.frameCount));
+  const frameHeight = config.frameHeight ?? Math.floor(image.naturalHeight / (config.rowsCount ?? 1));
+
+  if (frameWidth <= 0 || frameHeight <= 0) {
+    throw new Error(`Invalid monster sprite frame size: ${image.naturalWidth}x${image.naturalHeight}`);
+  }
+
+  return { frameWidth, frameHeight };
 }
 
 function makeRowTextures(
   sheet: Texture,
   row: number,
   config: MonsterSpriteSheetConfig,
+  frameGrid: SpriteFrameGrid,
 ): Texture[] {
   return Array.from({ length: config.frameCount }, (_, index) => {
     return new Texture({
       source: sheet.source,
       frame: new Rectangle(
-        index * config.frameWidth,
-        row * config.frameHeight,
-        config.frameWidth,
-        config.frameHeight,
+        index * frameGrid.frameWidth,
+        row * frameGrid.frameHeight,
+        frameGrid.frameWidth,
+        frameGrid.frameHeight,
       ),
     });
   });
