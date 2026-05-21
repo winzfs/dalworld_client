@@ -31,10 +31,18 @@ export type Inventory = {
   stone: number;
 };
 
+export type QuestCinematicCue = {
+  introTitle: string;
+  introText: string;
+  cameraCue: 'wake' | 'focus' | 'build' | 'danger';
+};
+
 export type QuestObjectiveSnapshot = {
   id: string;
-  type: 'collect_item';
-  itemId: string;
+  type: 'collect_item' | 'place_build_part' | 'craft_recipe';
+  itemId?: string;
+  partId?: string;
+  recipeId?: string;
   required: number;
   label: string;
   current: number;
@@ -45,6 +53,7 @@ export type ActiveQuestSnapshot = {
   id: string;
   title: string;
   description: string;
+  cinematic?: QuestCinematicCue;
   completed: boolean;
   objectives: QuestObjectiveSnapshot[];
 };
