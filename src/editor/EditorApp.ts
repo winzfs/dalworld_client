@@ -31,11 +31,9 @@ export class EditorApp {
     await nextFrame();
 
     onStatus('Initializing Pixi application...');
-    await this.initializePixiApplication(onStatus);
+    await this.initializePixiApplication(mount, onStatus);
     onStatus('Pixi application initialized');
 
-    onStatus('Mounting canvas...');
-    mount.appendChild(this.app.canvas);
     this.input.attach();
     this.world.sortableChildren = true;
     this.world.addChild(this.background);
@@ -74,17 +72,37 @@ export class EditorApp {
     onStatus('EditorApp.start completed');
   }
 
-  private async initializePixiApplication(onStatus: EditorBootStatus): Promise<void> {
+  private async initializePixiApplication(mount: HTMLElement, onStatus: EditorBootStatus): Promise<void> {
     const size = getViewportSize();
-    onStatus(`Trying Pixi init with explicit size ${size.width}x${size.height}...`);
+
+    // Mount canvas before Pixi.init. Mobile browsers (Android Chrome / iOS Safari)
+    // are more likely to return a working WebGL context when the canvas is already
+    // attached to the document; an off-DOM canvas can cause getContext to block
+    // the main thread on some devices, which also prevents the timeout below from
+    // firing.
+    onStatus(`Mounting canvas (${size.width}x${size.height}) before Pixi init...`);
+    const canvas = document.createElement('canvas');
+    canvas.width = size.width;
+    canvas.height = size.height;
+    canvas.style.display = 'block';
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    mount.appendChild(canvas);
+
+    onStatus(`Trying Pixi init with mobile-safe options (${size.width}x${size.height})...`);
     await withTimeout(
       this.app.init({
+        canvas,
         background: '#1d2b34',
         antialias: false,
         width: size.width,
         height: size.height,
-        autoDensity: true,
-        resolution: getRenderResolution(),
+        autoDensity: false,
+        resolution: 1,
+        preference: 'webgl',
+        preferWebGLVersion: 2,
+        failIfMajorPerformanceCaveat: false,
+        powerPreference: 'default',
       }),
       PIXI_INIT_TIMEOUT_MS,
       'Pixi initialization timed out.',
@@ -147,11 +165,6 @@ function getViewportSize(): { width: number; height: number } {
     width: Math.max(1, Math.floor(window.innerWidth || document.documentElement.clientWidth || 1)),
     height: Math.max(1, Math.floor(window.innerHeight || document.documentElement.clientHeight || 1)),
   };
-}
-
-function getRenderResolution(): number {
-  const raw = window.devicePixelRatio || 1;
-  return Math.max(1, Math.min(2, raw));
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
