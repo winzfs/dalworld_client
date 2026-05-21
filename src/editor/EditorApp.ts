@@ -3,8 +3,8 @@ import { Camera } from '../game/Camera';
 import { InputController } from '../game/InputController';
 import type { WorldInfo } from '../protocol/messages';
 import { EditorCameraSystem } from './EditorCameraSystem';
-import { MapEditor } from './MapEditor';
-import { EditorMinimap } from './EditorMinimap';
+import type { MapEditor as MapEditorInstance } from './MapEditor';
+import type { EditorMinimap as EditorMinimapInstance } from './EditorMinimap';
 
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 
@@ -16,15 +16,15 @@ export class EditorApp {
   private readonly camera = new Camera(this.world);
   private readonly cameraSystem = new EditorCameraSystem(this.camera);
 
-  private mapEditor: MapEditor | null = null;
-  private minimap: EditorMinimap | null = null;
+  private mapEditor: MapEditorInstance | null = null;
+  private minimap: EditorMinimapInstance | null = null;
   private transitioning = false;
 
   async start(mount: HTMLElement): Promise<void> {
     console.log('[EditorBoot] EditorApp.start entered.');
     document.body.classList.add('is-map-editor-mode');
 
-    console.log('[EditorBoot] Calling Pixi app.init with editor UI modules bundled.');
+    console.log('[EditorBoot] Calling Pixi app.init before loading editor modules.');
     await this.app.init({
       background: '#1d2b34',
       antialias: false,
@@ -43,7 +43,12 @@ export class EditorApp {
     this.drawBackground(DEFAULT_WORLD);
     this.cameraSystem.setWorldSize(DEFAULT_WORLD);
 
-    console.log('[EditorBoot] Creating map editor UI.');
+    console.log('[EditorBoot] Loading map editor modules after Pixi init.');
+    const [{ MapEditor }, { EditorMinimap }] = await Promise.all([
+      import('./MapEditor'),
+      import('./EditorMinimap'),
+    ]);
+
     this.mapEditor = new MapEditor({
       app: this.app,
       world: this.world,
