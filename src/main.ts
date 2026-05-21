@@ -10,6 +10,7 @@ import { installStationClientFeature } from './game/installStationClientFeature'
 import { installItemEditorFeature } from './editor/ItemEditorFeature';
 import { installTimeOfDayClientFeature } from './systems/timeOfDay/TimeOfDayClientFeature';
 import { installSystemLogHud } from './ui/SystemLogHud';
+import { showStartScreen } from './ui/StartScreen';
 import { BootOverlay, installGlobalErrorOverlay } from './utils/bootOverlay';
 
 const bootOverlay = new BootOverlay();
@@ -22,13 +23,20 @@ async function boot(): Promise<void> {
     throw new Error('Missing #app mount element');
   }
 
+  const editorMode = isEditorEnabled();
+  bootOverlay.remove();
+
+  const profile = editorMode
+    ? undefined
+    : await showStartScreen(document.body);
+
+  bootOverlay.setMessage('Starting Pixi.js application...');
   installTimeOfDayClientFeature(document.body);
   installSystemLogHud(document.body);
 
-  bootOverlay.setMessage('Starting Pixi.js application...');
-  const game = new GameApp();
+  const game = new GameApp(profile);
   await game.start(mount);
-  if (isEditorEnabled()) installItemEditorFeature(document.body);
+  if (editorMode) installItemEditorFeature(document.body);
   installCombatClientFeature(game);
   installStationClientFeature(game);
 
