@@ -6,13 +6,11 @@ import './editor/monsterEditor.css';
 import { GameApp } from './game/GameApp';
 import { installCombatClientFeature } from './game/installCombatClientFeature';
 import { installTimeOfDayClientFeature } from './systems/timeOfDay/TimeOfDayClientFeature';
-import { installGameWindowsPerformancePatch } from './ui/GameWindowsPerformancePatch';
 import { installSystemLogHud } from './ui/SystemLogHud';
 import { BootOverlay, installGlobalErrorOverlay } from './utils/bootOverlay';
 
 const bootOverlay = new BootOverlay();
 installGlobalErrorOverlay(bootOverlay);
-installGameWindowsPerformancePatch();
 
 async function boot(): Promise<void> {
   bootOverlay.setMessage('Finding #app mount element...');
