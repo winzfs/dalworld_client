@@ -10,8 +10,11 @@ import type {
 import { EditorState, BLACK_SOLID_ASSET } from './EditorState';
 import { MonsterSpawnControls } from './MonsterSpawnControls';
 import {
+  EDITOR_MONSTER_ANIMATION_LABELS,
   EDITOR_MONSTER_STAT_LABELS,
+  getEditorMonsterAnimationDefaults,
   getEditorMonsterDefaultStats,
+  type EditorMonsterAnimationDefaults,
   type EditorMonsterDefaultStats,
 } from './MonsterDefaultStats';
 
@@ -49,6 +52,9 @@ const SPEC_KEYS: Array<keyof EditorMonsterDefaultStats> = [
   'attackRange',
   'attackDamage',
   'attackCooldownMs',
+];
+const ANIMATION_KEYS: Array<keyof EditorMonsterAnimationDefaults> = [
+  'attackAnimationMs',
 ];
 
 type PanelTab = 'tiles' | 'monsters';
@@ -362,6 +368,7 @@ export class TilesetPanel {
     this.monsterEditorContainer.append(
       this.createMonsterSelect(),
       this.createDefaultStatsSection(),
+      this.createAnimationDefaultsSection(),
       this.createMonsterSection('전체맵 스폰', [
         this.createCheckboxField('전체맵에 스폰', worldRule.enabled, (checked) => {
           this.patchSelectedWorldRule({ enabled: checked });
@@ -461,16 +468,22 @@ export class TilesetPanel {
 
   private createDefaultStatsSection(): HTMLElement {
     const stats = getEditorMonsterDefaultStats(this.selectedMonsterType);
-    const rows = SPEC_KEYS.map((key) => this.createDefaultStatRow(key, stats[key]));
+    const rows = SPEC_KEYS.map((key) => this.createDefaultStatRow(EDITOR_MONSTER_STAT_LABELS[key], stats[key]));
     return this.createMonsterSection('서버 기본 스펙', rows, '서버 MonsterDefinitions 기준 표시값입니다. 실제 판정은 서버가 확정합니다.');
   }
 
-  private createDefaultStatRow(key: keyof EditorMonsterDefaultStats, value: number): HTMLElement {
+  private createAnimationDefaultsSection(): HTMLElement {
+    const stats = getEditorMonsterAnimationDefaults(this.selectedMonsterType);
+    const rows = ANIMATION_KEYS.map((key) => this.createDefaultStatRow(EDITOR_MONSTER_ANIMATION_LABELS[key], stats[key]));
+    return this.createMonsterSection('클라이언트 애니메이션 설정', rows, '표현용 표시 시간입니다. 실제 공격 판정/쿨타임은 서버 스펙을 따릅니다.');
+  }
+
+  private createDefaultStatRow(labelText: string, value: number): HTMLElement {
     const row = document.createElement('div');
     row.className = 'map-editor-monster-default-stat';
 
     const label = document.createElement('span');
-    label.textContent = EDITOR_MONSTER_STAT_LABELS[key];
+    label.textContent = labelText;
 
     const number = document.createElement('b');
     number.textContent = String(value);
