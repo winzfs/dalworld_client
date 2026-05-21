@@ -1,3 +1,4 @@
+import { loadEditorItemOverrides } from '../editor/ItemEditorStorage';
 import type {
   EditorItemOverride,
   EditorMonsterSpecOverrides,
@@ -41,6 +42,8 @@ const VALID_ITEM_CATEGORIES = new Set([
 ]);
 
 export function compileRuntimeWorldMap(world: EditorWorldSave): GameWorldMap {
+  const editorItemOverrides = world.worldMap?.itemOverrides ?? loadEditorItemOverrides();
+
   return {
     version: 1,
     name: sanitizeString(world.name, 'dalworld-map'),
@@ -55,7 +58,7 @@ export function compileRuntimeWorldMap(world: EditorWorldSave): GameWorldMap {
         .filter((placement): placement is WorldMapPlacement => placement !== null),
     })),
     monsterSpawnRules: compileMonsterSpawnRules(world.worldMap?.monsterSpawnRules),
-    itemOverrides: compileItemOverrides(world.worldMap?.itemOverrides),
+    itemOverrides: compileItemOverrides(editorItemOverrides),
   };
 }
 
