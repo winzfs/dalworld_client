@@ -22,12 +22,18 @@ type AuthSuccess = {
   profile: AuthUserProfile;
 };
 
+type AuthMeSuccess = {
+  ok: true;
+  profile: AuthUserProfile;
+};
+
 type AuthFailure = {
   ok: false;
   reason: string;
 };
 
 type AuthResult = AuthSuccess | AuthFailure;
+type AuthMeResult = AuthMeSuccess | AuthFailure;
 
 export type StartScreenResult = Required<Pick<GameConnectionProfile, 'sessionToken' | 'accountId' | 'characterName'>>;
 
@@ -244,6 +250,19 @@ async function postAuth(path: string, body: unknown): Promise<AuthResult> {
   }
 }
 
+async function postAuthMe(sessionToken: string): Promise<AuthMeResult> {
+  try {
+    const response = await fetch('/auth/me', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionToken }),
+    });
+    return await response.json() as AuthMeResult;
+  } catch {
+    return { ok: false, reason: '저장된 세션을 확인할 수 없습니다.' };
+  }
+}
+
 function setMessage(element: HTMLElement | null, message: string): void {
   if (element) element.textContent = message;
 }
@@ -269,9 +288,25 @@ function saveLastUsername(username: string): void {
   }
 }
 
+function loadSessionToken(): string | null {
+  try {
+    return window.localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 function saveSessionToken(token: string): void {
   try {
     window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, token);
+  } catch {
+    // localStorage may be unavailable.
+  }
+}
+
+function clearSessionToken(): void {
+  try {
+    window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
   } catch {
     // localStorage may be unavailable.
   }
