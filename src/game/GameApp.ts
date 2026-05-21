@@ -1,7 +1,7 @@
 import { Application, Container, Graphics } from 'pixi.js';
 import { GameNetwork, getDefaultWebSocketUrl, type NetworkStatus } from '../net/network';
 import type {
-  CraftingServerEvent,
+  CraftingInventoryEvent,
   PlayerSnapshot,
   PublicGameplayConfig,
   ResourceSnapshot,
@@ -535,7 +535,7 @@ export class GameApp {
     }
   }
 
-  private handleCraftingEvent(event: CraftingServerEvent): void {
+  private handleCraftingEvent(event: CraftingInventoryEvent): void {
     if (event.type === 'CRAFT_REJECTED') {
       console.warn('[Crafting] request rejected:', event.reason);
       return;
