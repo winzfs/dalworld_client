@@ -180,6 +180,27 @@ export function getDefaultWebSocketUrl(profile: GameConnectionProfile = {}): str
   return appendConnectionParams(`${protocol}//${window.location.host}/ws`, clientId, profile);
 }
 
+export function getDefaultHttpApiUrl(path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const explicitHttpUrl = import.meta.env.VITE_DALWORLD_HTTP_URL;
+
+  if (typeof explicitHttpUrl === 'string' && explicitHttpUrl.length > 0) {
+    return new URL(normalizedPath, ensureTrailingSlash(explicitHttpUrl)).toString();
+  }
+
+  const wsUrl = import.meta.env.VITE_DALWORLD_WS_URL;
+  if (typeof wsUrl === 'string' && wsUrl.length > 0) {
+    const baseUrl = new URL(wsUrl, window.location.href);
+    baseUrl.protocol = baseUrl.protocol === 'wss:' ? 'https:' : 'http:';
+    baseUrl.pathname = '/';
+    baseUrl.search = '';
+    baseUrl.hash = '';
+    return new URL(normalizedPath, baseUrl).toString();
+  }
+
+  return normalizedPath;
+}
+
 function appendConnectionParams(rawUrl: string, clientId: string, profile: GameConnectionProfile): string {
   const url = new URL(rawUrl, window.location.href);
   url.searchParams.set('clientId', clientId);
@@ -187,6 +208,10 @@ function appendConnectionParams(rawUrl: string, clientId: string, profile: GameC
   if (profile.accountId) url.searchParams.set('accountId', profile.accountId);
   if (profile.characterName) url.searchParams.set('name', profile.characterName);
   return url.toString();
+}
+
+function ensureTrailingSlash(value: string): string {
+  return value.endsWith('/') ? value : `${value}/`;
 }
 
 function getOrCreateClientId(): string {
