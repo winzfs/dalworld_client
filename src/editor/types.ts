@@ -3,6 +3,31 @@ export type EditorLayerId = 'ground' | 'object' | 'collision';
 export type EditorResourceType = 'tree' | 'stone';
 export type EditorMonsterType = 'wild_slime' | 'sheep';
 
+export type EditorItemCategory =
+  | 'resource'
+  | 'consumable'
+  | 'equipment'
+  | 'weapon'
+  | 'tool'
+  | 'crafting_material'
+  | 'crafting_station'
+  | 'building_part'
+  | 'capture'
+  | 'pet';
+
+export type EditorItemFieldValue = string | number | boolean;
+
+export type EditorItemOverride = {
+  id: string;
+  label?: string;
+  description?: string;
+  icon?: string;
+  category?: EditorItemCategory;
+  stackable?: boolean;
+  maxStack?: number;
+  fields?: Record<string, EditorItemFieldValue>;
+};
+
 export type EditorMonsterSpecOverrides = {
   maxHp?: number;
   moveSpeed?: number;
@@ -120,6 +145,7 @@ export type EditorWorldMapDraft = {
   current: EditorMapCoord;
   cells: EditorMapCell[];
   monsterSpawnRules?: EditorMonsterSpawnRule[];
+  itemOverrides?: EditorItemOverride[];
 };
 
 export type EditorMapDraft = {
