@@ -21,7 +21,9 @@ export type EditorMonsterSpawnRule = {
   monsterType: EditorMonsterType;
   scope: EditorMonsterSpawnRuleScope;
   maxAlive: number;
-  spawnsPerHour: number;
+  spawnsPerMinute: number;
+  /** @deprecated kept only for older local/server map saves. New saves use spawnsPerMinute. */
+  spawnsPerHour?: number;
   spec?: EditorMonsterSpecOverrides;
 };
 
@@ -39,6 +41,8 @@ export type EditorPlacementGameplay =
       spawnRadius: number;
       maxAlive: number;
       respawnMs: number;
+      spawnsPerMinute?: number;
+      /** @deprecated kept only for older map saves. */
       spawnsPerHour?: number;
       spec?: EditorMonsterSpecOverrides;
     };
