@@ -34,11 +34,17 @@ export type MonsterFallbackConfig = {
   chaseColor: number;
 };
 
+export type MonsterAnimationTimingConfig = {
+  attackCooldownMs: number;
+  attackAnimationMs: number;
+};
+
 export type MonsterRenderConfig = {
   type: MonsterType;
   spriteSheet?: MonsterSpriteSheetConfig;
   collision: MonsterCollisionConfig;
   fallback: MonsterFallbackConfig;
+  timing: MonsterAnimationTimingConfig;
 };
 
 const DEFAULT_ROWS: DirectionalRows = {
@@ -88,6 +94,10 @@ export const MONSTER_CONFIGS = {
       idleColor: 0xc62828,
       chaseColor: 0xff5252,
     },
+    timing: {
+      attackCooldownMs: 900,
+      attackAnimationMs: 420,
+    },
   },
   sheep: {
     type: 'sheep',
@@ -110,6 +120,10 @@ export const MONSTER_CONFIGS = {
       radius: 18,
       idleColor: 0xf6f1df,
       chaseColor: 0xfff2c7,
+    },
+    timing: {
+      attackCooldownMs: 1200,
+      attackAnimationMs: 480,
     },
   },
 } satisfies Record<MonsterType, MonsterRenderConfig>;
