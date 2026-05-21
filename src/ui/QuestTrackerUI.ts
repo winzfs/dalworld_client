@@ -1,9 +1,11 @@
 import type { QuestStateSnapshot } from '../protocol/messages';
+import { QuestStoryOverlay } from './QuestStoryOverlay';
 
 const QUEST_TRACKER_ROOT_ID = 'dalworld-quest-tracker';
 
 export class QuestTrackerUI {
   private readonly root: HTMLDivElement;
+  private readonly storyOverlay = new QuestStoryOverlay();
   private lastSignature = '';
 
   constructor() {
@@ -12,6 +14,8 @@ export class QuestTrackerUI {
 
   render(questState: QuestStateSnapshot | null | undefined): void {
     const activeQuest = questState?.active[0] ?? null;
+    this.storyOverlay.sync(activeQuest);
+
     const signature = JSON.stringify(activeQuest ?? null);
     if (signature === this.lastSignature) return;
     this.lastSignature = signature;
