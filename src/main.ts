@@ -46,10 +46,7 @@ async function bootEditor(mount: HTMLElement, probe: EditorBootProbe | null): Pr
   probe?.log('EditorApp created');
 
   probe?.log('starting EditorApp');
-  await editor.start(mount, (message) => {
-    bootOverlay.setMessage(message);
-    probe?.log(message);
-  });
+  await editor.start(mount);
   probe?.log('EditorApp.start resolved');
 
   bootOverlay.remove();
