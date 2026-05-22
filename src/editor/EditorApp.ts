@@ -5,9 +5,8 @@ import type { WorldInfo } from '../protocol/messages';
 import { EditorCameraSystem } from './EditorCameraSystem';
 import { EditorFallbackPanel } from './EditorFallbackPanel';
 import type { EditorState } from './EditorState';
-import type { TilesetPanel } from './TilesetPanel';
 import type { TilePlacementSystem } from './TilePlacementSystem';
-import type { EditorMapDraft, EditorMonsterSpawnRule, EditorTilesetAsset } from './types';
+import type { EditorMapDraft, EditorTilesetAsset } from './types';
 
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const EDITOR_MODULE_LOAD_TIMEOUT_MS = 5_000;
@@ -23,21 +22,6 @@ type RuntimeModules = {
     state: EditorState,
     options: { tileSize: number; mapName: string },
   ) => TilePlacementSystem;
-  TilesetPanel: new (
-    state: EditorState,
-    options: {
-      onSave: () => void;
-      onLoad: () => void;
-      onExport: () => void;
-      onClear: () => void;
-      onPickAsset: (asset: EditorTilesetAsset) => void;
-      onFillAll: () => void;
-      onRandomFill: (chancePercent: number) => void;
-      onToggleWorldMap: () => void;
-      getMonsterSpawnRules: () => EditorMonsterSpawnRule[];
-      setMonsterSpawnRules: (rules: EditorMonsterSpawnRule[]) => void;
-    },
-  ) => TilesetPanel;
 };
 
 export class EditorApp {
@@ -87,22 +71,20 @@ export class EditorApp {
       },
     });
     this.fallbackPanel.mount(document.body);
-    this.fallbackPanel.setStatus('렌더러 준비 완료. 경량 에디터 의존성 개별 로딩 중...');
+    this.fallbackPanel.setStatus('렌더러 준비 완료. 최소 에디터 로딩 중...');
   }
 
   private async loadLightweightRuntime(status: (message: string) => void): Promise<void> {
     try {
-      status('Loading lightweight editor dependencies individually...');
-      this.fallbackPanel?.setStatus('경량 에디터 의존성 개별 로딩 중...');
+      status('Loading minimal editor modules...');
+      this.fallbackPanel?.setStatus('최소 에디터 모듈 로딩 중...');
 
       const { EditorState } = await loadEditorModule('EditorState', () => import('./EditorState'), status);
-      const { TilesetPanel } = await loadEditorModule('TilesetPanel', () => import('./TilesetPanel'), status);
       const { TilePlacementSystem } = await loadEditorModule('TilePlacementSystem', () => import('./TilePlacementSystem'), status);
 
       this.editorRuntime = this.createInlineLightweightRuntime(
         {
           EditorState,
-          TilesetPanel,
           TilePlacementSystem,
         },
         status,
@@ -111,13 +93,13 @@ export class EditorApp {
       this.fallbackPanel?.element.remove();
       this.fallbackPanel = null;
       this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
-      status(`Lightweight editor ready. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
-      console.log('[EditorBoot] Lightweight editor ready.');
+      status(`Minimal editor ready. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
+      console.log('[EditorBoot] Minimal editor ready.');
     } catch (error) {
-      const message = `Lightweight editor failed: ${formatErrorMessage(error)}`;
+      const message = `Minimal editor failed: ${formatErrorMessage(error)}`;
       this.fallbackPanel?.setStatus(message);
       status(message);
-      console.warn('[EditorBoot] Lightweight editor failed.', error);
+      console.warn('[EditorBoot] Minimal editor failed.', error);
     }
   }
 
@@ -127,31 +109,15 @@ export class EditorApp {
       tileSize: 32,
       mapName: 'dalworld-map-lightweight',
     });
-    const panel = new modules.TilesetPanel(state, {
-      onSave: () => status('경량 모드에서는 아직 서버 저장을 지원하지 않습니다. Export를 사용해 주세요.'),
-      onLoad: () => status('경량 모드에서는 아직 불러오기를 지원하지 않습니다.'),
-      onExport: () => exportJson(placement.mapDraft),
-      onClear: () => placement.clear(),
-      onPickAsset: (asset) => state.selectAsset(asset),
-      onFillAll: () => {
-        void placement.fillAll({ width: DEFAULT_WORLD.width, height: DEFAULT_WORLD.height });
-      },
-      onRandomFill: (chancePercent) => {
-        void placement.fillRandom({
-          width: DEFAULT_WORLD.width,
-          height: DEFAULT_WORLD.height,
-          chancePercent,
-        });
-      },
-      onToggleWorldMap: () => status('경량 모드에서는 월드맵 패널을 아직 지원하지 않습니다.'),
-      getMonsterSpawnRules: () => [],
-      setMonsterSpawnRules: () => undefined,
-    });
 
     this.world.addChild(placement.layer);
-    panel.mount(document.body);
+    mountMinimalEditorPanel({
+      state,
+      placement,
+      status,
+    });
     this.attachPaintingHandlers(state, placement);
-    status('경량 에디터 준비 완료. 타일을 선택하고 맵을 터치/드래그해서 배치할 수 있습니다.');
+    status('최소 에디터 준비 완료. 기본 타일을 맵에 터치/드래그해서 배치할 수 있습니다.');
 
     return {
       placement,
@@ -255,6 +221,82 @@ export class EditorApp {
         .stroke({ width: 1, color: 0x2d3f4f, alpha: 0.28 });
     }
   }
+}
+
+function mountMinimalEditorPanel(options: {
+  state: EditorState;
+  placement: TilePlacementSystem;
+  status: (message: string) => void;
+}): void {
+  document.querySelectorAll('.editor-fallback-panel').forEach((element) => element.remove());
+  const panel = document.createElement('div');
+  panel.className = 'map-editor-panel minimal-editor-panel';
+  panel.style.left = '20px';
+  panel.style.top = '20px';
+  panel.style.zIndex = '2147483646';
+
+  const header = document.createElement('div');
+  header.className = 'map-editor-header';
+  header.textContent = 'Map Editor - Minimal';
+
+  const body = document.createElement('div');
+  body.style.cssText = 'padding:12px;display:grid;gap:10px;font-size:12px;line-height:1.45;';
+
+  const note = document.createElement('div');
+  note.textContent = '모바일 안정화용 최소 에디터입니다. 기본 타일 배치, 전체 채우기, 지우기, JSON 내보내기를 지원합니다.';
+  note.style.color = 'rgba(255,255,255,.78)';
+
+  const selected = document.createElement('div');
+  selected.style.cssText = 'padding:8px 9px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(0,0,0,.2);color:#ffe4a3;';
+  selected.textContent = '선택: 기본 잔디 타일';
+
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;';
+
+  const grassButton = createPanelButton('잔디 선택', () => {
+    options.state.selectAsset(createFallbackAsset('grass', 0x527a3a));
+    selected.textContent = '선택: 기본 잔디 타일';
+  });
+  const dirtButton = createPanelButton('흙 선택', () => {
+    options.state.selectAsset(createFallbackAsset('dirt', 0x8a6a3d));
+    selected.textContent = '선택: 기본 흙 타일';
+  });
+  const fillButton = createPanelButton('전체 채우기', () => {
+    void options.placement.fillAll({ width: DEFAULT_WORLD.width, height: DEFAULT_WORLD.height });
+  });
+  const clearButton = createPanelButton('지우기', () => options.placement.clear());
+  const exportButton = createPanelButton('JSON Export', () => exportJson(options.placement.mapDraft));
+
+  actions.append(grassButton, dirtButton, fillButton, clearButton, exportButton);
+  body.append(note, selected, actions);
+  panel.append(header, body);
+  document.body.appendChild(panel);
+
+  options.state.selectAsset(createFallbackAsset('grass', 0x527a3a));
+  options.status('최소 에디터 패널 표시 완료.');
+}
+
+function createPanelButton(label: string, onClick: () => void): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'map-editor-action';
+  button.textContent = label;
+  button.onclick = onClick;
+  return button;
+}
+
+function createFallbackAsset(id: string, color: number): EditorTilesetAsset {
+  return {
+    id: `fallback.${id}`,
+    label: id,
+    categoryId: 'fallback',
+    categoryLabel: 'Fallback',
+    url: '',
+    layer: 'ground',
+    tileWidth: 32,
+    tileHeight: 32,
+    solidColor: color,
+  };
 }
 
 function getRenderResolution(): number {
