@@ -40,6 +40,7 @@ export class MapEditorSession {
   private readonly cellSize: number;
   private readonly draftStore: WorldCellDraftStore;
   private worldMapGrid: WorldMapGridLike | null = null;
+  private loadedWorldMapDraft: EditorWorldMapDraft | null = null;
 
   constructor(options: MapEditorSessionOptions) {
     this.state = options.state;
@@ -56,6 +57,13 @@ export class MapEditorSession {
 
   attachWorldMapGrid(grid: WorldMapGridLike): void {
     this.worldMapGrid = grid;
+
+    if (this.loadedWorldMapDraft) {
+      grid.load(this.loadedWorldMapDraft);
+      grid.selectCell(this.loadedWorldMapDraft.current.gridX, this.loadedWorldMapDraft.current.gridY);
+      this.status(`월드맵 grid 연결 완료. loaded cells=${this.loadedWorldMapDraft.cells.length}`);
+    }
+
     this.draftStore.ensureCells(grid.cells);
   }
 
@@ -93,12 +101,14 @@ export class MapEditorSession {
     const { loadServerWorldMap } = await import('./EditorWorldSaveActions');
     const map = await loadServerWorldMap(this.status);
     const worldMapDraft = createWorldMapDraftFromServerMap(map as ServerWorldMapForSession);
+    this.loadedWorldMapDraft = worldMapDraft;
+
     const draft = await this.draftStore.loadFromServerMap(map);
 
     if (this.worldMapGrid) {
       this.worldMapGrid.load(worldMapDraft);
-      this.draftStore.ensureCells(this.worldMapGrid.cells);
       this.worldMapGrid.selectCell(worldMapDraft.current.gridX, worldMapDraft.current.gridY);
+      this.draftStore.ensureCells(this.worldMapGrid.cells);
     }
 
     this.status(`전체 월드 불러오기 완료. cells=${map.cells.length}, current=${worldMapDraft.current.gridX},${worldMapDraft.current.gridY}, placements=${draft.placements.length}`);
