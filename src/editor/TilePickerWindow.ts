@@ -105,14 +105,22 @@ export class TilePickerWindow {
 
   open(asset: EditorTilesetAsset): void {
     this.asset = asset;
+    this.naturalWidth = 0;
+    this.naturalHeight = 0;
     this.clearSelection();
-    this.image.src = asset.url;
-    this.image.onload = () => {
-      this.naturalWidth = this.image.naturalWidth;
-      this.naturalHeight = this.image.naturalHeight;
-      this.syncGridBackground();
-    };
     this.element.hidden = false;
+
+    this.image.onload = () => this.handleImageReady();
+    this.image.onerror = () => {
+      this.naturalWidth = 0;
+      this.naturalHeight = 0;
+      this.clearSelection();
+    };
+    this.image.src = asset.url;
+
+    if (this.image.complete && this.image.naturalWidth > 0 && this.image.naturalHeight > 0) {
+      this.handleImageReady();
+    }
   }
 
   close(): void {
@@ -121,9 +129,17 @@ export class TilePickerWindow {
     this.clearSelection();
   }
 
+  private handleImageReady(): void {
+    this.naturalWidth = this.image.naturalWidth;
+    this.naturalHeight = this.image.naturalHeight;
+    this.syncGridBackground();
+    this.clearSelection();
+  }
+
   private attachPointerHandlers(): void {
     this.imageWrap.addEventListener('pointerdown', (event) => {
-      if (!this.asset) return;
+      if (!this.asset || !this.hasImageSize()) return;
+      event.preventDefault();
       const point = this.eventToImagePoint(event);
       this.dragStart = snapPoint(point, this.gridSize);
       this.setSelectionFromPoints(this.dragStart, this.dragStart);
@@ -131,13 +147,15 @@ export class TilePickerWindow {
     });
 
     this.imageWrap.addEventListener('pointermove', (event) => {
-      if (!this.dragStart) return;
+      if (!this.dragStart || !this.hasImageSize()) return;
+      event.preventDefault();
       const current = snapPoint(this.eventToImagePoint(event), this.gridSize);
       this.setSelectionFromPoints(this.dragStart, current);
     });
 
-    const finish = () => {
+    const finish = (event: PointerEvent) => {
       this.dragStart = null;
+      if (this.imageWrap.hasPointerCapture(event.pointerId)) this.imageWrap.releasePointerCapture(event.pointerId);
     };
 
     this.imageWrap.addEventListener('pointerup', finish);
@@ -146,16 +164,19 @@ export class TilePickerWindow {
 
   private eventToImagePoint(event: PointerEvent): Point {
     const rect = this.image.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0 || !this.hasImageSize()) return { x: 0, y: 0 };
     const scaleX = this.naturalWidth / rect.width;
     const scaleY = this.naturalHeight / rect.height;
 
     return {
-      x: clamp((event.clientX - rect.left) * scaleX, 0, this.naturalWidth),
-      y: clamp((event.clientY - rect.top) * scaleY, 0, this.naturalHeight),
+      x: clamp((event.clientX - rect.left) * scaleX, 0, Math.max(0, this.naturalWidth - 1)),
+      y: clamp((event.clientY - rect.top) * scaleY, 0, Math.max(0, this.naturalHeight - 1)),
     };
   }
 
   private setSelectionFromPoints(a: Point, b: Point): void {
+    if (!this.hasImageSize()) return;
+
     const minX = Math.min(a.x, b.x);
     const minY = Math.min(a.y, b.y);
     const maxX = Math.max(a.x, b.x) + this.gridSize;
@@ -176,12 +197,17 @@ export class TilePickerWindow {
   }
 
   private renderSelection(): void {
-    if (!this.sourceRect) {
+    if (!this.sourceRect || !this.hasImageSize()) {
       this.selection.hidden = true;
       return;
     }
 
     const rect = this.image.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      this.selection.hidden = true;
+      return;
+    }
+
     const scaleX = rect.width / this.naturalWidth;
     const scaleY = rect.height / this.naturalHeight;
 
@@ -207,6 +233,10 @@ export class TilePickerWindow {
     this.sourceRect = null;
     this.selection.hidden = true;
     this.confirmButton.disabled = true;
+  }
+
+  private hasImageSize(): boolean {
+    return this.naturalWidth > 0 && this.naturalHeight > 0;
   }
 }
 
