@@ -1,4 +1,4 @@
-import type { EditorLayerId } from './types';
+import type { EditorLayerId, EditorToolMode } from './types';
 import type { EditorState } from './EditorState';
 import type { TilePlacementSystem } from './TilePlacementSystem';
 
@@ -7,6 +7,11 @@ const LAYERS: Array<{ id: EditorLayerId; label: string; extraClass?: string }> =
   { id: 'ground', label: 'Ground' },
   { id: 'object', label: 'Object' },
   { id: 'collision', label: 'Block', extraClass: 'is-collision' },
+];
+const TOOL_MODES: Array<{ mode: EditorToolMode; label: string }> = [
+  { mode: 'paint', label: '배치' },
+  { mode: 'picker', label: '피커' },
+  { mode: 'erase', label: '삭제' },
 ];
 
 type Options = {
@@ -43,14 +48,35 @@ export function mountClassicTilesPanelLite(options: Options): void {
   const scale = createScaleControls(options);
   const grid = createGridControls(options);
   const layers = createLayerControls(options);
+  const tools = createToolControls(options);
 
   const note = document.createElement('div');
   note.className = 'map-editor-empty';
-  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 표시 완료';
+  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 표시 완료';
 
-  panel.append(header, tabs, scale, grid, layers, note);
+  panel.append(header, tabs, scale, grid, layers, tools, note);
   document.body.appendChild(panel);
-  options.status('기존 UI 패널 레이어 표시 완료.');
+  options.status('기존 UI 패널 도구 표시 완료.');
+}
+
+function createToolControls(options: Options): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'map-editor-tools';
+
+  for (const item of TOOL_MODES) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'map-editor-tool';
+    if (options.state.mode === item.mode) button.classList.add('is-active');
+    button.textContent = item.label;
+    button.onclick = () => {
+      options.state.setMode(item.mode);
+      options.status(`도구 변경: ${item.label}`);
+    };
+    container.appendChild(button);
+  }
+
+  return container;
 }
 
 function createLayerControls(options: Options): HTMLElement {
