@@ -179,7 +179,7 @@ function optionsDraftClone(draft: EditorMapDraft): EditorMapDraft {
     ...draft,
     worldMap: draft.worldMap ? {
       ...draft.worldMap,
-      current: draft.worldMap.current ? { ...draft.worldMap.current } : undefined,
+      current: draft.worldMap.current ? { ...draft.worldMap.current } : { gridX: 0, gridY: 0 },
       cells: draft.worldMap.cells.map((cell) => ({ ...cell })),
       monsterSpawnRules: draft.worldMap.monsterSpawnRules?.map((rule) => ({
         ...rule,
