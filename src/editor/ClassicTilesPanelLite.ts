@@ -64,44 +64,56 @@ export function mountClassicTilesPanelLite(options: Options): void {
   const tools = createToolControls(options);
   const fill = createFillControls(options);
   const actions = createActionControls(options);
-  const categories = createLazyCategoryControls(options);
+  const assets = document.createElement('div');
+  assets.className = 'map-editor-assets';
+  assets.textContent = '카테고리 선택 후 에셋이 표시됩니다.';
+  const categories = createLazyCategoryControls(options, assets);
 
   const note = document.createElement('div');
   note.className = 'map-editor-empty';
-  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + 월드맵 + Fill + Actions + Categories 표시 완료';
+  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + 월드맵 + Fill + Actions + Categories + Assets 표시 완료';
 
-  panel.append(header, tabs, scale, grid, layers, tools, fill, actions, categories, note);
+  panel.append(header, tabs, scale, grid, layers, tools, fill, actions, categories, assets, note);
   document.body.appendChild(panel);
-  options.status('기존 UI 패널 Categories 표시 완료.');
+  options.status('기존 UI 패널 Assets 표시 완료.');
 }
 
-function createLazyCategoryControls(options: Options): HTMLElement {
+function createLazyCategoryControls(options: Options, assetContainer: HTMLElement): HTMLElement {
   const container = document.createElement('div');
   container.className = 'map-editor-categories';
 
   const loadButton = createActionButton('카테고리 로드', () => {
-    void loadCategories(container, options);
+    void loadCategories(container, assetContainer, options);
   });
   container.appendChild(loadButton);
   return container;
 }
 
-async function loadCategories(container: HTMLElement, options: Options): Promise<void> {
+async function loadCategories(container: HTMLElement, assetContainer: HTMLElement, options: Options): Promise<void> {
   container.textContent = '카테고리 로딩 중...';
+  assetContainer.textContent = '에셋 대기 중...';
   try {
-    options.status('tilesetManifest 카테고리 로딩 중...');
+    options.status('tilesetManifest 카테고리/에셋 로딩 중...');
     const { TILESET_CATEGORIES } = await import('./tilesetManifest');
-    renderCategories(container, TILESET_CATEGORIES, options);
-    options.status(`카테고리 로딩 완료. categories=${TILESET_CATEGORIES.length}`);
+    renderCategories(container, assetContainer, TILESET_CATEGORIES, options);
+    options.status(`카테고리/에셋 로딩 완료. categories=${TILESET_CATEGORIES.length}`);
   } catch (error) {
     const message = `카테고리 로딩 실패: ${formatErrorMessage(error)}`;
     container.textContent = message;
+    assetContainer.textContent = '';
     options.status(message);
   }
 }
 
-function renderCategories(container: HTMLElement, categories: EditorTilesetCategory[], options: Options): void {
+function renderCategories(
+  container: HTMLElement,
+  assetContainer: HTMLElement,
+  categories: EditorTilesetCategory[],
+  options: Options,
+): void {
   container.replaceChildren();
+
+  const visibleCategories = categories.filter((category) => category.id !== MONSTER_CATEGORY_ID);
 
   const sync = () => {
     for (const child of Array.from(container.children)) {
@@ -110,18 +122,55 @@ function renderCategories(container: HTMLElement, categories: EditorTilesetCateg
     }
   };
 
-  for (const category of categories.filter((category) => category.id !== MONSTER_CATEGORY_ID)) {
+  const showCategoryAssets = (category: EditorTilesetCategory) => {
+    options.state.setActiveCategory(category.id);
+    sync();
+    renderAssets(assetContainer, category, options);
+    options.status(`카테고리 선택: ${category.name} / assets=${category.assets.length}`);
+  };
+
+  for (const category of visibleCategories) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'map-editor-category';
     button.dataset.categoryId = category.id;
     button.textContent = category.name;
+    button.onclick = () => showCategoryAssets(category);
+    container.appendChild(button);
+  }
+
+  const initial = visibleCategories.find((category) => category.id === options.state.activeCategoryId) ?? visibleCategories[0];
+  if (initial) showCategoryAssets(initial);
+  sync();
+}
+
+function renderAssets(container: HTMLElement, category: EditorTilesetCategory, options: Options): void {
+  container.replaceChildren();
+
+  const sync = () => {
+    for (const child of Array.from(container.children)) {
+      if (!(child instanceof HTMLButtonElement)) continue;
+      child.classList.toggle('is-active', child.dataset.assetId === options.state.selectedAsset?.id);
+    }
+  };
+
+  for (const asset of category.assets) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'map-editor-asset';
+    button.dataset.assetId = asset.id;
+    button.textContent = asset.name;
     button.onclick = () => {
-      options.state.setActiveCategory(category.id);
+      options.state.selectAsset(asset);
+      options.state.setMode('paint');
       sync();
-      options.status(`카테고리 선택: ${category.name}`);
+      options.status(`에셋 선택: ${asset.name}`);
     };
     container.appendChild(button);
+  }
+
+  if (category.assets.length === 0) {
+    container.textContent = '이 카테고리에 에셋이 없습니다.';
   }
   sync();
 }
