@@ -33,6 +33,7 @@ export class MapEditorBootMinimal {
   private picker: any = createHiddenWindow('tile-picker-window is-fallback');
   private worldMapGrid: any = null;
   private worldMapPanel: any = createHiddenWindow('world-map-panel is-fallback');
+  private gridOverlay: any = null;
   private minimap: any = null;
   private readonly uiRoot: HTMLElement;
   private readonly toast = createEditorToast();
@@ -79,6 +80,8 @@ export class MapEditorBootMinimal {
     this.report('MapEditorBootMinimal loading WorldMap modules...');
     const worldGridModule = await import('./WorldMapGrid');
     const worldPanelModule = await import('./WorldMapPanel');
+    this.report('MapEditorBootMinimal loading EditorGridOverlay...');
+    const gridOverlayModule = await import('./EditorGridOverlay');
     this.report('MapEditorBootMinimal loading EditorMinimap...');
     const minimapModule = await import('./EditorMinimap');
 
@@ -86,6 +89,11 @@ export class MapEditorBootMinimal {
     this.placement = new placementModule.TilePlacementSystem(this.state, {
       tileSize: this.options.tileSize ?? 32,
       mapName: this.getCellMapName(0, 0),
+    });
+
+    this.gridOverlay = new gridOverlayModule.EditorGridOverlay(this.state, {
+      width: this.worldWidth,
+      height: this.worldHeight,
     });
 
     this.worldMapGrid = new worldGridModule.WorldMapGrid({ cellSize: this.cellSize });
@@ -123,6 +131,7 @@ export class MapEditorBootMinimal {
 
     this.enabled = true;
     this.options.world.sortableChildren = true;
+    this.options.world.addChild(this.gridOverlay.layer);
     this.options.world.addChild(this.placement.layer);
     this.panel.mount(this.uiRoot);
     this.picker.mount(this.uiRoot);
@@ -132,7 +141,7 @@ export class MapEditorBootMinimal {
     this.attachCanvasHandlers();
     this.options.app.ticker.add(this.minimapTicker);
     void this.loadLocalBackup();
-    this.report('MapEditorBootMinimal DOM mounted with world map panel and minimap.');
+    this.report('MapEditorBootMinimal DOM mounted with grid overlay, world map panel and minimap.');
   }
 
   stop(): void {
@@ -145,11 +154,13 @@ export class MapEditorBootMinimal {
     this.worldMapPanel.element.remove();
     this.minimap?.element.remove();
     this.toast.remove();
+    if (this.gridOverlay?.layer?.parent) this.gridOverlay.layer.parent.removeChild(this.gridOverlay.layer);
     if (this.placement?.layer?.parent) this.placement.layer.parent.removeChild(this.placement.layer);
     this.detachCanvasHandlers();
   }
 
   setWorldSize(width: number, height: number): void {
+    this.gridOverlay?.setWorldSize(width, height);
     this.minimap?.setWorldSize(width, height);
   }
 
@@ -205,7 +216,7 @@ export class MapEditorBootMinimal {
     const key = `${this.state.activeLayer}:${x}:${y}`;
     if (key === this.lastPaintKey) return;
     this.lastPaintKey = key;
-    void this.placement.placeAt(point.x, point.y);
+    void this.placement.placeAt(x, y);
   }
 
   private screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
