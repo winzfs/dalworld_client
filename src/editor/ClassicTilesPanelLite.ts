@@ -46,45 +46,56 @@ class ClassicTilesPanelLite {
   private dragOffsetY = 0;
   private categories: EditorTilesetCategory[] = [];
   private loadError = '';
-  private readonly unsubscribe: () => void;
+  private unsubscribe: (() => void) | null = null;
+  private destroyed = false;
 
   constructor(private readonly options: Options) {
     this.element.className = 'map-editor-panel';
     this.element.style.left = '20px';
     this.element.style.top = '20px';
-    this.unsubscribe = options.state.subscribe(() => this.render());
-    this.attachDragHandlers();
-    this.render();
-    void this.loadCategories();
+    this.element.appendChild(this.createHeader('Map Editor'));
   }
 
   mount(parent: HTMLElement): void {
     document.querySelector('.minimal-editor-panel')?.remove();
     parent.appendChild(this.element);
+    this.options.status('Map Editor 패널 표시 완료. 컨트롤 렌더 준비 중...');
+    requestAnimationFrame(() => {
+      if (this.destroyed) return;
+      this.attachDragHandlers();
+      this.renderShell();
+      this.unsubscribe = this.options.state.subscribe(() => this.renderShell());
+      window.setTimeout(() => void this.loadCategories(), 0);
+    });
   }
 
   destroy(): void {
-    this.unsubscribe();
+    this.destroyed = true;
+    this.unsubscribe?.();
     this.element.remove();
   }
 
   private async loadCategories(): Promise<void> {
     try {
-      this.options.status('tilesetManifest import started for classic-lite panel...');
+      this.options.status('타일셋 목록 로딩 중...');
       const { TILESET_CATEGORIES } = await import('./tilesetManifest');
+      if (this.destroyed) return;
       this.categories = TILESET_CATEGORIES;
       this.loadError = '';
-      this.options.status(`기존 UI 형태 패널 준비 완료. categories=${TILESET_CATEGORIES.length}`);
+      this.options.status(`타일셋 목록 로딩 완료. categories=${TILESET_CATEGORIES.length}`);
     } catch (error) {
+      if (this.destroyed) return;
       this.loadError = `타일셋 로딩 실패: ${formatErrorMessage(error)}`;
       this.options.status(this.loadError);
     }
-    this.render();
+    requestAnimationFrame(() => {
+      if (!this.destroyed) this.renderShell();
+    });
   }
 
-  private render(): void {
+  private renderShell(): void {
     this.element.replaceChildren(
-      this.createHeader(),
+      this.createHeader('Map Editor'),
       this.createTabs(),
       this.createScaleControls(),
       this.createGridControls(),
@@ -98,10 +109,10 @@ class ClassicTilesPanelLite {
     );
   }
 
-  private createHeader(): HTMLElement {
+  private createHeader(title: string): HTMLElement {
     const header = document.createElement('div');
     header.className = 'map-editor-header';
-    header.textContent = 'Map Editor';
+    header.textContent = title;
     return header;
   }
 
@@ -119,7 +130,7 @@ class ClassicTilesPanelLite {
     button.textContent = label;
     button.onclick = () => {
       this.activeTab = tab;
-      this.render();
+      this.renderShell();
     };
     return button;
   }
