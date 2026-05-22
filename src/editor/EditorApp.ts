@@ -3,6 +3,7 @@ import { Camera } from '../game/Camera';
 import { InputController } from '../game/InputController';
 import type { WorldInfo } from '../protocol/messages';
 import { EditorCameraSystem } from './EditorCameraSystem';
+import { EditorFallbackPanel } from './EditorFallbackPanel';
 import type { MapEditor as MapEditorInstance } from './MapEditor';
 import type { EditorMinimap as EditorMinimapInstance } from './EditorMinimap';
 
@@ -19,6 +20,7 @@ export class EditorApp {
 
   private mapEditor: MapEditorInstance | null = null;
   private minimap: EditorMinimapInstance | null = null;
+  private fallbackPanel: EditorFallbackPanel | null = null;
   private transitioning = false;
 
   async start(mount: HTMLElement): Promise<void> {
@@ -45,34 +47,61 @@ export class EditorApp {
     this.cameraSystem.setWorldSize(DEFAULT_WORLD);
 
     const status = createEditorStagePanel();
+    this.showFallbackPanel(status);
+
     status('Pixi initialized. Probing MapEditor dependencies...');
     await probeMapEditorDependencies(status);
 
-    status('Dependencies resolved. Loading MapEditor module...');
-    const { MapEditor } = await loadEditorModule(
-      'MapEditor',
-      () => import('./MapEditor'),
-      status,
-    );
+    await this.loadFullMapEditor(status);
+  }
 
-    status('MapEditor loaded. Creating main editor UI...');
-    this.mapEditor = new MapEditor({
-      app: this.app,
-      world: this.world,
-      tileSize: 32,
-      mapName: 'dalworld-map',
-      worldWidth: DEFAULT_WORLD.width,
-      worldHeight: DEFAULT_WORLD.height,
-      onMoveCameraTo: (x, y) => this.cameraSystem.setPosition(x, y),
+  private showFallbackPanel(status: (message: string) => void): void {
+    this.fallbackPanel = new EditorFallbackPanel({
+      onRetryMapEditor: () => {
+        void this.loadFullMapEditor(status);
+      },
     });
+    this.fallbackPanel.mount(document.body);
+    this.fallbackPanel.setStatus('렌더러 준비 완료. 전체 MapEditor 모듈 로딩 대기 중...');
+  }
 
-    status('Starting MapEditor DOM UI...');
-    this.mapEditor.start();
-    status(`MapEditor started. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
+  private async loadFullMapEditor(status: (message: string) => void): Promise<void> {
+    try {
+      this.fallbackPanel?.setStatus('MapEditor import started...');
+      status('Dependencies resolved. Loading MapEditor module...');
+      const { MapEditor } = await loadEditorModule(
+        'MapEditor',
+        () => import('./MapEditor'),
+        status,
+      );
 
-    this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
-    status('EditorApp.start completed without minimap.');
-    console.log('[EditorBoot] EditorApp.start completed without minimap.');
+      status('MapEditor loaded. Creating main editor UI...');
+      this.fallbackPanel?.setStatus('MapEditor loaded. Creating main editor UI...');
+      this.mapEditor = new MapEditor({
+        app: this.app,
+        world: this.world,
+        tileSize: 32,
+        mapName: 'dalworld-map',
+        worldWidth: DEFAULT_WORLD.width,
+        worldHeight: DEFAULT_WORLD.height,
+        onMoveCameraTo: (x, y) => this.cameraSystem.setPosition(x, y),
+      });
+
+      status('Starting MapEditor DOM UI...');
+      this.mapEditor.start();
+      this.fallbackPanel?.element.remove();
+      this.fallbackPanel = null;
+      status(`MapEditor started. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
+
+      this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
+      status('EditorApp.start completed without minimap.');
+      console.log('[EditorBoot] EditorApp.start completed without minimap.');
+    } catch (error) {
+      const message = `MapEditor import failed or timed out: ${formatErrorMessage(error)}`;
+      this.fallbackPanel?.setStatus(message);
+      status(message);
+      console.warn('[EditorBoot] MapEditor failed to load. Fallback panel remains active.', error);
+    }
   }
 
   private update(dt: number): void {
