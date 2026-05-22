@@ -104,11 +104,11 @@ export class MapEditorBootMinimal {
     this.detachCanvasHandlers();
   }
 
-  setWorldSize(): void {
+  setWorldSize(_width: number, _height: number): void {
     // Grid overlay is intentionally disabled in the minimal boot path.
   }
 
-  async transitionWorldCell(): Promise<void> {
+  async transitionWorldCell(_transition: WorldCellTransition): Promise<void> {
     this.showToast('월드맵 셀 전환은 임시 비활성화되어 있습니다.', 'info');
   }
 
@@ -225,6 +225,8 @@ export class MapEditorBootMinimal {
 
 function createPlacementFallback(state: any, mapName: string, tileSize: number): any {
   const layer = new PixiContainer();
+  layer.label = 'editor-minimal-placement-layer';
+  layer.sortableChildren = true;
   const draft: EditorMapDraft = { version: 1, name: mapName, tileSize, placements: [] };
   const displays = new Map<string, Graphics>();
 
@@ -240,6 +242,7 @@ function createPlacementFallback(state: any, mapName: string, tileSize: number):
   };
 
   const removeAt = (x: number, y: number) => {
+    if (!state) return;
     const gridSize = getGridSize();
     const sx = Math.floor(x / gridSize) * gridSize;
     const sy = Math.floor(y / gridSize) * gridSize;
@@ -303,13 +306,12 @@ function createPlacementFallback(state: any, mapName: string, tileSize: number):
 
 function createDisplay(placement: EditorTilePlacement, gridSize: number): Graphics {
   const display = new Graphics();
-  const scale = placement.scale ?? 1;
-  const width = (placement.displayWidth ?? placement.sourceRect?.width ?? gridSize) * scale;
-  const height = (placement.displayHeight ?? placement.sourceRect?.height ?? gridSize) * scale;
+  const width = placement.displayWidth ?? placement.sourceRect?.width ?? gridSize;
+  const height = placement.displayHeight ?? placement.sourceRect?.height ?? gridSize;
   display.x = placement.x;
   display.y = placement.y;
   display.zIndex = placement.layer === 'collision' ? 100 : placement.layer === 'object' ? 10 + placement.y / 1000 : 1;
-  display.rect(0, 0, width, height).fill({ color: placement.solidColor ?? fallbackColor(placement.categoryId), alpha: placement.layer === 'collision' ? 0.36 : 1 });
+  display.rect(0, 0, width, height).fill({ color: placement.solidColor ?? fallbackColor(placement.categoryId), alpha: placement.layer === 'collision' ? 0.38 : 1 });
   return display;
 }
 
