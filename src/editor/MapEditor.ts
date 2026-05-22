@@ -1,2 +1,2 @@
-export { MapEditorBootStandaloneLite as MapEditor } from './MapEditorBootStandaloneLite';
-export type { MapEditorBootStandaloneLiteOptions as MapEditorOptions, WorldCellTransition } from './MapEditorBootStandaloneLite';
+export { MapEditorBootMinimal as MapEditor } from './MapEditorBootMinimal';
+export type { MapEditorBootMinimalOptions as MapEditorOptions, WorldCellTransition } from './MapEditorBootMinimal';
