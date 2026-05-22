@@ -4,8 +4,7 @@ import { InputController } from '../game/InputController';
 import type { WorldInfo } from '../protocol/messages';
 import { EditorCameraSystem } from './EditorCameraSystem';
 import { EditorFallbackPanel } from './EditorFallbackPanel';
-import type { MapEditor as MapEditorInstance } from './MapEditor';
-import type { EditorMinimap as EditorMinimapInstance } from './EditorMinimap';
+import type { LightweightEditorRuntime } from './LightweightEditorRuntime';
 
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const EDITOR_MODULE_LOAD_TIMEOUT_MS = 5_000;
@@ -18,8 +17,7 @@ export class EditorApp {
   private readonly camera = new Camera(this.world);
   private readonly cameraSystem = new EditorCameraSystem(this.camera);
 
-  private mapEditor: MapEditorInstance | null = null;
-  private minimap: EditorMinimapInstance | null = null;
+  private editorRuntime: LightweightEditorRuntime | null = null;
   private fallbackPanel: EditorFallbackPanel | null = null;
   private transitioning = false;
 
@@ -48,64 +46,57 @@ export class EditorApp {
 
     const status = createEditorStagePanel();
     this.showFallbackPanel(status);
-
-    status('Pixi initialized. Probing MapEditor dependencies...');
-    await probeMapEditorDependencies(status);
-
-    await this.loadFullMapEditor(status);
+    await this.loadLightweightRuntime(status);
   }
 
   private showFallbackPanel(status: (message: string) => void): void {
     this.fallbackPanel = new EditorFallbackPanel({
       onRetryMapEditor: () => {
-        void this.loadFullMapEditor(status);
+        void this.loadLightweightRuntime(status);
       },
     });
     this.fallbackPanel.mount(document.body);
-    this.fallbackPanel.setStatus('렌더러 준비 완료. 전체 MapEditor 모듈 로딩 대기 중...');
+    this.fallbackPanel.setStatus('렌더러 준비 완료. 경량 에디터 런타임 로딩 중...');
   }
 
-  private async loadFullMapEditor(status: (message: string) => void): Promise<void> {
+  private async loadLightweightRuntime(status: (message: string) => void): Promise<void> {
     try {
-      this.fallbackPanel?.setStatus('MapEditor import started...');
-      status('Dependencies resolved. Loading MapEditor module...');
-      const { MapEditor } = await loadEditorModule(
-        'MapEditor',
-        () => import('./MapEditor'),
+      status('Loading lightweight editor runtime...');
+      this.fallbackPanel?.setStatus('경량 에디터 런타임 로딩 중...');
+      const { LightweightEditorRuntime } = await loadEditorModule(
+        'LightweightEditorRuntime',
+        () => import('./LightweightEditorRuntime'),
         status,
       );
 
-      status('MapEditor loaded. Creating main editor UI...');
-      this.fallbackPanel?.setStatus('MapEditor loaded. Creating main editor UI...');
-      this.mapEditor = new MapEditor({
+      this.editorRuntime = new LightweightEditorRuntime({
         app: this.app,
         world: this.world,
-        tileSize: 32,
-        mapName: 'dalworld-map',
         worldWidth: DEFAULT_WORLD.width,
         worldHeight: DEFAULT_WORLD.height,
-        onMoveCameraTo: (x, y) => this.cameraSystem.setPosition(x, y),
+        tileSize: 32,
+        mapName: 'dalworld-map-lightweight',
+        notify: (message) => {
+          this.fallbackPanel?.setStatus(message);
+          status(message);
+        },
       });
-
-      status('Starting MapEditor DOM UI...');
-      this.mapEditor.start();
+      this.editorRuntime.start(document.body);
       this.fallbackPanel?.element.remove();
       this.fallbackPanel = null;
-      status(`MapEditor started. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
-
       this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
-      status('EditorApp.start completed without minimap.');
-      console.log('[EditorBoot] EditorApp.start completed without minimap.');
+      status(`Lightweight editor ready. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
+      console.log('[EditorBoot] Lightweight editor ready.');
     } catch (error) {
-      const message = `MapEditor import failed or timed out: ${formatErrorMessage(error)}`;
+      const message = `Lightweight editor failed: ${formatErrorMessage(error)}`;
       this.fallbackPanel?.setStatus(message);
       status(message);
-      console.warn('[EditorBoot] MapEditor failed to load. Fallback panel remains active.', error);
+      console.warn('[EditorBoot] Lightweight editor failed.', error);
     }
   }
 
   private update(dt: number): void {
-    if (!this.mapEditor) return;
+    if (!this.editorRuntime) return;
 
     const transition = this.cameraSystem.update({
       input: this.input.state,
@@ -115,15 +106,9 @@ export class EditorApp {
       dt,
     });
 
-    if (this.minimap) {
-      const view = this.cameraSystem.getView();
-      this.minimap.setPlacements(this.mapEditor.placement.mapDraft.placements);
-      this.minimap.render({ ...view, screenWidth: this.app.renderer.width, screenHeight: this.app.renderer.height });
-    }
-
     if (transition && !this.transitioning) {
       this.transitioning = true;
-      void this.mapEditor.transitionWorldCell(transition).finally(() => {
+      void this.editorRuntime.transitionWorldCell().finally(() => {
         this.cameraSystem.setPosition(transition.targetX, transition.targetY);
         this.transitioning = false;
       });
@@ -181,18 +166,6 @@ function createEditorStagePanel(): (message: string) => void {
     panel.textContent = message;
     console.log('[EditorBoot]', message);
   };
-}
-
-async function probeMapEditorDependencies(status: (message: string) => void): Promise<void> {
-  await loadEditorModule('EditorState', () => import('./EditorState'), status);
-  await loadEditorModule('EditorTabServerSaves', () => import('./EditorTabServerSaves'), status);
-  await loadEditorModule('TilesetPanel', () => import('./TilesetPanel'), status);
-  await loadEditorModule('TilePlacementSystem', () => import('./TilePlacementSystem'), status);
-  await loadEditorModule('MapStorage', () => import('./MapStorage'), status);
-  await loadEditorModule('TilePickerWindow', () => import('./TilePickerWindow'), status);
-  await loadEditorModule('WorldMapGrid', () => import('./WorldMapGrid'), status);
-  await loadEditorModule('WorldMapPanel', () => import('./WorldMapPanel'), status);
-  await loadEditorModule('EditorGridOverlay', () => import('./EditorGridOverlay'), status);
 }
 
 async function loadEditorModule<T>(
