@@ -34,7 +34,6 @@ type LoadedModules = {
   MapStorage: new (mapName: string) => any;
   TilePickerWindow: new (options: { defaultGridSize: number; onPick: (asset: EditorTilesetAsset, sourceRect: any) => void }) => any;
   WorldMapGrid: new (options: { cellSize: number }) => any;
-  WorldMapPanel: new (options: any) => any;
 };
 
 const DIRECT_SELECT_MAX_SIZE = 96;
@@ -86,6 +85,9 @@ export class MapEditorOriginal {
     this.state = new modules.EditorState();
     this.storage = new modules.MapStorage(mapName);
     this.worldMapGrid = new modules.WorldMapGrid({ cellSize: this.worldWidth });
+    this.worldMapPanel = createWorldMapPanelFallback(() => {
+      this.showToast('월드맵 패널은 부팅 안정화 후 다시 연결합니다.', 'info', 2_500);
+    });
     this.placement = new modules.TilePlacementSystem(this.state, {
       tileSize: this.options.tileSize ?? 32,
       mapName: this.getCellMapName(0, 0),
@@ -96,14 +98,6 @@ export class MapEditorOriginal {
     this.picker = new modules.TilePickerWindow({
       defaultGridSize: this.options.tileSize ?? 32,
       onPick: (asset: EditorTilesetAsset, sourceRect: any) => this.state.setSourceRect(asset, sourceRect),
-    });
-
-    this.worldMapPanel = new modules.WorldMapPanel({
-      grid: this.worldMapGrid,
-      onSelectCell: (gridX: number, gridY: number) => {
-        void this.selectWorldCell(gridX, gridY, { targetX: this.worldWidth / 2, targetY: this.worldHeight / 2 });
-      },
-      onDeleteCurrentCell: () => { void this.deleteCurrentWorldCell(); },
     });
 
     this.panel = new modules.TilesetPanel(this.state, {
@@ -130,7 +124,6 @@ export class MapEditorOriginal {
     this.options.world.addChild(this.placement.layer);
     this.panel.mount(this.uiRoot);
     this.picker.mount(this.uiRoot);
-    this.worldMapPanel.mount(this.uiRoot);
     this.uiRoot.appendChild(this.toast);
 
     this.options.app.canvas.addEventListener('pointerdown', this.pointerDownHandler);
@@ -195,9 +188,7 @@ export class MapEditorOriginal {
     const picker = await import('./TilePickerWindow');
     this.reportStage('MapEditorOriginal loading WorldMapGrid...');
     const grid = await import('./WorldMapGrid');
-    this.reportStage('MapEditorOriginal loading WorldMapPanel...');
-    const worldPanel = await import('./WorldMapPanel');
-    this.reportStage('MapEditorOriginal modules loaded. Grid overlay skipped.');
+    this.reportStage('MapEditorOriginal modules loaded. World map panel and grid overlay skipped.');
 
     return {
       EditorState: editorState.EditorState,
@@ -208,7 +199,6 @@ export class MapEditorOriginal {
       MapStorage: storage.MapStorage,
       TilePickerWindow: picker.TilePickerWindow,
       WorldMapGrid: grid.WorldMapGrid,
-      WorldMapPanel: worldPanel.WorldMapPanel,
     };
   }
 
@@ -492,6 +482,21 @@ export class MapEditorOriginal {
     const panel = document.getElementById('editor-stage-panel');
     if (panel) panel.textContent = message;
   }
+}
+
+function createWorldMapPanelFallback(onToggle: () => void): { element: HTMLElement; mount(root: HTMLElement): void; toggle(): void } {
+  const element = document.createElement('div');
+  element.className = 'world-map-panel is-fallback';
+  element.hidden = true;
+  return {
+    element,
+    mount(root: HTMLElement) {
+      root.appendChild(element);
+    },
+    toggle() {
+      onToggle();
+    },
+  };
 }
 
 function createEditorToast(): HTMLDivElement {
