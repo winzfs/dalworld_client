@@ -113,7 +113,7 @@ export class EditorApp {
     this.world.addChild(placement.layer);
     mountSafeBootPanel({ state, placement, status });
     this.attachPaintingHandlers(state, placement);
-    status('안전 부팅 완료. 기존 Map Editor UI를 지연 로드할 수 있습니다.');
+    status('안전 부팅 완료. 기존 UI 형태의 가벼운 에디터 패널을 지연 로드할 수 있습니다.');
 
     return {
       placement,
@@ -232,7 +232,7 @@ function mountSafeBootPanel(options: {
   body.style.cssText = 'padding:12px;display:grid;gap:10px;font-size:12px;line-height:1.45;max-height:min(70vh,620px);overflow:auto;';
 
   const note = document.createElement('div');
-  note.textContent = '모바일 안전 부팅 패널입니다. 기존 Map Editor UI는 버튼으로 지연 로드합니다.';
+  note.textContent = '모바일 안전 부팅 패널입니다. 기존 UI 형태의 가벼운 Map Editor 패널은 버튼으로 지연 로드합니다.';
   note.style.color = 'rgba(255,255,255,.78)';
 
   const selected = document.createElement('div');
@@ -261,7 +261,7 @@ function mountSafeBootPanel(options: {
   const loadButton = createPanelButton('서버 불러오기', () => {
     void loadMinimalEditorFromServer(options.placement, options.status);
   });
-  const classicUiButton = createPanelButton('기존 에디터 UI 열기', () => {
+  const classicUiButton = createPanelButton('기존 UI 패널 열기', () => {
     void openClassicEditorUi(options);
   });
   const exportButton = createPanelButton('JSON Export', () => exportJson(options.placement.mapDraft));
@@ -288,7 +288,7 @@ function mountSafeBootPanel(options: {
 
   options.state.selectAsset(createFallbackAsset('grass', 0x527a3a));
   syncSummary();
-  options.status('안전 부팅 패널 표시 완료. 기존 UI를 지연 로드할 수 있습니다.');
+  options.status('안전 부팅 패널 표시 완료. 기존 UI 형태 패널을 지연 로드할 수 있습니다.');
 }
 
 async function openClassicEditorUi(options: {
@@ -297,9 +297,9 @@ async function openClassicEditorUi(options: {
   status: (message: string) => void;
 }): Promise<void> {
   try {
-    options.status('기존 Map Editor UI 로딩 중...');
-    const { mountClassicEditorPanelBridge } = await import('./ClassicEditorPanelBridge');
-    mountClassicEditorPanelBridge({
+    options.status('기존 UI 형태의 가벼운 Map Editor 패널 로딩 중...');
+    const { mountClassicTilesPanelLite } = await import('./ClassicTilesPanelLite');
+    mountClassicTilesPanelLite({
       state: options.state,
       placement: options.placement,
       status: options.status,
@@ -313,9 +313,9 @@ async function openClassicEditorUi(options: {
       onClear: () => options.placement.clear(),
     });
   } catch (error) {
-    const message = `기존 UI 로딩 실패: ${formatErrorMessage(error)}`;
+    const message = `기존 UI 형태 패널 로딩 실패: ${formatErrorMessage(error)}`;
     options.status(message);
-    console.warn('[EditorBoot] Classic editor UI load failed.', error);
+    console.warn('[EditorBoot] Classic lite editor UI load failed.', error);
   }
 }
 
