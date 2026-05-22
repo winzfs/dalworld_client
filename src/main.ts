@@ -53,6 +53,18 @@ async function bootEditor(mount: HTMLElement, probe: EditorBootProbe | null): Pr
   probe?.log('BootOverlay removed');
 
   try {
+    probe?.log('installing classic editor auto open');
+    const { installEditorClassicAutoOpen } = await import('./editor/EditorClassicAutoOpen');
+    installEditorClassicAutoOpen({
+      status: (message: string) => probe?.log(message),
+    });
+    probe?.log('Classic editor auto open installed');
+  } catch (error) {
+    probe?.error(error);
+    console.warn('[Editor] Classic editor auto open failed.', error);
+  }
+
+  try {
     probe?.log('installing optional ItemEditorFeature');
     installItemEditorFeature(document.body);
     probe?.log('ItemEditorFeature installed');
