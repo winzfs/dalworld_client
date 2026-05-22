@@ -1,4 +1,4 @@
-import { Container as PixiContainer, Graphics } from 'pixi.js';
+import { Assets, Container as PixiContainer, Graphics, Sprite } from 'pixi.js';
 import type { Application, Container } from 'pixi.js';
 import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset, EditorWorldMapDraft, EditorWorldSave } from './types';
 
@@ -228,7 +228,7 @@ function createPlacementFallback(state: any, mapName: string, tileSize: number, 
   layer.sortableChildren = true;
   layer.zIndex = 500;
   const draft: EditorMapDraft = { version: 1, name: mapName, tileSize, placements: [] };
-  const displays = new Map<string, Graphics>();
+  const displays = new Map<string, PixiContainer>();
 
   const getGridSize = () => state?.gridSize ?? tileSize;
   const getBrushAsset = (): EditorTilesetAsset | null => {
@@ -239,7 +239,7 @@ function createPlacementFallback(state: any, mapName: string, tileSize: number, 
     layer.removeChildren();
     displays.clear();
     for (const placement of draft.placements) {
-      const display = createDisplay(placement, getGridSize());
+      const display = createDisplay(placement, getGridSize(), report);
       displays.set(placement.id, display);
       layer.addChild(display);
     }
@@ -287,10 +287,10 @@ function createPlacementFallback(state: any, mapName: string, tileSize: number, 
       scale: state.brushScale ?? 1,
       displayWidth: asset.tileWidth ?? gridSize,
       displayHeight: asset.tileHeight ?? gridSize,
-      solidColor: asset.solidColor ?? fallbackColor(asset.categoryId),
+      solidColor: asset.solidColor,
     };
     draft.placements.push(placement);
-    const display = createDisplay(placement, gridSize);
+    const display = createDisplay(placement, gridSize, report);
     displays.set(placement.id, display);
     layer.addChild(display);
     report(`Placed ${asset.name} at ${sx},${sy}. count=${draft.placements.length}`);
@@ -316,17 +316,48 @@ function createPlacementFallback(state: any, mapName: string, tileSize: number, 
   };
 }
 
-function createDisplay(placement: EditorTilePlacement, gridSize: number): Graphics {
-  const display = new Graphics();
+function createDisplay(placement: EditorTilePlacement, gridSize: number, report: (message: string) => void): PixiContainer {
+  const container = new PixiContainer();
   const width = placement.displayWidth ?? placement.sourceRect?.width ?? gridSize;
   const height = placement.displayHeight ?? placement.sourceRect?.height ?? gridSize;
-  display.x = placement.x;
-  display.y = placement.y;
-  display.zIndex = placement.layer === 'collision' ? 100 : placement.layer === 'object' ? 10 + placement.y / 1000 : 1;
+  container.x = placement.x;
+  container.y = placement.y;
+  container.zIndex = placement.layer === 'collision' ? 100 : placement.layer === 'object' ? 10 + placement.y / 1000 : 1;
+
+  const outline = new Graphics();
+  outline.rect(0, 0, width, height).stroke({ color: 0xffffff, alpha: 0.28, width: 1 });
+  container.addChild(outline);
+
+  if (isImageAssetUrl(placement.assetUrl) && placement.solidColor === undefined) {
+    const placeholder = new Graphics();
+    placeholder.rect(0, 0, width, height).fill({ color: 0x22313a, alpha: 0.35 });
+    container.addChildAt(placeholder, 0);
+    void Assets.load(placement.assetUrl)
+      .then((texture) => {
+        if (container.destroyed) return;
+        placeholder.destroy();
+        const sprite = new Sprite(texture);
+        sprite.width = width;
+        sprite.height = height;
+        sprite.roundPixels = true;
+        container.addChildAt(sprite, 0);
+      })
+      .catch((error) => {
+        console.warn('[MapEditor] Failed to load tile asset.', placement.assetUrl, error);
+        report(`Tile image load failed: ${placement.assetUrl}`);
+      });
+    return container;
+  }
+
+  const fill = new Graphics();
   const color = placement.solidColor ?? fallbackColor(placement.categoryId);
-  display.rect(0, 0, width, height).fill({ color, alpha: placement.layer === 'collision' ? 0.42 : 0.92 });
-  display.rect(0, 0, width, height).stroke({ color: 0xffffff, alpha: 0.45, width: 1 });
-  return display;
+  fill.rect(0, 0, width, height).fill({ color, alpha: placement.layer === 'collision' ? 0.42 : 0.92 });
+  container.addChildAt(fill, 0);
+  return container;
+}
+
+function isImageAssetUrl(url: string): boolean {
+  return !url.startsWith('solid://') && !url.startsWith('editor://');
 }
 
 function fallbackColor(categoryId: string): number {
