@@ -86,7 +86,7 @@ export class EditorApp {
       });
 
       status('Starting MapEditor DOM UI...');
-      this.mapEditor.start();
+      await this.mapEditor.start();
       this.fallbackPanel?.element.remove();
       this.fallbackPanel = null;
       status(`MapEditor started. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
