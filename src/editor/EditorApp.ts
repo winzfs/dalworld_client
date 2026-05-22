@@ -2,14 +2,24 @@ import { Application, Container, Graphics } from 'pixi.js';
 import { Camera } from '../game/Camera';
 import { InputController } from '../game/InputController';
 import type { WorldInfo } from '../protocol/messages';
+import type { GameWorldMap, WorldMapPlacement } from '../worldMap/types';
 import { EditorCameraSystem } from './EditorCameraSystem';
 import { EditorFallbackPanel } from './EditorFallbackPanel';
 import type { EditorState } from './EditorState';
 import type { TilePlacementSystem } from './TilePlacementSystem';
-import type { EditorMapDraft, EditorTilesetAsset, EditorTilesetCategory } from './types';
+import type {
+  EditorMapDraft,
+  EditorTilePlacement,
+  EditorTilesetAsset,
+  EditorTilesetCategory,
+  EditorWorldMapDraft,
+  EditorWorldSave,
+} from './types';
 
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const EDITOR_MODULE_LOAD_TIMEOUT_MS = 5_000;
+const DEFAULT_MAP_NAME = 'dalworld-map-lightweight';
+const DEFAULT_CELL_SIZE = 3000;
 
 type LightweightRuntime = {
   placement: TilePlacementSystem;
@@ -107,7 +117,7 @@ export class EditorApp {
     const state = new modules.EditorState();
     const placement = new modules.TilePlacementSystem(state, {
       tileSize: 32,
-      mapName: 'dalworld-map-lightweight',
+      mapName: DEFAULT_MAP_NAME,
     });
 
     this.world.addChild(placement.layer);
@@ -243,7 +253,7 @@ function mountMinimalEditorPanel(options: {
   body.style.cssText = 'padding:12px;display:grid;gap:10px;font-size:12px;line-height:1.45;max-height:min(70vh,620px);overflow:auto;';
 
   const note = document.createElement('div');
-  note.textContent = '모바일 안정화용 최소 에디터입니다. 기본 타일 배치, 전체 채우기, 지우기, JSON 내보내기를 지원합니다.';
+  note.textContent = '모바일 안정화용 최소 에디터입니다. 타일 배치, 서버 저장/불러오기, JSON 내보내기를 지원합니다.';
   note.style.color = 'rgba(255,255,255,.78)';
 
   const selected = document.createElement('div');
@@ -265,6 +275,12 @@ function mountMinimalEditorPanel(options: {
     void options.placement.fillAll({ width: DEFAULT_WORLD.width, height: DEFAULT_WORLD.height });
   });
   const clearButton = createPanelButton('지우기', () => options.placement.clear());
+  const saveButton = createPanelButton('서버 저장', () => {
+    void saveMinimalEditorToServer(options.placement, options.status);
+  });
+  const loadButton = createPanelButton('서버 불러오기', () => {
+    void loadMinimalEditorFromServer(options.placement, options.status);
+  });
   const exportButton = createPanelButton('JSON Export', () => exportJson(options.placement.mapDraft));
 
   const manifestContainer = document.createElement('div');
@@ -278,7 +294,16 @@ function mountMinimalEditorPanel(options: {
     });
   });
 
-  actions.append(grassButton, dirtButton, fillButton, clearButton, exportButton, loadTilesetsButton);
+  actions.append(
+    grassButton,
+    dirtButton,
+    fillButton,
+    clearButton,
+    saveButton,
+    loadButton,
+    exportButton,
+    loadTilesetsButton,
+  );
   body.append(note, selected, actions, manifestContainer);
   panel.append(header, body);
   document.body.appendChild(panel);
@@ -304,6 +329,120 @@ async function loadTilesetManifestIntoPanel(options: {
     options.container.textContent = message;
     options.status(message);
   }
+}
+
+async function saveMinimalEditorToServer(placement: TilePlacementSystem, status: (message: string) => void): Promise<void> {
+  try {
+    status('서버 저장 모듈 로딩 중...');
+    const { uploadWorldMap } = await import('../worldMap/uploadWorldMap');
+    const draft = placement.mapDraft;
+    const world = createSingleCellWorldSave(draft);
+    status(`서버 저장 중... placements=${draft.placements.length}`);
+    const report = await uploadWorldMap(world);
+    status(`서버 저장 완료. cells=${report.cells}, placements=${report.placements}`);
+  } catch (error) {
+    const message = `서버 저장 실패: ${formatErrorMessage(error)}`;
+    status(message);
+    console.warn('[EditorBoot] Minimal editor save failed.', error);
+  }
+}
+
+async function loadMinimalEditorFromServer(placement: TilePlacementSystem, status: (message: string) => void): Promise<void> {
+  try {
+    status('서버 불러오기 모듈 로딩 중...');
+    const { getServerHttpPath } = await import('../net/serverHttp');
+    const url = getServerHttpPath('/maps/default');
+    status('서버 맵 불러오는 중...');
+    const response = await fetch(withCacheBuster(url), {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-store' },
+    });
+    if (!response.ok) {
+      throw new Error(`GET /maps/default failed: ${response.status}`);
+    }
+    const map = await response.json() as GameWorldMap | null;
+    if (!map) {
+      throw new Error('서버에 저장된 맵이 없습니다.');
+    }
+    const draft = createDraftFromServerMap(map);
+    await placement.replaceDraft(draft);
+    status(`서버 불러오기 완료. placements=${draft.placements.length}`);
+  } catch (error) {
+    const message = `서버 불러오기 실패: ${formatErrorMessage(error)}`;
+    status(message);
+    console.warn('[EditorBoot] Minimal editor load failed.', error);
+  }
+}
+
+function createSingleCellWorldSave(draft: EditorMapDraft): EditorWorldSave {
+  const worldMap: EditorWorldMapDraft = draft.worldMap ?? {
+    version: 1,
+    cellSize: DEFAULT_CELL_SIZE,
+    current: { gridX: 0, gridY: 0 },
+    cells: [{ id: 'cell-0-0', name: 'Cell 0,0', gridX: 0, gridY: 0 }],
+  };
+
+  return {
+    version: 1,
+    name: draft.name || DEFAULT_MAP_NAME,
+    tileSize: draft.tileSize || 32,
+    worldMap,
+    cells: [
+      {
+        gridX: worldMap.current.gridX,
+        gridY: worldMap.current.gridY,
+        draft: {
+          ...draft,
+          worldMap,
+        },
+      },
+    ],
+  };
+}
+
+function createDraftFromServerMap(map: GameWorldMap): EditorMapDraft {
+  const currentCell = map.cells.find((cell) => cell.gridX === 0 && cell.gridY === 0) ?? map.cells[0];
+  const worldMap: EditorWorldMapDraft = {
+    version: 1,
+    cellSize: map.cellSize || DEFAULT_CELL_SIZE,
+    current: currentCell ? { gridX: currentCell.gridX, gridY: currentCell.gridY } : { gridX: 0, gridY: 0 },
+    cells: map.cells.map((cell) => ({
+      id: `cell-${cell.gridX}-${cell.gridY}`,
+      name: `Cell ${cell.gridX},${cell.gridY}`,
+      gridX: cell.gridX,
+      gridY: cell.gridY,
+    })),
+    monsterSpawnRules: map.monsterSpawnRules,
+    itemOverrides: map.itemOverrides,
+  };
+
+  return {
+    version: 1,
+    name: map.name || DEFAULT_MAP_NAME,
+    tileSize: map.tileSize || 32,
+    worldMap,
+    placements: (currentCell?.placements ?? []).map(convertWorldPlacementToEditorPlacement),
+  };
+}
+
+function convertWorldPlacementToEditorPlacement(placement: WorldMapPlacement): EditorTilePlacement {
+  return {
+    id: placement.id || crypto.randomUUID(),
+    assetId: placement.assetId,
+    assetUrl: placement.assetUrl,
+    categoryId: placement.categoryId,
+    x: placement.x,
+    y: placement.y,
+    layer: placement.layer,
+    scale: placement.scale || 1,
+    displayWidth: placement.displayWidth,
+    displayHeight: placement.displayHeight,
+    sourceRect: placement.sourceRect,
+    solidColor: placement.solidColor,
+    transparentBlack: placement.transparentBlack,
+    gameplay: placement.gameplay,
+  };
 }
 
 function renderTilesetCategories(categories: EditorTilesetCategory[], options: {
@@ -427,9 +566,14 @@ function exportJson(draft: EditorMapDraft): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `${draft.name || 'dalworld-map-lightweight'}.json`;
+  anchor.download = `${draft.name || DEFAULT_MAP_NAME}.json`;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function withCacheBuster(url: string): string {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}t=${Date.now()}`;
 }
 
 function formatErrorMessage(error: unknown): string {
