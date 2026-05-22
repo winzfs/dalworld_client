@@ -1,6 +1,6 @@
 # DalWorld Client Architecture Guide
 
-Last updated: 2026-05-21
+Last updated: 2026-05-22
 
 이 문서는 DalWorld 클라이언트의 전체 구조를 설명한다.
 AI 작업자는 새 기능을 추가하기 전에 이 문서를 기준으로 어느 계층을 수정해야 하는지 판단한다.
@@ -131,17 +131,46 @@ HUD, 창, 버튼 등 DOM 또는 UI 레이어를 담당한다.
 
 - `src/editor/*`
 
-`?editor=1`에서만 활성화되는 월드맵 편집 기능이다.
+`?editor=1`, `/editor`, `/editor.html`에서 활성화되는 월드맵 편집 기능이다.
 일반 게임 모드와 입력/UI를 섞지 않는다.
 
 관련 주요 파일:
 
-- `src/editor/MapEditor.ts`: 에디터 조립, 셀 드래프트, Tiles 저장 흐름
-- `src/editor/TilesetPanel.ts`: Tiles/Monsters 탭 UI
-- `src/editor/EditorTabServerSaves.ts`: Monsters/Items 탭 서버 저장 보조
+- `src/editor/EditorApp.ts`: 현재 모바일 안정화용 최소 에디터 부팅 경로
+- `src/editor/MapEditor.ts`: 기존 정식 에디터 조립, 셀 드래프트, Tiles 저장 흐름. 현재 모바일 부팅 필수 경로에 넣지 않는다.
+- `src/editor/TilesetPanel.ts`: 기존 Tiles/Monsters 탭 UI. 현재 모바일 부팅 필수 경로에 넣지 않는다.
+- `src/editor/EditorTabServerSaves.ts`: Monsters/Items 탭 서버 저장 보조. 기능 버튼 뒤 지연 로드 대상으로 유지한다.
 - `src/editor/ItemEditorFeature.ts`: Items 탭 UI 설치와 편집 UI
 - `src/editor/ItemEditorStorage.ts`: Items 탭 로컬 override 저장소
 - `src/worldMap/uploadWorldMap.ts`: 셀/manifest/monsters/items 업로드 함수
+- `docs/map-editor-boot-stability.md`: 모바일 맵 에디터 부팅 안정화 규칙
+
+현재 안정화된 최소 부팅 경로:
+
+```txt
+EditorApp
+  -> Pixi Application init
+  -> 기본 배경/그리드 표시
+  -> EditorState import
+  -> TilePlacementSystem import
+  -> EditorApp 내부 최소 DOM 패널 생성
+  -> fallback tile 선택
+  -> 터치/드래그 배치 가능 상태
+```
+
+부팅 필수 경로에는 다음 모듈을 직접 넣지 않는다.
+
+```txt
+MapEditor
+EditorMinimap
+EditorGridOverlay
+TilesetPanel
+LightweightEditorRuntime
+createLightweightEditorRuntime
+WorldMapPanel
+TilePickerWindow
+EditorTabServerSaves
+```
 
 ## 4. GameApp 분리 기준
 
@@ -193,11 +222,14 @@ HUD, 창, 버튼 등 DOM 또는 UI 레이어를 담당한다.
 
 ## 7. 맵 에디터 원칙
 
-- `?editor=1`에서만 활성화한다.
+- `?editor=1`, `/editor`, `/editor.html`에서만 활성화한다.
 - 일반 게임 모드와 에디터 모드의 입력을 섞지 않는다.
 - 저장 API는 서버의 `/maps/default` 계열 엔드포인트와 맞춰야 한다.
 - 대형 맵을 고려해 셀 기반 구조를 유지한다.
 - payload 실패 범위를 줄이기 위해 탭별 저장을 사용한다.
+- 모바일 부팅 안정성 규칙은 `docs/map-editor-boot-stability.md`를 따른다.
+- 에디터 기능은 가능한 한 사용자 액션 이후 작은 단위로 지연 로드한다.
+- 부팅 상태 패널은 에디터 준비 전까지 오류/timeout을 표시할 수 있어야 한다.
 
 ### 탭별 저장 정책
 
@@ -224,6 +256,17 @@ Items 저장
 Items 탭은 에디터 패널에 보조 탭으로 설치된다.
 편집값은 `ItemEditorStorage`에 로컬 백업되고, `서버 저장` 버튼을 누를 때 `/maps/default/items`로 업로드한다.
 서버에서 다시 받은 월드맵의 `itemOverrides`는 `runtimeMapStore`를 통해 `ItemRuntimeOverrides`에 적용된다.
+
+### 모바일 부팅 안정화 원칙
+
+모바일에서 데스크톱보다 동적 import/evaluation이 더 쉽게 멈출 수 있다.
+따라서 정식 에디터 기능을 복구할 때는 아래 순서를 따른다.
+
+1. 최소 에디터 부팅 경로를 유지한다.
+2. 새 기능은 버튼 클릭 이후 import한다.
+3. 지연 로드 단위는 데이터/저장/패널/미니맵처럼 작게 유지한다.
+4. `MapEditor.ts` 전체를 다시 부팅 경로에 넣지 않는다.
+5. 모바일 Chrome 실기기에서 `Minimal editor ready. Panel count: 1`과 실제 타일 배치를 확인한다.
 
 ## 8. 프로토콜 변경 원칙
 
@@ -283,8 +326,8 @@ Items 탭은 에디터 패널에 보조 탭으로 설치된다.
 
 권장 위치:
 
-- 탭 UI: `src/editor/*`
-- 서버 저장 helper: `src/editor/EditorTabServerSaves.ts`
+- 탭 UI: `src/editor/*`, 단 모바일 부팅 경로에는 직접 포함하지 않는다.
+- 서버 저장 helper: `src/editor/EditorTabServerSaves.ts`, 기능 버튼 뒤 지연 로드 대상으로 둔다.
 - HTTP 업로드 함수: `src/worldMap/uploadWorldMap.ts`
 - 서버 endpoint: `dalworld_server/src/rooms/GameRoom.ts` 또는 향후 `WorldMapStorageService`
 
@@ -292,6 +335,7 @@ Items 탭은 에디터 패널에 보조 탭으로 설치된다.
 
 - 대형 맵 payload에 모든 설정을 계속 묶기
 - 클라이언트 로컬 저장만 하고 서버 런타임 반영을 누락하기
+- `EditorApp.start()` 필수 경로에 대형 에디터 UI 모듈을 다시 추가하기
 
 ## 10. 작업 체크리스트
 
@@ -301,4 +345,6 @@ Items 탭은 에디터 패널에 보조 탭으로 설치된다.
 - [ ] 서버 권위 구조를 유지했는가?
 - [ ] 프로토콜 변경 시 서버도 수정했는가?
 - [ ] 모바일 입력을 고려했는가?
+- [ ] 맵 에디터 작업 시 `docs/map-editor-boot-stability.md`를 확인했는가?
+- [ ] 맵 에디터 부팅 경로에 금지 모듈을 추가하지 않았는가?
 - [ ] 문서를 갱신했는가?
