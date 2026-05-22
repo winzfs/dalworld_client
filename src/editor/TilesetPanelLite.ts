@@ -284,7 +284,7 @@ export class TilesetPanelLite {
       preview.style.backgroundColor = 'rgba(255,255,255,.08)';
       preview.style.backgroundPosition = 'center';
       preview.style.backgroundRepeat = 'no-repeat';
-      preview.style.backgroundSize = asset.tileWidth || asset.tileHeight ? 'contain' : 'cover';
+      preview.style.backgroundSize = 'contain';
       preview.style.imageRendering = 'pixelated';
       if (asset.solidColor !== undefined || asset.url.startsWith('solid://')) {
         preview.style.background = `#${(asset.solidColor ?? 0x55d6be).toString(16).padStart(6, '0')}`;
