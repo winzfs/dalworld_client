@@ -288,11 +288,9 @@ function createPanelButton(label: string, onClick: () => void): HTMLButtonElemen
 function createFallbackAsset(id: string, color: number): EditorTilesetAsset {
   return {
     id: `fallback.${id}`,
-    label: id,
+    name: id,
     categoryId: 'fallback',
-    categoryLabel: 'Fallback',
     url: '',
-    layer: 'ground',
     tileWidth: 32,
     tileHeight: 32,
     solidColor: color,
