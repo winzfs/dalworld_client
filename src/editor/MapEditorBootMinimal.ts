@@ -33,6 +33,7 @@ export class MapEditorBootMinimal {
   private picker: any = createHiddenWindow('tile-picker-window is-fallback');
   private worldMapGrid: any = null;
   private worldMapPanel: any = createHiddenWindow('world-map-panel is-fallback');
+  private minimap: any = null;
   private readonly uiRoot: HTMLElement;
   private readonly toast = createEditorToast();
   private readonly worldWidth: number;
@@ -46,6 +47,7 @@ export class MapEditorBootMinimal {
   private toastTimer: number | null = null;
   private loadingPicker: Promise<any> | null = null;
   private transitioning = false;
+  private readonly minimapTicker = () => this.updateMinimap();
 
   constructor(private readonly options: MapEditorBootMinimalOptions) {
     this.uiRoot = options.uiRoot ?? document.body;
@@ -77,6 +79,8 @@ export class MapEditorBootMinimal {
     this.report('MapEditorBootMinimal loading WorldMap modules...');
     const worldGridModule = await import('./WorldMapGrid');
     const worldPanelModule = await import('./WorldMapPanel');
+    this.report('MapEditorBootMinimal loading EditorMinimap...');
+    const minimapModule = await import('./EditorMinimap');
 
     this.state = new editorState.EditorState();
     this.placement = new placementModule.TilePlacementSystem(this.state, {
@@ -94,14 +98,20 @@ export class MapEditorBootMinimal {
       onDeleteCurrentCell: () => { void this.deleteCurrentWorldCell(); },
     });
 
+    this.minimap = new minimapModule.EditorMinimap({
+      worldWidth: this.worldWidth,
+      worldHeight: this.worldHeight,
+      onMoveTo: (x: number, y: number) => this.options.onMoveCameraTo?.(x, y),
+    });
+
     this.panel = new tilesetPanel.TilesetPanelLite(this.state, {
       onSave: () => { void this.save(); },
       onLoad: () => { void this.load(); },
       onExport: () => this.exportJson(),
       onClear: () => this.clearAll(),
       onPickAsset: (asset: EditorTilesetAsset) => this.pickAsset(asset),
-      onFillAll: () => { void this.placement.fillAll({ width: this.worldWidth, height: this.worldHeight }); },
-      onRandomFill: (chancePercent: number) => { void this.placement.fillRandom({ width: this.worldWidth, height: this.worldHeight, chancePercent }); },
+      onFillAll: () => { void this.fillAll(); },
+      onRandomFill: (chancePercent: number) => { void this.fillRandom(chancePercent); },
       onToggleWorldMap: () => this.worldMapPanel.toggle(),
     });
 
@@ -117,26 +127,30 @@ export class MapEditorBootMinimal {
     this.panel.mount(this.uiRoot);
     this.picker.mount(this.uiRoot);
     this.worldMapPanel.mount(this.uiRoot);
+    this.minimap.mount(this.uiRoot);
     this.uiRoot.appendChild(this.toast);
     this.attachCanvasHandlers();
+    this.options.app.ticker.add(this.minimapTicker);
     void this.loadLocalBackup();
-    this.report('MapEditorBootMinimal DOM mounted with world map panel.');
+    this.report('MapEditorBootMinimal DOM mounted with world map panel and minimap.');
   }
 
   stop(): void {
     if (!this.enabled) return;
     this.persistCurrentCellDraft();
     this.enabled = false;
+    this.options.app.ticker.remove(this.minimapTicker);
     this.panel?.element.remove();
     this.picker.element.remove();
     this.worldMapPanel.element.remove();
+    this.minimap?.element.remove();
     this.toast.remove();
     if (this.placement?.layer?.parent) this.placement.layer.parent.removeChild(this.placement.layer);
     this.detachCanvasHandlers();
   }
 
-  setWorldSize(_width: number, _height: number): void {
-    // Grid overlay is intentionally disabled in the minimal boot path.
+  setWorldSize(width: number, height: number): void {
+    this.minimap?.setWorldSize(width, height);
   }
 
   async transitionWorldCell(transition: WorldCellTransition): Promise<void> {
@@ -200,6 +214,38 @@ export class MapEditorBootMinimal {
     const screenY = clientY - rect.top;
     const transform = this.options.world.worldTransform;
     return { x: (screenX - transform.tx) / transform.a, y: (screenY - transform.ty) / transform.d };
+  }
+
+  private updateMinimap(): void {
+    if (!this.minimap || !this.enabled) return;
+    const transform = this.options.world.worldTransform;
+    const zoom = Math.max(0.001, Math.abs(transform.a || 1));
+    const screenWidth = this.options.app.renderer.width;
+    const screenHeight = this.options.app.renderer.height;
+    const x = (-transform.tx + screenWidth / 2) / zoom;
+    const y = (-transform.ty + screenHeight / 2) / zoom;
+    this.minimap.setPlacements(this.placement.mapDraft.placements);
+    this.minimap.render({ x, y, screenWidth, screenHeight, zoom });
+  }
+
+  private async fillAll(): Promise<void> {
+    const before = this.placement.mapDraft.placements.length;
+    this.showToast('전체 Fill 적용 중...', 'info', 0);
+    await this.placement.fillAll({ width: this.worldWidth, height: this.worldHeight });
+    this.persistCurrentCellDraft();
+    const after = this.placement.mapDraft.placements.length;
+    this.showToast(`전체 Fill 완료 · ${Math.max(0, after - before)}개 추가 · 총 ${after}개`, 'success', 3_500);
+    this.report(`Fill all completed. before=${before}, after=${after}`);
+  }
+
+  private async fillRandom(chancePercent: number): Promise<void> {
+    const before = this.placement.mapDraft.placements.length;
+    this.showToast(`랜덤 Fill 적용 중... ${chancePercent}%`, 'info', 0);
+    await this.placement.fillRandom({ width: this.worldWidth, height: this.worldHeight, chancePercent });
+    this.persistCurrentCellDraft();
+    const after = this.placement.mapDraft.placements.length;
+    this.showToast(`랜덤 Fill 완료 · ${Math.max(0, after - before)}개 추가 · 총 ${after}개`, 'success', 3_500);
+    this.report(`Random fill completed. chance=${chancePercent}, before=${before}, after=${after}`);
   }
 
   private async selectWorldCell(gridX: number, gridY: number): Promise<void> {
@@ -492,7 +538,7 @@ function createEditorToast(): HTMLDivElement {
 }
 
 function isEditorUiTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest('.map-editor-panel, .tile-picker-window, .world-map-panel'));
+  return target instanceof Element && Boolean(target.closest('.map-editor-panel, .tile-picker-window, .world-map-panel, .editor-minimap'));
 }
 
 function cellKey(gridX: number, gridY: number): string {
