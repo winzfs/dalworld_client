@@ -1,6 +1,8 @@
 import type { Application, Container } from 'pixi.js';
 import type { EditorMapDraft } from './types';
 
+const ORIGINAL_IMPORT_TIMEOUT_MS = 5000;
+
 export type MapEditorOptions = {
   app: Application;
   world: Container;
@@ -71,12 +73,37 @@ export class MapEditor {
   }
 
   private async loadAndStart(): Promise<OriginalEditor> {
-    console.log('[EditorBoot] Loading original MapEditor implementation...');
-    const module = await import('./MapEditorOriginal');
+    this.reportStage('MapEditorOriginal import started...');
+    const module = await withTimeout(
+      import('./MapEditorOriginal'),
+      ORIGINAL_IMPORT_TIMEOUT_MS,
+      'MapEditorOriginal import timed out',
+    );
+
+    this.reportStage('MapEditorOriginal import resolved. Creating instance...');
     const editor = new module.MapEditorOriginal(this.options);
     this.instance = editor;
+
+    this.reportStage('MapEditorOriginal instance created. Mounting DOM...');
     editor.start();
-    console.log('[EditorBoot] Original MapEditor implementation started.');
+    this.reportStage('MapEditorOriginal started.');
     return editor;
   }
+
+  private reportStage(message: string): void {
+    console.log('[EditorBoot]', message);
+    const panel = document.getElementById('editor-stage-panel');
+    if (panel) panel.textContent = message;
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: number | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
+  });
 }
