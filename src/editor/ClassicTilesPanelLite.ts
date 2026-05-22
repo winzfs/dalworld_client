@@ -4,6 +4,15 @@ import type { TilePlacementSystem } from './TilePlacementSystem';
 
 const GRID_SIZES = [16, 32, 64] as const;
 const BLACK_SOLID_ASSET_ID = 'editor-solid-black';
+const DEFAULT_FALLBACK_ASSET: EditorTilesetAsset = {
+  id: 'fallback.grass',
+  name: 'grass',
+  categoryId: 'fallback',
+  url: '',
+  tileWidth: 32,
+  tileHeight: 32,
+  solidColor: 0x527a3a,
+};
 const LAYERS: Array<{ id: EditorLayerId; label: string; extraClass?: string }> = [
   { id: 'ground', label: 'Ground' },
   { id: 'object', label: 'Object' },
@@ -97,6 +106,14 @@ function createToolControls(options: Options): HTMLElement {
   blackButton.dataset.role = 'black';
   blackButton.textContent = 'Black';
   blackButton.onclick = () => {
+    if (options.state.selectedAsset?.id === BLACK_SOLID_ASSET_ID) {
+      options.state.setBrush({ asset: { ...DEFAULT_FALLBACK_ASSET, tileWidth: options.state.gridSize, tileHeight: options.state.gridSize } });
+      options.state.setMode('paint');
+      sync();
+      options.status('Black 브러시 해제. 기본 잔디 브러시로 복귀.');
+      return;
+    }
+
     const blackAsset: EditorTilesetAsset = {
       id: BLACK_SOLID_ASSET_ID,
       name: 'Black',
@@ -107,9 +124,10 @@ function createToolControls(options: Options): HTMLElement {
       tileHeight: options.state.gridSize,
     };
     options.state.setLayer('ground');
+    options.state.setMode('paint');
     options.state.setBrush({ asset: blackAsset });
     sync();
-    options.status('Black 브러시 선택됨.');
+    options.status('Black 브러시 선택됨. 다시 누르면 기본 브러시로 복귀합니다.');
   };
   container.appendChild(blackButton);
 
