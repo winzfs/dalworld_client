@@ -8,10 +8,12 @@ import { EditorFallbackPanel } from './EditorFallbackPanel';
 import type { EditorState } from './EditorState';
 import type { TilePlacementSystem } from './TilePlacementSystem';
 import type {
+  EditorLayerId,
   EditorMapDraft,
   EditorTilePlacement,
   EditorTilesetAsset,
   EditorTilesetCategory,
+  EditorToolMode,
   EditorWorldMapDraft,
   EditorWorldSave,
 } from './types';
@@ -258,18 +260,48 @@ function mountMinimalEditorPanel(options: {
 
   const selected = document.createElement('div');
   selected.style.cssText = 'padding:8px 9px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(0,0,0,.2);color:#ffe4a3;';
-  selected.textContent = '선택: 기본 잔디 타일';
+
+  const stateSummary = document.createElement('div');
+  stateSummary.style.cssText = 'padding:8px 9px;border:1px solid rgba(85,214,190,.35);border-radius:10px;background:rgba(85,214,190,.08);color:#dffaf5;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;';
+
+  const toolActions = document.createElement('div');
+  toolActions.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;';
+  const paintButton = createPanelButton('페인트 모드', () => options.state.setMode('paint'));
+  const eraseButton = createPanelButton('삭제 모드', () => options.state.setMode('erase'));
+  toolActions.append(paintButton, eraseButton);
+
+  const layerActions = document.createElement('div');
+  layerActions.style.cssText = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;';
+  layerActions.append(
+    createPanelButton('Ground', () => options.state.setLayer('ground')),
+    createPanelButton('Object', () => options.state.setLayer('object')),
+    createPanelButton('Collision', () => options.state.setLayer('collision')),
+  );
+
+  const brushActions = document.createElement('div');
+  brushActions.style.cssText = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;';
+  brushActions.append(
+    createPanelButton('Scale -', () => options.state.decreaseBrushScale()),
+    createPanelButton('Scale +', () => options.state.increaseBrushScale()),
+    createPanelButton('검정 투명', () => options.state.toggleTransparentBlack()),
+  );
+
+  const gridActions = document.createElement('div');
+  gridActions.style.cssText = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;';
+  gridActions.append(
+    createPanelButton('Grid 16', () => options.state.setGridSize(16)),
+    createPanelButton('Grid 32', () => options.state.setGridSize(32)),
+    createPanelButton('Grid 64', () => options.state.setGridSize(64)),
+  );
 
   const actions = document.createElement('div');
   actions.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;';
 
   const grassButton = createPanelButton('잔디 선택', () => {
     options.state.selectAsset(createFallbackAsset('grass', 0x527a3a));
-    selected.textContent = '선택: 기본 잔디 타일';
   });
   const dirtButton = createPanelButton('흙 선택', () => {
     options.state.selectAsset(createFallbackAsset('dirt', 0x8a6a3d));
-    selected.textContent = '선택: 기본 흙 타일';
   });
   const fillButton = createPanelButton('전체 채우기', () => {
     void options.placement.fillAll({ width: DEFAULT_WORLD.width, height: DEFAULT_WORLD.height });
@@ -294,6 +326,17 @@ function mountMinimalEditorPanel(options: {
     });
   });
 
+  const syncSummary = () => {
+    const assetName = options.state.selectedBrush?.asset.name ?? '없음';
+    const sourceRect = options.state.selectedBrush?.sourceRect;
+    const sourceRectText = sourceRect ? ` / rect ${sourceRect.width}x${sourceRect.height}` : '';
+    selected.textContent = `선택: ${assetName}${sourceRectText}`;
+    stateSummary.textContent = `mode=${options.state.mode} layer=${options.state.activeLayer} grid=${options.state.gridSize} scale=${options.state.brushScale} transparentBlack=${options.state.transparentBlack ? 'on' : 'off'}`;
+    setPressed(paintButton, options.state.mode === 'paint');
+    setPressed(eraseButton, options.state.mode === 'erase');
+  };
+  options.state.subscribe(syncSummary);
+
   actions.append(
     grassButton,
     dirtButton,
@@ -304,11 +347,12 @@ function mountMinimalEditorPanel(options: {
     exportButton,
     loadTilesetsButton,
   );
-  body.append(note, selected, actions, manifestContainer);
+  body.append(note, selected, stateSummary, toolActions, layerActions, brushActions, gridActions, actions, manifestContainer);
   panel.append(header, body);
   document.body.appendChild(panel);
 
   options.state.selectAsset(createFallbackAsset('grass', 0x527a3a));
+  syncSummary();
   options.status('최소 에디터 패널 표시 완료.');
 }
 
@@ -484,6 +528,11 @@ function createPanelButton(label: string, onClick: () => void): HTMLButtonElemen
   button.textContent = label;
   button.onclick = onClick;
   return button;
+}
+
+function setPressed(button: HTMLButtonElement, pressed: boolean): void {
+  button.style.outline = pressed ? '2px solid rgba(85,214,190,.8)' : '';
+  button.style.background = pressed ? 'rgba(85,214,190,.18)' : '';
 }
 
 function createFallbackAsset(id: string, color: number): EditorTilesetAsset {
