@@ -4,10 +4,46 @@ import { InputController } from '../game/InputController';
 import type { WorldInfo } from '../protocol/messages';
 import { EditorCameraSystem } from './EditorCameraSystem';
 import { EditorFallbackPanel } from './EditorFallbackPanel';
-import type { LightweightRuntime } from './createLightweightEditorRuntime';
+import type { EditorGridOverlay } from './EditorGridOverlay';
+import type { EditorState } from './EditorState';
+import type { TilesetPanel } from './TilesetPanel';
+import type { TilePlacementSystem } from './TilePlacementSystem';
+import type { EditorMapDraft, EditorMonsterSpawnRule, EditorTilesetAsset } from './types';
 
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const EDITOR_MODULE_LOAD_TIMEOUT_MS = 5_000;
+
+type LightweightRuntime = {
+  placement: TilePlacementSystem;
+  transitionWorldCell: () => Promise<void>;
+};
+
+type RuntimeModules = {
+  EditorState: new () => EditorState;
+  TilePlacementSystem: new (
+    state: EditorState,
+    options: { tileSize: number; mapName: string },
+  ) => TilePlacementSystem;
+  EditorGridOverlay: new (
+    state: EditorState,
+    options: { width: number; height: number },
+  ) => EditorGridOverlay;
+  TilesetPanel: new (
+    state: EditorState,
+    options: {
+      onSave: () => void;
+      onLoad: () => void;
+      onExport: () => void;
+      onClear: () => void;
+      onPickAsset: (asset: EditorTilesetAsset) => void;
+      onFillAll: () => void;
+      onRandomFill: (chancePercent: number) => void;
+      onToggleWorldMap: () => void;
+      getMonsterSpawnRules: () => EditorMonsterSpawnRule[];
+      setMonsterSpawnRules: (rules: EditorMonsterSpawnRule[]) => void;
+    },
+  ) => TilesetPanel;
+};
 
 export class EditorApp {
   private readonly app = new Application();
@@ -56,7 +92,7 @@ export class EditorApp {
       },
     });
     this.fallbackPanel.mount(document.body);
-    this.fallbackPanel.setStatus('렌더러 준비 완료. 경량 에디터 런타임 로딩 중...');
+    this.fallbackPanel.setStatus('렌더러 준비 완료. 경량 에디터 의존성 개별 로딩 중...');
   }
 
   private async loadLightweightRuntime(status: (message: string) => void): Promise<void> {
@@ -68,30 +104,16 @@ export class EditorApp {
       const { TilesetPanel } = await loadEditorModule('TilesetPanel', () => import('./TilesetPanel'), status);
       const { TilePlacementSystem } = await loadEditorModule('TilePlacementSystem', () => import('./TilePlacementSystem'), status);
       const { EditorGridOverlay } = await loadEditorModule('EditorGridOverlay', () => import('./EditorGridOverlay'), status);
-      const { createLightweightEditorRuntime } = await loadEditorModule(
-        'createLightweightEditorRuntime',
-        () => import('./createLightweightEditorRuntime'),
-        status,
-      );
 
-      this.editorRuntime = createLightweightEditorRuntime({
-        app: this.app,
-        world: this.world,
-        worldWidth: DEFAULT_WORLD.width,
-        worldHeight: DEFAULT_WORLD.height,
-        tileSize: 32,
-        mapName: 'dalworld-map-lightweight',
-        modules: {
+      this.editorRuntime = this.createInlineLightweightRuntime(
+        {
           EditorState,
           TilesetPanel,
           TilePlacementSystem,
           EditorGridOverlay,
         },
-        notify: (message) => {
-          this.fallbackPanel?.setStatus(message);
-          status(message);
-        },
-      });
+        status,
+      );
 
       this.fallbackPanel?.element.remove();
       this.fallbackPanel = null;
@@ -104,6 +126,105 @@ export class EditorApp {
       status(message);
       console.warn('[EditorBoot] Lightweight editor failed.', error);
     }
+  }
+
+  private createInlineLightweightRuntime(modules: RuntimeModules, status: (message: string) => void): LightweightRuntime {
+    const state = new modules.EditorState();
+    const placement = new modules.TilePlacementSystem(state, {
+      tileSize: 32,
+      mapName: 'dalworld-map-lightweight',
+    });
+    const gridOverlay = new modules.EditorGridOverlay(state, {
+      width: DEFAULT_WORLD.width,
+      height: DEFAULT_WORLD.height,
+    });
+    const panel = new modules.TilesetPanel(state, {
+      onSave: () => status('경량 모드에서는 아직 서버 저장을 지원하지 않습니다. Export를 사용해 주세요.'),
+      onLoad: () => status('경량 모드에서는 아직 불러오기를 지원하지 않습니다.'),
+      onExport: () => exportJson(placement.mapDraft),
+      onClear: () => placement.clear(),
+      onPickAsset: (asset) => state.selectAsset(asset),
+      onFillAll: () => {
+        void placement.fillAll({ width: DEFAULT_WORLD.width, height: DEFAULT_WORLD.height });
+      },
+      onRandomFill: (chancePercent) => {
+        void placement.fillRandom({
+          width: DEFAULT_WORLD.width,
+          height: DEFAULT_WORLD.height,
+          chancePercent,
+        });
+      },
+      onToggleWorldMap: () => status('경량 모드에서는 월드맵 패널을 아직 지원하지 않습니다.'),
+      getMonsterSpawnRules: () => [],
+      setMonsterSpawnRules: () => undefined,
+    });
+
+    this.world.addChild(gridOverlay.layer);
+    this.world.addChild(placement.layer);
+    panel.mount(document.body);
+    this.attachPaintingHandlers(state, placement);
+    status('경량 에디터 준비 완료. 타일을 선택하고 맵을 터치/드래그해서 배치할 수 있습니다.');
+
+    return {
+      placement,
+      transitionWorldCell: async () => undefined,
+    };
+  }
+
+  private attachPaintingHandlers(state: EditorState, placement: TilePlacementSystem): void {
+    let paintingPointerId: number | null = null;
+    let lastPaintKey: string | null = null;
+
+    const paintFromEvent = (event: PointerEvent) => {
+      const point = this.screenToWorld(event.clientX, event.clientY);
+      const tileSize = state.gridSize;
+      const x = Math.floor(point.x / tileSize) * tileSize;
+      const y = Math.floor(point.y / tileSize) * tileSize;
+      const paintKey = `${state.activeLayer}:${x}:${y}`;
+      if (paintKey === lastPaintKey) return;
+      lastPaintKey = paintKey;
+      void placement.placeAt(point.x, point.y);
+    };
+
+    const pointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      if (isEditorUiTarget(event.target)) return;
+      paintingPointerId = event.pointerId;
+      lastPaintKey = null;
+      this.app.canvas.setPointerCapture(event.pointerId);
+      paintFromEvent(event);
+    };
+
+    const pointerMove = (event: PointerEvent) => {
+      if (paintingPointerId !== event.pointerId) return;
+      if (isEditorUiTarget(event.target)) return;
+      paintFromEvent(event);
+    };
+
+    const pointerEnd = (event: PointerEvent) => {
+      if (paintingPointerId !== event.pointerId) return;
+      paintingPointerId = null;
+      lastPaintKey = null;
+      if (this.app.canvas.hasPointerCapture(event.pointerId)) {
+        this.app.canvas.releasePointerCapture(event.pointerId);
+      }
+    };
+
+    this.app.canvas.addEventListener('pointerdown', pointerDown);
+    this.app.canvas.addEventListener('pointermove', pointerMove);
+    this.app.canvas.addEventListener('pointerup', pointerEnd);
+    this.app.canvas.addEventListener('pointercancel', pointerEnd);
+  }
+
+  private screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.app.canvas.getBoundingClientRect();
+    const screenX = clientX - rect.left;
+    const screenY = clientY - rect.top;
+    const transform = this.world.worldTransform;
+    return {
+      x: (screenX - transform.tx) / transform.a,
+      y: (screenY - transform.ty) / transform.d,
+    };
   }
 
   private update(dt: number): void {
@@ -203,6 +324,22 @@ async function loadEditorModule<T>(
   } finally {
     if (timeoutId !== null) window.clearTimeout(timeoutId);
   }
+}
+
+function isEditorUiTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest('.map-editor-panel, .tile-picker-window, .world-map-panel'));
+}
+
+function exportJson(draft: EditorMapDraft): void {
+  const json = JSON.stringify(draft, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${draft.name || 'dalworld-map-lightweight'}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function formatErrorMessage(error: unknown): string {
