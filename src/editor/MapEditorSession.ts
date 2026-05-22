@@ -1,14 +1,25 @@
 import type { EditorState } from './EditorState';
 import type { TilePlacementSystem } from './TilePlacementSystem';
-import type { EditorWorldSave } from './types';
+import type { EditorWorldMapDraft, EditorWorldSave } from './types';
 import { WorldCellDraftStore } from './WorldCellDraftStore';
 
 const DEFAULT_WORLD_SIZE = 3000;
 const DEFAULT_MAP_NAME = 'dalworld-map-lightweight';
 
+type ServerWorldMapForSession = {
+  version: 1;
+  name: string;
+  tileSize: number;
+  cellSize: number;
+  cells: Array<{ gridX: number; gridY: number; placements: unknown[] }>;
+  monsterSpawnRules?: EditorWorldMapDraft['monsterSpawnRules'];
+  itemOverrides?: EditorWorldMapDraft['itemOverrides'];
+};
+
 type WorldMapGridLike = {
   readonly current: { gridX: number; gridY: number };
   readonly cells: Array<{ gridX: number; gridY: number }>;
+  load(draft: EditorWorldMapDraft | undefined): void;
   selectCell(gridX: number, gridY: number): void;
   deleteCell(gridX: number, gridY: number): void;
 };
@@ -81,15 +92,19 @@ export class MapEditorSession {
   async loadWorld(): Promise<void> {
     const { loadServerWorldMap } = await import('./EditorWorldSaveActions');
     const map = await loadServerWorldMap(this.status);
-    const draft = await this.draftStore.loadFromServerMap(map);
+    const worldMapDraft = createWorldMapDraftFromServerMap(map as ServerWorldMapForSession);
+
     if (this.worldMapGrid) {
-      for (const cell of map.cells) {
-        this.worldMapGrid.selectCell(cell.gridX, cell.gridY);
-      }
-      const current = map.cells[0] ?? { gridX: 0, gridY: 0 };
-      this.worldMapGrid.selectCell(current.gridX, current.gridY);
+      this.worldMapGrid.load(worldMapDraft);
     }
-    this.status(`전체 월드 불러오기 완료. cells=${map.cells.length}, placements=${draft.placements.length}`);
+
+    const draft = await this.draftStore.loadFromServerMap(map);
+
+    if (this.worldMapGrid) {
+      this.draftStore.ensureCells(this.worldMapGrid.cells);
+    }
+
+    this.status(`전체 월드 불러오기 완료. cells=${map.cells.length}, current=${worldMapDraft.current.gridX},${worldMapDraft.current.gridY}, placements=${draft.placements.length}`);
   }
 
   async exportWorldJson(): Promise<void> {
@@ -125,6 +140,23 @@ export class MapEditorSession {
 
     this.status(`저장 검증 완료. snapshot=[${worldCounts}] compiled=[${compiledCounts}]`);
   }
+}
+
+function createWorldMapDraftFromServerMap(map: ServerWorldMapForSession): EditorWorldMapDraft {
+  const first = map.cells[0] ?? { gridX: 0, gridY: 0 };
+  return {
+    version: 1,
+    cellSize: map.cellSize || DEFAULT_WORLD_SIZE,
+    current: { gridX: first.gridX, gridY: first.gridY },
+    cells: map.cells.map((cell) => ({
+      id: `cell-${cell.gridX}-${cell.gridY}`,
+      name: `Cell ${cell.gridX},${cell.gridY}`,
+      gridX: cell.gridX,
+      gridY: cell.gridY,
+    })),
+    monsterSpawnRules: map.monsterSpawnRules,
+    itemOverrides: map.itemOverrides,
+  };
 }
 
 function cellKey(gridX: number, gridY: number): string {
