@@ -1,6 +1,8 @@
 import type { EditorState } from './EditorState';
 import type { TilePlacementSystem } from './TilePlacementSystem';
 
+const GRID_SIZES = [16, 32, 64] as const;
+
 type Options = {
   state: EditorState;
   placement: TilePlacementSystem;
@@ -33,14 +35,38 @@ export function mountClassicTilesPanelLite(options: Options): void {
   );
 
   const scale = createScaleControls(options);
+  const grid = createGridControls(options);
 
   const note = document.createElement('div');
   note.className = 'map-editor-empty';
-  note.textContent = '패널 껍데기 + 탭 + 스케일 표시 완료';
+  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid 표시 완료';
 
-  panel.append(header, tabs, scale, note);
+  panel.append(header, tabs, scale, grid, note);
   document.body.appendChild(panel);
-  options.status('기존 UI 패널 스케일 표시 완료.');
+  options.status('기존 UI 패널 Grid 표시 완료.');
+}
+
+function createGridControls(options: Options): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'map-editor-grid-controls';
+
+  const gridToggle = createGridButton('Grid', () => {
+    options.state.toggleGridVisible();
+    options.status(`Grid 표시: ${options.state.gridVisible ? 'on' : 'off'}`);
+  });
+  if (options.state.gridVisible) gridToggle.classList.add('is-active');
+  container.appendChild(gridToggle);
+
+  for (const size of GRID_SIZES) {
+    const button = createGridButton(String(size), () => {
+      options.state.setGridSize(size);
+      options.status(`Grid 크기: ${size}`);
+    });
+    if (options.state.gridSize === size) button.classList.add('is-active');
+    container.appendChild(button);
+  }
+
+  return container;
 }
 
 function createScaleControls(options: Options): HTMLElement {
@@ -83,6 +109,15 @@ function createScaleControls(options: Options): HTMLElement {
     }),
   );
   return container;
+}
+
+function createGridButton(label: string, onClick: () => void): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'map-editor-grid-button';
+  button.textContent = label;
+  button.onclick = onClick;
+  return button;
 }
 
 function createScaleButton(label: string, onClick: () => void): HTMLButtonElement {
