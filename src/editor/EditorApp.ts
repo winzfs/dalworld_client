@@ -329,6 +329,15 @@ function openClassicEditorUi(options: {
       },
       onClear: () => options.placement.clear(),
     });
+
+    void import('./MonsterTabLiteFeature')
+      .then(({ installMonsterTabLiteFeature }) => {
+        installMonsterTabLiteFeature({ status: options.status });
+        options.status('Monsters 탭 경량 편집 기능 연결 완료.');
+      })
+      .catch((error: unknown) => {
+        options.status(`Monsters 탭 기능 로딩 실패: ${formatErrorMessage(error)}`);
+      });
   } catch (error) {
     const message = `기존 UI 형태 패널 열기 실패: ${formatErrorMessage(error)}`;
     options.status(message);
