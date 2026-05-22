@@ -46,7 +46,7 @@ export class MapEditorBootMinimal {
     this.worldHeight = options.worldHeight ?? 3000;
     this.cellSize = options.worldWidth ?? 3000;
     this.worldMap = createWorldMapDraft(this.cellSize);
-    this.placement = createPlacementFallback(null, options.mapName ?? 'dalworld-map', options.tileSize ?? 32);
+    this.placement = createPlacementFallback(null, options.mapName ?? 'dalworld-map', options.tileSize ?? 32, (message) => this.report(message));
   }
 
   async start(): Promise<void> {
@@ -60,7 +60,7 @@ export class MapEditorBootMinimal {
     const tilesetPanel = await import('./TilesetPanelLite');
 
     this.state = new editorState.EditorState();
-    this.placement = createPlacementFallback(this.state, this.options.mapName ?? 'dalworld-map', this.options.tileSize ?? 32);
+    this.placement = createPlacementFallback(this.state, this.options.mapName ?? 'dalworld-map', this.options.tileSize ?? 32, (message) => this.report(message));
 
     this.panel = new tilesetPanel.TilesetPanelLite(this.state, {
       onSave: () => this.save(),
@@ -165,6 +165,7 @@ export class MapEditorBootMinimal {
 
   private pickAsset(asset: EditorTilesetAsset): void {
     this.state.selectAsset(asset);
+    this.report(`Selected tile: ${asset.name}`);
   }
 
   private save(): void {
@@ -221,14 +222,19 @@ export class MapEditorBootMinimal {
   }
 }
 
-function createPlacementFallback(state: any, mapName: string, tileSize: number): any {
+function createPlacementFallback(state: any, mapName: string, tileSize: number, report: (message: string) => void): any {
   const layer = new PixiContainer();
   layer.label = 'editor-minimal-placement-layer';
   layer.sortableChildren = true;
+  layer.zIndex = 500;
   const draft: EditorMapDraft = { version: 1, name: mapName, tileSize, placements: [] };
   const displays = new Map<string, Graphics>();
 
   const getGridSize = () => state?.gridSize ?? tileSize;
+  const getBrushAsset = (): EditorTilesetAsset | null => {
+    return (state?.selectedBrush?.asset ?? state?.selectedAsset ?? null) as EditorTilesetAsset | null;
+  };
+
   const redraw = () => {
     layer.removeChildren();
     displays.clear();
@@ -248,18 +254,25 @@ function createPlacementFallback(state: any, mapName: string, tileSize: number):
     if (index >= 0) {
       draft.placements.splice(index, 1);
       redraw();
+      report(`Removed placement. count=${draft.placements.length}`);
     }
   };
 
   const placeAt = (x: number, y: number) => {
-    if (!state?.selectedBrush) return;
+    if (!state) return;
     if (state.mode === 'erase') {
       removeAt(x, y);
       return;
     }
     if (state.mode === 'picker') return;
+
+    const asset = getBrushAsset();
+    if (!asset) {
+      report('No tile selected. Select a tile first.');
+      return;
+    }
+
     const gridSize = getGridSize();
-    const asset = state.selectedBrush.asset as EditorTilesetAsset;
     const sx = Math.floor(x / gridSize) * gridSize;
     const sy = Math.floor(y / gridSize) * gridSize;
     removeAt(sx, sy);
@@ -274,12 +287,13 @@ function createPlacementFallback(state: any, mapName: string, tileSize: number):
       scale: state.brushScale ?? 1,
       displayWidth: asset.tileWidth ?? gridSize,
       displayHeight: asset.tileHeight ?? gridSize,
-      solidColor: asset.solidColor,
+      solidColor: asset.solidColor ?? fallbackColor(asset.categoryId),
     };
     draft.placements.push(placement);
     const display = createDisplay(placement, gridSize);
     displays.set(placement.id, display);
     layer.addChild(display);
+    report(`Placed ${asset.name} at ${sx},${sy}. count=${draft.placements.length}`);
   };
 
   return {
@@ -298,7 +312,7 @@ function createPlacementFallback(state: any, mapName: string, tileSize: number):
     },
     async loadDraft(next: EditorMapDraft) { draft.name = next.name; draft.tileSize = next.tileSize; draft.worldMap = next.worldMap; draft.placements = next.placements.map((p) => ({ ...p, sourceRect: p.sourceRect ? { ...p.sourceRect } : undefined })); redraw(); },
     async replaceDraft(next: EditorMapDraft) { await this.loadDraft(next); },
-    clear() { draft.placements.length = 0; redraw(); },
+    clear() { draft.placements.length = 0; redraw(); report('Cleared placements.'); },
   };
 }
 
@@ -309,7 +323,9 @@ function createDisplay(placement: EditorTilePlacement, gridSize: number): Graphi
   display.x = placement.x;
   display.y = placement.y;
   display.zIndex = placement.layer === 'collision' ? 100 : placement.layer === 'object' ? 10 + placement.y / 1000 : 1;
-  display.rect(0, 0, width, height).fill({ color: placement.solidColor ?? fallbackColor(placement.categoryId), alpha: placement.layer === 'collision' ? 0.38 : 1 });
+  const color = placement.solidColor ?? fallbackColor(placement.categoryId);
+  display.rect(0, 0, width, height).fill({ color, alpha: placement.layer === 'collision' ? 0.42 : 0.92 });
+  display.rect(0, 0, width, height).stroke({ color: 0xffffff, alpha: 0.45, width: 1 });
   return display;
 }
 
@@ -317,6 +333,7 @@ function fallbackColor(categoryId: string): number {
   if (categoryId === 'nature') return 0x47b881;
   if (categoryId === 'buildings') return 0xc69054;
   if (categoryId === 'monsters') return 0x7bdff2;
+  if (categoryId === 'editor') return 0xef476f;
   return 0x55d6be;
 }
 
