@@ -1,7 +1,13 @@
+import type { EditorLayerId } from './types';
 import type { EditorState } from './EditorState';
 import type { TilePlacementSystem } from './TilePlacementSystem';
 
 const GRID_SIZES = [16, 32, 64] as const;
+const LAYERS: Array<{ id: EditorLayerId; label: string; extraClass?: string }> = [
+  { id: 'ground', label: 'Ground' },
+  { id: 'object', label: 'Object' },
+  { id: 'collision', label: 'Block', extraClass: 'is-collision' },
+];
 
 type Options = {
   state: EditorState;
@@ -36,14 +42,40 @@ export function mountClassicTilesPanelLite(options: Options): void {
 
   const scale = createScaleControls(options);
   const grid = createGridControls(options);
+  const layers = createLayerControls(options);
 
   const note = document.createElement('div');
   note.className = 'map-editor-empty';
-  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid 표시 완료';
+  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 표시 완료';
 
-  panel.append(header, tabs, scale, grid, note);
+  panel.append(header, tabs, scale, grid, layers, note);
   document.body.appendChild(panel);
-  options.status('기존 UI 패널 Grid 표시 완료.');
+  options.status('기존 UI 패널 레이어 표시 완료.');
+}
+
+function createLayerControls(options: Options): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'map-editor-layers';
+
+  const label = document.createElement('span');
+  label.className = 'map-editor-layer-label';
+  label.textContent = '레이어';
+  container.appendChild(label);
+
+  for (const layer of LAYERS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `map-editor-layer${layer.extraClass ? ` ${layer.extraClass}` : ''}`;
+    if (options.state.activeLayer === layer.id) button.classList.add('is-active');
+    button.textContent = layer.label;
+    button.onclick = () => {
+      options.state.setLayer(layer.id);
+      options.status(`레이어 변경: ${layer.label}`);
+    };
+    container.appendChild(button);
+  }
+
+  return container;
 }
 
 function createGridControls(options: Options): HTMLElement {
