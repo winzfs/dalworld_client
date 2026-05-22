@@ -7,6 +7,7 @@ import { mountClassicTilesPanelLite } from './ClassicTilesPanelLite';
 import { EditorCameraSystem } from './EditorCameraSystem';
 import { EditorFallbackPanel } from './EditorFallbackPanel';
 import type { EditorState } from './EditorState';
+import { MapEditorSession } from './MapEditorSession';
 import type { TilePlacementSystem } from './TilePlacementSystem';
 import type {
   EditorMapDraft,
@@ -23,6 +24,7 @@ const DEFAULT_CELL_SIZE = 3000;
 
 type LightweightRuntime = {
   placement: TilePlacementSystem;
+  session: MapEditorSession;
   transitionWorldCell: () => Promise<void>;
 };
 
@@ -110,14 +112,22 @@ export class EditorApp {
       tileSize: 32,
       mapName: DEFAULT_MAP_NAME,
     });
+    const session = new MapEditorSession({
+      state,
+      placement,
+      status,
+      mapName: DEFAULT_MAP_NAME,
+      cellSize: DEFAULT_CELL_SIZE,
+    });
 
     this.world.addChild(placement.layer);
-    mountSafeBootPanel({ state, placement, status });
+    mountSafeBootPanel({ state, placement, session, status });
     this.attachPaintingHandlers(state, placement);
-    status('안전 부팅 완료. 기존 UI 형태의 가벼운 에디터 패널을 즉시 열 수 있습니다.');
+    status('안전 부팅 완료. MapEditorSession 기준으로 기존 UI 패널을 열 수 있습니다.');
 
     return {
       placement,
+      session,
       transitionWorldCell: async () => undefined,
     };
   }
@@ -207,7 +217,7 @@ export class EditorApp {
       this.background.moveTo(x, 0).lineTo(x, world.height).stroke({ width: 1, color: 0x2d3f4f, alpha: 0.28 });
     }
     for (let y = 0; y <= world.height; y += gridSize) {
-      this.background.moveTo(0, y).lineTo(world.width, y).stroke({ width: 1, color: 0x2d3f4f, alpha: 0.28 });
+      this.background.moveTo(0, y).lineTo(0 + world.width, y).stroke({ width: 1, color: 0x2d3f4f, alpha: 0.28 });
     }
   }
 }
@@ -215,6 +225,7 @@ export class EditorApp {
 function mountSafeBootPanel(options: {
   state: EditorState;
   placement: TilePlacementSystem;
+  session: MapEditorSession;
   status: (message: string) => void;
 }): void {
   document.querySelectorAll('.editor-fallback-panel').forEach((element) => element.remove());
@@ -233,7 +244,7 @@ function mountSafeBootPanel(options: {
   body.style.cssText = 'padding:12px;display:grid;gap:10px;font-size:12px;line-height:1.45;max-height:min(70vh,620px);overflow:auto;';
 
   const note = document.createElement('div');
-  note.textContent = '모바일 안전 부팅 패널입니다. 기존 UI 형태의 가벼운 Map Editor 패널은 버튼으로 즉시 엽니다.';
+  note.textContent = '모바일 안전 부팅 패널입니다. 저장/불러오기/기존 UI는 MapEditorSession 기준으로 동작합니다.';
   note.style.color = 'rgba(255,255,255,.78)';
 
   const selected = document.createElement('div');
@@ -257,15 +268,17 @@ function mountSafeBootPanel(options: {
   const grassButton = createPanelButton('잔디 선택', () => options.state.selectAsset(createFallbackAsset('grass', 0x527a3a)));
   const dirtButton = createPanelButton('흙 선택', () => options.state.selectAsset(createFallbackAsset('dirt', 0x8a6a3d)));
   const saveButton = createPanelButton('서버 저장', () => {
-    void saveMinimalEditorToServer(options.placement, options.status);
+    void options.session.saveWorld().catch((error: unknown) => options.status(`서버 저장 실패: ${formatErrorMessage(error)}`));
   });
   const loadButton = createPanelButton('서버 불러오기', () => {
-    void loadMinimalEditorFromServer(options.placement, options.status);
+    void options.session.loadWorld().catch((error: unknown) => options.status(`서버 불러오기 실패: ${formatErrorMessage(error)}`));
   });
   const classicUiButton = createPanelButton('기존 UI 패널 열기', () => {
     openClassicEditorUi(options);
   });
-  const exportButton = createPanelButton('JSON Export', () => exportJson(options.placement.mapDraft));
+  const exportButton = createPanelButton('JSON Export', () => {
+    void options.session.exportWorldJson().catch((error: unknown) => options.status(`JSON Export 실패: ${formatErrorMessage(error)}`));
+  });
 
   const syncSummary = () => {
     const assetName = options.state.selectedBrush?.asset.name ?? '없음';
@@ -295,6 +308,7 @@ function mountSafeBootPanel(options: {
 function openClassicEditorUi(options: {
   state: EditorState;
   placement: TilePlacementSystem;
+  session: MapEditorSession;
   status: (message: string) => void;
 }): void {
   try {
@@ -302,14 +316,17 @@ function openClassicEditorUi(options: {
     mountClassicTilesPanelLite({
       state: options.state,
       placement: options.placement,
+      session: options.session,
       status: options.status,
       onSave: () => {
-        void saveMinimalEditorToServer(options.placement, options.status);
+        void options.session.saveWorld();
       },
       onLoad: () => {
-        void loadMinimalEditorFromServer(options.placement, options.status);
+        void options.session.loadWorld();
       },
-      onExport: () => exportJson(options.placement.mapDraft),
+      onExport: () => {
+        void options.session.exportWorldJson();
+      },
       onClear: () => options.placement.clear(),
     });
   } catch (error) {
@@ -453,7 +470,7 @@ function createFallbackAsset(id: string, color: number): EditorTilesetAsset {
     id: `fallback.${id}`,
     name: id,
     categoryId: 'fallback',
-    url: '',
+    url: `solid://fallback-${id}`,
     tileWidth: 32,
     tileHeight: 32,
     solidColor: color,
