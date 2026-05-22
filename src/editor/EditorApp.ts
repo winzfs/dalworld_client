@@ -6,7 +6,7 @@ import { EditorCameraSystem } from './EditorCameraSystem';
 import { EditorFallbackPanel } from './EditorFallbackPanel';
 import type { EditorState } from './EditorState';
 import type { TilePlacementSystem } from './TilePlacementSystem';
-import type { EditorMapDraft, EditorTilesetAsset } from './types';
+import type { EditorMapDraft, EditorTilesetAsset, EditorTilesetCategory } from './types';
 
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const EDITOR_MODULE_LOAD_TIMEOUT_MS = 5_000;
@@ -240,7 +240,7 @@ function mountMinimalEditorPanel(options: {
   header.textContent = 'Map Editor - Minimal';
 
   const body = document.createElement('div');
-  body.style.cssText = 'padding:12px;display:grid;gap:10px;font-size:12px;line-height:1.45;';
+  body.style.cssText = 'padding:12px;display:grid;gap:10px;font-size:12px;line-height:1.45;max-height:min(70vh,620px);overflow:auto;';
 
   const note = document.createElement('div');
   note.textContent = '모바일 안정화용 최소 에디터입니다. 기본 타일 배치, 전체 채우기, 지우기, JSON 내보내기를 지원합니다.';
@@ -267,13 +267,75 @@ function mountMinimalEditorPanel(options: {
   const clearButton = createPanelButton('지우기', () => options.placement.clear());
   const exportButton = createPanelButton('JSON Export', () => exportJson(options.placement.mapDraft));
 
-  actions.append(grassButton, dirtButton, fillButton, clearButton, exportButton);
-  body.append(note, selected, actions);
+  const manifestContainer = document.createElement('div');
+  manifestContainer.style.cssText = 'display:grid;gap:8px;';
+  const loadTilesetsButton = createPanelButton('실제 타일셋 불러오기', () => {
+    void loadTilesetManifestIntoPanel({
+      state: options.state,
+      selected,
+      container: manifestContainer,
+      status: options.status,
+    });
+  });
+
+  actions.append(grassButton, dirtButton, fillButton, clearButton, exportButton, loadTilesetsButton);
+  body.append(note, selected, actions, manifestContainer);
   panel.append(header, body);
   document.body.appendChild(panel);
 
   options.state.selectAsset(createFallbackAsset('grass', 0x527a3a));
   options.status('최소 에디터 패널 표시 완료.');
+}
+
+async function loadTilesetManifestIntoPanel(options: {
+  state: EditorState;
+  selected: HTMLElement;
+  container: HTMLElement;
+  status: (message: string) => void;
+}): Promise<void> {
+  options.container.textContent = '타일셋 로딩 중...';
+  try {
+    options.status('tilesetManifest import started...');
+    const { TILESET_CATEGORIES } = await import('./tilesetManifest');
+    options.status(`tilesetManifest loaded. Categories: ${TILESET_CATEGORIES.length}`);
+    renderTilesetCategories(TILESET_CATEGORIES, options);
+  } catch (error) {
+    const message = `타일셋 로딩 실패: ${formatErrorMessage(error)}`;
+    options.container.textContent = message;
+    options.status(message);
+  }
+}
+
+function renderTilesetCategories(categories: EditorTilesetCategory[], options: {
+  state: EditorState;
+  selected: HTMLElement;
+  container: HTMLElement;
+  status: (message: string) => void;
+}): void {
+  options.container.replaceChildren();
+  for (const category of categories) {
+    const section = document.createElement('div');
+    section.style.cssText = 'display:grid;gap:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.1);';
+
+    const title = document.createElement('strong');
+    title.textContent = category.name;
+    title.style.color = '#ffe4a3';
+
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;';
+
+    for (const asset of category.assets) {
+      const button = createPanelButton(asset.name, () => {
+        options.state.selectAsset(asset);
+        options.selected.textContent = `선택: ${category.name} / ${asset.name}`;
+        options.status(`선택됨: ${asset.name}`);
+      });
+      grid.appendChild(button);
+    }
+
+    section.append(title, grid);
+    options.container.appendChild(section);
+  }
 }
 
 function createPanelButton(label: string, onClick: () => void): HTMLButtonElement {
