@@ -1,4 +1,4 @@
-import type { EditorLayerId, EditorToolMode, EditorTilesetAsset, EditorTilesetCategory } from './types';
+import type { EditorLayerId, EditorSourceRect, EditorToolMode, EditorTilesetAsset, EditorTilesetCategory } from './types';
 import type { EditorState } from './EditorState';
 import type { TilePlacementSystem } from './TilePlacementSystem';
 
@@ -6,6 +6,7 @@ const GRID_SIZES = [16, 32, 64] as const;
 const BLACK_SOLID_ASSET_ID = 'editor-solid-black';
 const DEFAULT_WORLD_SIZE = 3000;
 const DEFAULT_RANDOM_CHANCE = 30;
+const DIRECT_SELECT_MAX_SIZE = 96;
 const MONSTER_CATEGORY_ID = 'monsters';
 const DEFAULT_FALLBACK_ASSET: EditorTilesetAsset = {
   id: 'fallback.grass',
@@ -37,6 +38,13 @@ type Options = {
   onClear: () => void;
   onToggleWorldMap?: () => void;
 };
+
+type TilePickerWindowInstance = {
+  mount(parent: HTMLElement): void;
+  open(asset: EditorTilesetAsset): void;
+};
+
+let pickerWindow: TilePickerWindowInstance | null = null;
 
 export function mountClassicTilesPanelLite(options: Options): void {
   document.querySelector('.staged-classic-editor-panel')?.remove();
@@ -71,11 +79,11 @@ export function mountClassicTilesPanelLite(options: Options): void {
 
   const note = document.createElement('div');
   note.className = 'map-editor-empty';
-  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + 월드맵 + Fill + Actions + Categories + Assets 표시 완료';
+  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + 월드맵 + Fill + Actions + Categories + Assets + Picker 표시 완료';
 
   panel.append(header, tabs, scale, grid, layers, tools, fill, actions, categories, assets, note);
   document.body.appendChild(panel);
-  options.status('기존 UI 패널 Assets 표시 완료.');
+  options.status('기존 UI 패널 Picker 연결 완료.');
 }
 
 function createLazyCategoryControls(options: Options, assetContainer: HTMLElement): HTMLElement {
@@ -161,10 +169,7 @@ function renderAssets(container: HTMLElement, category: EditorTilesetCategory, o
     button.dataset.assetId = asset.id;
     button.textContent = asset.name;
     button.onclick = () => {
-      options.state.selectAsset(asset);
-      options.state.setMode('paint');
-      sync();
-      options.status(`에셋 선택: ${asset.name}`);
+      void selectAsset(asset, options, sync);
     };
     container.appendChild(button);
   }
@@ -173,6 +178,58 @@ function renderAssets(container: HTMLElement, category: EditorTilesetCategory, o
     container.textContent = '이 카테고리에 에셋이 없습니다.';
   }
   sync();
+}
+
+async function selectAsset(asset: EditorTilesetAsset, options: Options, sync: () => void): Promise<void> {
+  options.state.selectAsset(asset);
+  options.state.setMode('paint');
+  sync();
+
+  if (await shouldOpenPicker(asset)) {
+    await openTilePicker(asset, options, sync);
+    return;
+  }
+
+  options.status(`에셋 선택: ${asset.name}`);
+}
+
+async function shouldOpenPicker(asset: EditorTilesetAsset): Promise<boolean> {
+  if (asset.tileWidth && asset.tileHeight) return false;
+  if (asset.solidColor !== undefined) return false;
+  if (!asset.url || asset.url.startsWith('solid://')) return false;
+  const size = await loadImageSize(asset.url);
+  return Boolean(size && (size.width > DIRECT_SELECT_MAX_SIZE || size.height > DIRECT_SELECT_MAX_SIZE));
+}
+
+async function openTilePicker(asset: EditorTilesetAsset, options: Options, sync: () => void): Promise<void> {
+  try {
+    options.status(`타일셋 부분 선택 로딩: ${asset.name}`);
+    const { TilePickerWindow } = await import('./TilePickerWindow');
+    if (!pickerWindow) {
+      pickerWindow = new TilePickerWindow({
+        defaultGridSize: options.state.gridSize,
+        onPick: (pickedAsset: EditorTilesetAsset, sourceRect: EditorSourceRect) => {
+          options.state.setSourceRect(pickedAsset, sourceRect);
+          options.state.setMode('paint');
+          sync();
+          options.status(`부분 선택됨: ${pickedAsset.name} ${sourceRect.width}x${sourceRect.height}`);
+        },
+      });
+      pickerWindow.mount(document.body);
+    }
+    pickerWindow.open(asset);
+  } catch (error) {
+    options.status(`부분 선택 로딩 실패: ${formatErrorMessage(error)}`);
+  }
+}
+
+function loadImageSize(url: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
 }
 
 function createActionControls(options: Options): HTMLElement {
