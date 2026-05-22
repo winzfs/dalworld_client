@@ -32,7 +32,6 @@ type LoadedModules = {
   TilesetPanel: new (state: any, actions: any) => any;
   TilePlacementSystem: new (state: any, options: { tileSize: number; mapName: string }) => any;
   MapStorage: new (mapName: string) => any;
-  TilePickerWindow: new (options: { defaultGridSize: number; onPick: (asset: EditorTilesetAsset, sourceRect: any) => void }) => any;
 };
 
 const DIRECT_SELECT_MAX_SIZE = 96;
@@ -93,10 +92,8 @@ export class MapEditorOriginal {
     });
 
     this.cellDrafts.set(cellKey(0, 0), this.createCellDraft(0, 0));
-
-    this.picker = new modules.TilePickerWindow({
-      defaultGridSize: this.options.tileSize ?? 32,
-      onPick: (asset: EditorTilesetAsset, sourceRect: any) => this.state.setSourceRect(asset, sourceRect),
+    this.picker = createTilePickerFallback(() => {
+      this.showToast('타일 부분 선택 창은 부팅 안정화 후 다시 연결합니다.', 'info', 2_500);
     });
 
     this.panel = new modules.TilesetPanel(this.state, {
@@ -183,9 +180,7 @@ export class MapEditorOriginal {
     const placement = await import('./TilePlacementSystem');
     this.reportStage('MapEditorOriginal loading MapStorage...');
     const storage = await import('./MapStorage');
-    this.reportStage('MapEditorOriginal loading TilePickerWindow...');
-    const picker = await import('./TilePickerWindow');
-    this.reportStage('MapEditorOriginal modules loaded. World map grid, world map panel, and grid overlay skipped.');
+    this.reportStage('MapEditorOriginal modules loaded. World map grid, world map panel, grid overlay, and tile picker skipped.');
 
     return {
       EditorState: editorState.EditorState,
@@ -194,7 +189,6 @@ export class MapEditorOriginal {
       TilesetPanel: tilesetPanel.TilesetPanel,
       TilePlacementSystem: placement.TilePlacementSystem,
       MapStorage: storage.MapStorage,
-      TilePickerWindow: picker.TilePickerWindow,
     };
   }
 
@@ -372,7 +366,11 @@ export class MapEditorOriginal {
 
   private pickAsset(asset: EditorTilesetAsset): void {
     this.state.selectAsset(asset);
-    void this.shouldOpenPicker(asset).then((openPicker) => { if (openPicker) this.picker.open(asset); });
+    void this.shouldOpenPicker(asset).then((openPicker) => {
+      if (openPicker) {
+        this.showToast('타일 부분 선택 창은 임시 비활성화되어 전체 에셋을 선택합니다.', 'info', 2_500);
+      }
+    });
   }
 
   private async shouldOpenPicker(asset: EditorTilesetAsset): Promise<boolean> {
@@ -478,6 +476,21 @@ export class MapEditorOriginal {
     const panel = document.getElementById('editor-stage-panel');
     if (panel) panel.textContent = message;
   }
+}
+
+function createTilePickerFallback(onOpen: () => void): { element: HTMLElement; mount(root: HTMLElement): void; open(): void } {
+  const element = document.createElement('div');
+  element.className = 'tile-picker-window is-fallback';
+  element.hidden = true;
+  return {
+    element,
+    mount(root: HTMLElement) {
+      root.appendChild(element);
+    },
+    open() {
+      onOpen();
+    },
+  };
 }
 
 function createWorldMapGridFallback(cellSize: number): any {
