@@ -455,27 +455,113 @@ function renderTilesetCategories(categories: EditorTilesetCategory[], options: {
   status: (message: string) => void;
 }): void {
   options.container.replaceChildren();
-  for (const category of categories) {
-    const section = document.createElement('div');
-    section.style.cssText = 'display:grid;gap:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.1);';
 
-    const title = document.createElement('strong');
-    title.textContent = category.name;
-    title.style.color = '#ffe4a3';
+  const searchInput = document.createElement('input');
+  searchInput.type = 'search';
+  searchInput.placeholder = '타일셋 검색...';
+  searchInput.autocomplete = 'off';
+  searchInput.style.cssText = [
+    'width:100%',
+    'box-sizing:border-box',
+    'padding:9px 10px',
+    'border:1px solid rgba(255,255,255,.16)',
+    'border-radius:10px',
+    'background:rgba(0,0,0,.28)',
+    'color:#fff',
+    'font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace',
+    'outline:none',
+  ].join(';');
 
-    const grid = createButtonGrid(2);
-    for (const asset of category.assets) {
-      const button = createPanelButton(asset.name, () => {
-        options.state.selectAsset(asset);
-        options.selected.textContent = `선택: ${category.name} / ${asset.name}`;
-        options.status(`선택됨: ${asset.name}`);
-      });
-      grid.appendChild(button);
+  const resultSummary = document.createElement('div');
+  resultSummary.style.cssText = 'color:rgba(255,255,255,.62);font-size:11px;';
+
+  const list = document.createElement('div');
+  list.style.cssText = 'display:grid;gap:8px;';
+
+  const assetButtons = new Map<string, HTMLButtonElement>();
+
+  const updateAssetSelection = () => {
+    const selectedAssetId = options.state.selectedBrush?.asset.id ?? '';
+    for (const [assetId, button] of assetButtons) {
+      setPressed(button, assetId === selectedAssetId);
+    }
+  };
+
+  const render = () => {
+    assetButtons.clear();
+    list.replaceChildren();
+
+    const query = normalizeSearchQuery(searchInput.value);
+    let visibleCategoryCount = 0;
+    let visibleAssetCount = 0;
+
+    for (const category of categories) {
+      const visibleAssets = category.assets.filter((asset) => matchesAssetSearch(category, asset, query));
+      if (visibleAssets.length === 0) continue;
+
+      visibleCategoryCount += 1;
+      visibleAssetCount += visibleAssets.length;
+
+      const details = document.createElement('details');
+      details.open = query.length > 0 || visibleCategoryCount <= 1;
+      details.style.cssText = 'border-top:1px solid rgba(255,255,255,.1);padding-top:6px;';
+
+      const summary = document.createElement('summary');
+      summary.textContent = `${category.name} (${visibleAssets.length})`;
+      summary.style.cssText = 'cursor:pointer;color:#ffe4a3;font-weight:700;padding:4px 0;';
+
+      const grid = createButtonGrid(2);
+      grid.style.marginTop = '6px';
+
+      for (const asset of visibleAssets) {
+        const button = createPanelButton(asset.name, () => {
+          options.state.selectAsset(asset);
+          options.selected.textContent = `선택: ${category.name} / ${asset.name}`;
+          options.status(`선택됨: ${asset.name}`);
+          updateAssetSelection();
+        });
+        assetButtons.set(asset.id, button);
+        grid.appendChild(button);
+      }
+
+      details.append(summary, grid);
+      list.appendChild(details);
     }
 
-    section.append(title, grid);
-    options.container.appendChild(section);
-  }
+    resultSummary.textContent = query
+      ? `검색 결과: 카테고리 ${visibleCategoryCount}개 / 에셋 ${visibleAssetCount}개`
+      : `전체: 카테고리 ${categories.length}개 / 에셋 ${categories.reduce((sum, item) => sum + item.assets.length, 0)}개`;
+
+    if (visibleAssetCount === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = '검색 결과가 없습니다.';
+      empty.style.cssText = 'padding:10px;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.7);';
+      list.appendChild(empty);
+    }
+
+    updateAssetSelection();
+  };
+
+  searchInput.addEventListener('input', render);
+  options.state.subscribe(updateAssetSelection);
+
+  options.container.append(searchInput, resultSummary, list);
+  render();
+}
+
+function normalizeSearchQuery(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function matchesAssetSearch(category: EditorTilesetCategory, asset: EditorTilesetAsset, query: string): boolean {
+  if (!query) return true;
+  return (
+    category.name.toLowerCase().includes(query) ||
+    category.id.toLowerCase().includes(query) ||
+    asset.name.toLowerCase().includes(query) ||
+    asset.id.toLowerCase().includes(query) ||
+    asset.categoryId.toLowerCase().includes(query)
+  );
 }
 
 function createButtonGrid(columns: number): HTMLDivElement {
