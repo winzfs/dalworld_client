@@ -3,7 +3,7 @@ import { Camera } from '../game/Camera';
 import { InputController } from '../game/InputController';
 import type { WorldInfo } from '../protocol/messages';
 import type { GameWorldMap, WorldMapPlacement } from '../worldMap/types';
-import { ClassicTilesPanelLite, mountClassicTilesPanelLite } from './ClassicTilesPanelLite';
+import { mountClassicTilesPanelLite } from './ClassicTilesPanelLite';
 import { EditorCameraSystem } from './EditorCameraSystem';
 import { EditorFallbackPanel } from './EditorFallbackPanel';
 import type { EditorState } from './EditorState';
