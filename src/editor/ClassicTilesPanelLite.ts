@@ -62,14 +62,40 @@ export function mountClassicTilesPanelLite(options: Options): void {
   const layers = createLayerControls(options);
   const tools = createToolControls(options);
   const fill = createFillControls(options);
+  const actions = createActionControls(options);
 
   const note = document.createElement('div');
   note.className = 'map-editor-empty';
-  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + 월드맵 + Fill 표시 완료';
+  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + 월드맵 + Fill + Actions 표시 완료';
 
-  panel.append(header, tabs, scale, grid, layers, tools, fill, note);
+  panel.append(header, tabs, scale, grid, layers, tools, fill, actions, note);
   document.body.appendChild(panel);
-  options.status('기존 UI 패널 Fill 표시 완료.');
+  options.status('기존 UI 패널 Actions 표시 완료.');
+}
+
+function createActionControls(options: Options): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'map-editor-actions';
+  container.append(
+    createActionButton('저장', () => {
+      options.status('저장 실행 중...');
+      options.onSave();
+    }),
+    createActionButton('불러오기', () => {
+      options.status('불러오기 실행 중...');
+      options.onLoad();
+    }),
+    createActionButton('JSON', () => {
+      options.status('JSON export 실행 중...');
+      options.onExport();
+    }),
+    createActionButton('전체삭제', () => {
+      if (!window.confirm('현재 맵 배치를 모두 삭제할까요?')) return;
+      options.onClear();
+      options.status('전체삭제 완료.');
+    }, 'danger'),
+  );
+  return container;
 }
 
 function createFillControls(options: Options): HTMLElement {
@@ -323,6 +349,15 @@ function createScaleControls(options: Options): HTMLElement {
     }),
   );
   return container;
+}
+
+function createActionButton(label: string, onClick: () => void, extraClass = ''): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `map-editor-action${extraClass ? ` ${extraClass}` : ''}`;
+  button.textContent = label;
+  button.onclick = onClick;
+  return button;
 }
 
 function createGridButton(label: string, onClick: () => void): HTMLButtonElement {
