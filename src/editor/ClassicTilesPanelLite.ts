@@ -63,19 +63,27 @@ function createToolControls(options: Options): HTMLElement {
   const container = document.createElement('div');
   container.className = 'map-editor-tools';
 
+  const sync = () => {
+    for (const child of Array.from(container.children)) {
+      const button = child as HTMLButtonElement;
+      button.classList.toggle('is-active', button.dataset.mode === options.state.mode);
+    }
+  };
+
   for (const item of TOOL_MODES) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'map-editor-tool';
-    if (options.state.mode === item.mode) button.classList.add('is-active');
+    button.dataset.mode = item.mode;
     button.textContent = item.label;
     button.onclick = () => {
       options.state.setMode(item.mode);
-      options.status(`도구 변경: ${item.label}`);
+      sync();
+      options.status(`도구 변경: ${item.label} / 현재 mode=${options.state.mode}`);
     };
     container.appendChild(button);
   }
-
+  sync();
   return container;
 }
 
@@ -88,19 +96,27 @@ function createLayerControls(options: Options): HTMLElement {
   label.textContent = '레이어';
   container.appendChild(label);
 
+  const sync = () => {
+    for (const child of Array.from(container.children)) {
+      if (!(child instanceof HTMLButtonElement)) continue;
+      child.classList.toggle('is-active', child.dataset.layer === options.state.activeLayer);
+    }
+  };
+
   for (const layer of LAYERS) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `map-editor-layer${layer.extraClass ? ` ${layer.extraClass}` : ''}`;
-    if (options.state.activeLayer === layer.id) button.classList.add('is-active');
+    button.dataset.layer = layer.id;
     button.textContent = layer.label;
     button.onclick = () => {
       options.state.setLayer(layer.id);
-      options.status(`레이어 변경: ${layer.label}`);
+      sync();
+      options.status(`레이어 변경: ${layer.label} / 현재 layer=${options.state.activeLayer}`);
     };
     container.appendChild(button);
   }
-
+  sync();
   return container;
 }
 
@@ -108,22 +124,36 @@ function createGridControls(options: Options): HTMLElement {
   const container = document.createElement('div');
   container.className = 'map-editor-grid-controls';
 
+  const sync = () => {
+    for (const child of Array.from(container.children)) {
+      if (!(child instanceof HTMLButtonElement)) continue;
+      if (child.dataset.role === 'visible') {
+        child.classList.toggle('is-active', options.state.gridVisible);
+      } else {
+        child.classList.toggle('is-active', Number(child.dataset.size) === options.state.gridSize);
+      }
+    }
+  };
+
   const gridToggle = createGridButton('Grid', () => {
     options.state.toggleGridVisible();
+    sync();
     options.status(`Grid 표시: ${options.state.gridVisible ? 'on' : 'off'}`);
   });
-  if (options.state.gridVisible) gridToggle.classList.add('is-active');
+  gridToggle.dataset.role = 'visible';
   container.appendChild(gridToggle);
 
   for (const size of GRID_SIZES) {
     const button = createGridButton(String(size), () => {
       options.state.setGridSize(size);
-      options.status(`Grid 크기: ${size}`);
+      sync();
+      options.status(`Grid 크기: ${options.state.gridSize}`);
     });
-    if (options.state.gridSize === size) button.classList.add('is-active');
+    button.dataset.size = String(size);
     container.appendChild(button);
   }
 
+  sync();
   return container;
 }
 
@@ -144,6 +174,7 @@ function createScaleControls(options: Options): HTMLElement {
   input.value = String(options.state.brushScale);
   input.onchange = () => {
     options.state.setBrushScale(Number(input.value));
+    input.value = String(options.state.brushScale);
     options.status(`스케일 변경: ${input.value}`);
   };
 
