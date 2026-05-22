@@ -45,7 +45,10 @@ export class EditorApp {
     this.cameraSystem.setWorldSize(DEFAULT_WORLD);
 
     const status = createEditorStagePanel();
-    status('Pixi initialized. Loading MapEditor module...');
+    status('Pixi initialized. Probing MapEditor dependencies...');
+    await probeMapEditorDependencies(status);
+
+    status('Dependencies resolved. Loading MapEditor module...');
     const { MapEditor } = await loadEditorModule(
       'MapEditor',
       () => import('./MapEditor'),
@@ -68,29 +71,8 @@ export class EditorApp {
     status(`MapEditor started. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
 
     this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
-    status('EditorApp.start completed without minimap. Loading minimap in background...');
+    status('EditorApp.start completed without minimap.');
     console.log('[EditorBoot] EditorApp.start completed without minimap.');
-    void this.loadMinimapInBackground(status);
-  }
-
-  private async loadMinimapInBackground(status: (message: string) => void): Promise<void> {
-    try {
-      const { EditorMinimap } = await loadEditorModule(
-        'EditorMinimap',
-        () => import('./EditorMinimap'),
-        status,
-      );
-      this.minimap = new EditorMinimap({
-        worldWidth: DEFAULT_WORLD.width,
-        worldHeight: DEFAULT_WORLD.height,
-        onMoveTo: (x, y) => this.cameraSystem.setPosition(x, y),
-      });
-      this.minimap.mount(document.body);
-      status('EditorMinimap mounted.');
-    } catch (error) {
-      console.warn('[EditorBoot] EditorMinimap failed to load. Editor will continue without minimap.', error);
-      status(`EditorMinimap skipped: ${formatErrorMessage(error)}`);
-    }
   }
 
   private update(dt: number): void {
@@ -170,6 +152,18 @@ function createEditorStagePanel(): (message: string) => void {
     panel.textContent = message;
     console.log('[EditorBoot]', message);
   };
+}
+
+async function probeMapEditorDependencies(status: (message: string) => void): Promise<void> {
+  await loadEditorModule('EditorState', () => import('./EditorState'), status);
+  await loadEditorModule('EditorTabServerSaves', () => import('./EditorTabServerSaves'), status);
+  await loadEditorModule('TilesetPanel', () => import('./TilesetPanel'), status);
+  await loadEditorModule('TilePlacementSystem', () => import('./TilePlacementSystem'), status);
+  await loadEditorModule('MapStorage', () => import('./MapStorage'), status);
+  await loadEditorModule('TilePickerWindow', () => import('./TilePickerWindow'), status);
+  await loadEditorModule('WorldMapGrid', () => import('./WorldMapGrid'), status);
+  await loadEditorModule('WorldMapPanel', () => import('./WorldMapPanel'), status);
+  await loadEditorModule('EditorGridOverlay', () => import('./EditorGridOverlay'), status);
 }
 
 async function loadEditorModule<T>(
