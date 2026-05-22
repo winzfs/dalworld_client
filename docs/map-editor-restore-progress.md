@@ -56,7 +56,6 @@
 
 남은 문제:
 
-- Monsters 탭은 아직 실제 기능이 연결되지 않고 상태 메시지만 표시한다.
 - 임시 안내문이 일부 남아 있다.
 - 최종 UI는 원래 UI와 동일해야 하므로, 버튼만 늘리는 방식은 중단해야 한다.
 
@@ -118,6 +117,7 @@
 - 서버 `GameWorldMap`을 셀별 draft로 복원.
 - 전체 `EditorWorldSave` snapshot 생성.
 - `knownCellKeys`로 한 번이라도 생성/이동/로드된 셀 좌표 추적.
+- 서버에서 불러온 `monsterSpawnRules`와 `itemOverrides`를 world snapshot에 보존하도록 메타데이터 복제 경로 추가.
 
 관련 파일:
 
@@ -130,6 +130,7 @@
 - `823baa6e9a29ac18ec9779bc819b2ada826ef8ce`
 - `2a7b1030d345a2b06236e949357ae92f0f7bfb5a`
 - `058ef3d2e57a5fb8067fcacbbc5d54194b4594c5`
+- `33fa913799972de094a550a55e4b37a1e5fab269`
 
 ### 6. 전체 월드 저장/JSON export 추가
 
@@ -252,7 +253,40 @@ EditorWorldSave
 - `ad5606e6ed7e27319f856d1a7ff4b4327a08949c`
 - `b2364a6d3207a9c2c47d7b7925bfdf6578aa9315`
 
-### 10. 빌드 오류 대응 기록
+### 10. Monsters 탭 경량 복구
+
+목표:
+
+- Monsters 탭이 단순 상태 메시지만 표시하던 상태를 실제 편집/저장 UI로 복구한다.
+- 모바일 안전 부팅 경로에는 무거운 모듈을 추가하지 않고, 기존 UI 패널을 연 뒤 기능을 지연 로드한다.
+
+추가/수정:
+
+- `MonsterTabLiteFeature` 추가.
+- `EditorApp.openClassicEditorUi()`에서 기존 UI 패널 생성 후 `import('./MonsterTabLiteFeature')`로 지연 로드.
+- Monsters 탭 클릭 시 Tiles 영역을 숨기고 경량 몬스터 규칙 편집 UI 표시.
+- `wild_slime`, `sheep` world spawn rule 추가/수정/삭제 지원.
+- `enabled`, `monsterType`, `scope`, `maxAlive`, `spawnsPerMinute`, 일부 spec override 편집 지원.
+- 불러오기는 `GET /maps/default`의 `monsterSpawnRules`를 사용한다.
+- 저장은 `saveMonsterTabToServer()`를 통해 `/maps/default/monsters`로 분리 저장한다.
+
+관련 파일:
+
+- `src/editor/MonsterTabLiteFeature.ts`
+- `src/editor/EditorApp.ts`
+- `src/editor/EditorTabServerSaves.ts`
+
+관련 커밋:
+
+- `c671c481afc65fa844206e90bc714f84950c4c7c`
+- `2d02207b4e881995a8f8dea8b7e24a22fe861ffb`
+
+남은 확인:
+
+- Monsters 탭 UI가 기존 UI와 100% 동일한지는 아직 검증 필요.
+- 서버 저장 후 `GET /maps/default`에서 규칙이 유지되는지 실기기/서버 연결 상태에서 확인 필요.
+
+### 11. 빌드 오류 대응 기록
 
 #### TypeScript 오류: WorldMapGridInstance에 load 누락
 
@@ -304,11 +338,12 @@ EditorApp
 - 전체 월드 불러오기 시도
 - 저장 전 검증
 - 불러오기 후 grid 연결 지연 문제 보강
+- Monsters 탭 경량 편집/불러오기/분리 저장 UI
 
 아직 완료로 보지 않는 것:
 
 - 기존 UI와 100% 동일한 레이아웃 복구
-- Monsters 탭 실제 기능 복구
+- Monsters 탭의 기존 UI 수준 완전 복구
 - Items/Resource/Spawn 전체 연결 확인
 - `ClassicTilesPanelLite`에서 임시 fallback 제거
 - 불필요한 safe boot 전용 임시 안내문 제거
@@ -320,9 +355,9 @@ EditorApp
 1. 최신 커밋 빌드 확인.
 2. 0,0 / 1,0 셀 저장, 새로고침, 불러오기 단일 클릭 검증.
 3. 불러오기 전에 월드맵 패널이 없어도 이후 패널 열 때 전체 셀이 즉시 표시되는지 검증.
-4. `ClassicTilesPanelLite`에 남은 fallbackWorldCellStore 경로를 정리.
-5. 원래 UI 레이아웃/패널 구조를 기존 문서 기준으로 복구.
-6. Monsters 탭 실제 기능 복구.
+4. Monsters 탭 저장 후 `GET /maps/default`에서 규칙 유지 확인.
+5. `ClassicTilesPanelLite`에 남은 fallbackWorldCellStore 경로를 정리.
+6. 원래 UI 레이아웃/패널 구조를 기존 문서 기준으로 복구.
 7. Items/Resource/Spawn 저장 구조 확인.
 8. 회귀 테스트 문서 기준으로 전체 검증.
 
