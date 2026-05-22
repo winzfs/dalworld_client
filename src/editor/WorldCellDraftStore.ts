@@ -29,10 +29,12 @@ export type WorldCellDraftStoreOptions = {
 
 export class WorldCellDraftStore {
   private readonly drafts = new Map<string, EditorMapDraft>();
+  private readonly knownCellKeys = new Set<string>();
   private activeKey = cellKey(0, 0);
 
   constructor(private readonly options: WorldCellDraftStoreOptions) {
-    this.drafts.set(this.activeKey, options.placement.mapDraft);
+    this.knownCellKeys.add(this.activeKey);
+    this.drafts.set(this.activeKey, optionsDraftClone(options.placement.mapDraft));
   }
 
   get activeCellKey(): string {
@@ -40,6 +42,7 @@ export class WorldCellDraftStore {
   }
 
   saveActive(): void {
+    this.knownCellKeys.add(this.activeKey);
     this.drafts.set(this.activeKey, optionsDraftClone(this.options.placement.mapDraft));
   }
 
@@ -47,10 +50,7 @@ export class WorldCellDraftStore {
     for (const cell of cells) {
       const gridX = Number.isFinite(cell.gridX) ? cell.gridX : 0;
       const gridY = Number.isFinite(cell.gridY) ? cell.gridY : 0;
-      const key = cellKey(gridX, gridY);
-      if (!this.drafts.has(key)) {
-        this.drafts.set(key, createEmptyCellDraft(gridX, gridY, this.options.defaultTileSize));
-      }
+      this.ensureCell(gridX, gridY);
     }
   }
 
@@ -59,6 +59,7 @@ export class WorldCellDraftStore {
 
     const nextKey = cellKey(gridX, gridY);
     this.activeKey = nextKey;
+    this.ensureCell(gridX, gridY);
 
     const nextDraft = this.drafts.get(nextKey) ?? createEmptyCellDraft(gridX, gridY, this.options.defaultTileSize);
     this.drafts.set(nextKey, nextDraft);
@@ -68,6 +69,7 @@ export class WorldCellDraftStore {
 
   async loadFromServerMap(map: ServerWorldMap): Promise<EditorMapDraft> {
     this.drafts.clear();
+    this.knownCellKeys.clear();
 
     const worldMap = {
       version: 1 as const,
@@ -84,7 +86,9 @@ export class WorldCellDraftStore {
     };
 
     for (const cell of map.cells) {
-      this.drafts.set(cellKey(cell.gridX, cell.gridY), {
+      const key = cellKey(cell.gridX, cell.gridY);
+      this.knownCellKeys.add(key);
+      this.drafts.set(key, {
         version: 1,
         name: `${map.name || 'Map'} ${cell.gridX},${cell.gridY}`,
         tileSize: map.tileSize || this.options.defaultTileSize || 32,
@@ -97,8 +101,8 @@ export class WorldCellDraftStore {
       });
     }
 
-    if (this.drafts.size === 0) {
-      this.drafts.set(cellKey(0, 0), createEmptyCellDraft(0, 0, map.tileSize || this.options.defaultTileSize || 32));
+    if (this.knownCellKeys.size === 0) {
+      this.ensureCell(0, 0, map.tileSize || this.options.defaultTileSize || 32);
     }
 
     const first = map.cells[0] ?? { gridX: 0, gridY: 0 };
@@ -111,15 +115,18 @@ export class WorldCellDraftStore {
   deleteCell(gridX: number, gridY: number): void {
     const key = cellKey(gridX, gridY);
     if (key === cellKey(0, 0)) return;
+    this.knownCellKeys.delete(key);
     this.drafts.delete(key);
   }
 
   snapshotWorldSave(name: string): EditorWorldSave {
     this.saveActive();
 
-    const cells = Array.from(this.drafts.entries())
-      .map(([key, draft]) => {
+    const cells = Array.from(this.knownCellKeys)
+      .map((key) => {
         const [gridX, gridY] = parseCellKey(key);
+        const draft = this.drafts.get(key) ?? createEmptyCellDraft(gridX, gridY, this.options.defaultTileSize);
+        this.drafts.set(key, draft);
         return { gridX, gridY, draft };
       })
       .sort((a, b) => (a.gridY - b.gridY) || (a.gridX - b.gridX));
@@ -158,6 +165,14 @@ export class WorldCellDraftStore {
         },
       })),
     };
+  }
+
+  private ensureCell(gridX: number, gridY: number, tileSize = this.options.defaultTileSize): void {
+    const key = cellKey(gridX, gridY);
+    this.knownCellKeys.add(key);
+    if (!this.drafts.has(key)) {
+      this.drafts.set(key, createEmptyCellDraft(gridX, gridY, tileSize));
+    }
   }
 }
 
