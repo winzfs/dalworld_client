@@ -1,13 +1,4 @@
 import type { Application, Container } from 'pixi.js';
-import { EditorState, BLACK_SOLID_ASSET } from './EditorState';
-import { installMonsterTabSaveInterceptor } from './EditorTabServerSaves';
-import { TilesetPanel } from './TilesetPanel';
-import { TilePlacementSystem } from './TilePlacementSystem';
-import { MapStorage } from './MapStorage';
-import { TilePickerWindow } from './TilePickerWindow';
-import { WorldMapGrid } from './WorldMapGrid';
-import { WorldMapPanel } from './WorldMapPanel';
-import { EditorGridOverlay } from './EditorGridOverlay';
 import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset, EditorWorldSave } from './types';
 
 export type MapEditorOptions = {
@@ -28,21 +19,41 @@ export type WorldCellTransition = {
   targetY: number;
 };
 
+type ToastKind = 'info' | 'success' | 'error';
+
+type LoadedModules = {
+  EditorState: new () => any;
+  BLACK_SOLID_ASSET: EditorTilesetAsset;
+  installMonsterTabSaveInterceptor: (options: {
+    panel: HTMLElement;
+    getRules: () => any[];
+    notify: (message: string, kind: ToastKind, durationMs?: number) => void;
+  }) => void;
+  TilesetPanel: new (state: any, actions: Record<string, unknown>) => any;
+  TilePlacementSystem: new (state: any, options: { tileSize: number; mapName: string }) => any;
+  MapStorage: new (mapName: string) => any;
+  TilePickerWindow: new (options: { defaultGridSize: number; onPick: (asset: EditorTilesetAsset, sourceRect: any) => void }) => any;
+  WorldMapGrid: new (options: { cellSize: number }) => any;
+  WorldMapPanel: new (options: Record<string, unknown>) => any;
+  EditorGridOverlay: new (state: any, options: { width: number; height: number }) => any;
+};
+
 const DIRECT_SELECT_MAX_SIZE = 96;
 const BLACK_BASE_PLACEMENT_ID = 'editor-black-base';
 
-type ToastKind = 'info' | 'success' | 'error';
-
 export class MapEditorOriginal {
-  readonly state = new EditorState();
-  readonly placement: TilePlacementSystem;
+  state: any = null;
+  placement: any = {
+    mapDraft: { version: 1, name: this.options.mapName ?? 'dalworld-map', tileSize: this.options.tileSize ?? 32, placements: [] },
+  };
 
-  private readonly panel: TilesetPanel;
-  private readonly picker: TilePickerWindow;
-  private readonly worldMapGrid: WorldMapGrid;
-  private readonly worldMapPanel: WorldMapPanel;
-  private readonly gridOverlay: EditorGridOverlay;
-  private readonly storage: MapStorage;
+  private modules: LoadedModules | null = null;
+  private panel: any = null;
+  private picker: any = null;
+  private worldMapGrid: any = null;
+  private worldMapPanel: any = null;
+  private gridOverlay: any = null;
+  private storage: any = null;
   private readonly uiRoot: HTMLElement;
   private readonly toast: HTMLDivElement;
   private readonly cellDrafts = new Map<string, EditorMapDraft>();
@@ -53,6 +64,156 @@ export class MapEditorOriginal {
   private paintingPointerId: number | null = null;
   private lastPaintKey: string | null = null;
   private toastHideTimeout: ReturnType<typeof window.setTimeout> | null = null;
+
+  constructor(private readonly options: MapEditorOptions) {
+    this.worldWidth = options.worldWidth ?? 3000;
+    this.worldHeight = options.worldHeight ?? 3000;
+    this.uiRoot = options.uiRoot ?? document.body;
+    this.toast = createEditorToast();
+  }
+
+  async start(): Promise<void> {
+    if (this.enabled) return;
+
+    const modules = await this.loadModules();
+    this.modules = modules;
+
+    const mapName = this.options.mapName ?? 'untitled-map';
+    this.state = new modules.EditorState();
+    this.storage = new modules.MapStorage(mapName);
+    this.worldMapGrid = new modules.WorldMapGrid({ cellSize: this.worldWidth });
+    this.gridOverlay = new modules.EditorGridOverlay(this.state, { width: this.worldWidth, height: this.worldHeight });
+    this.placement = new modules.TilePlacementSystem(this.state, {
+      tileSize: this.options.tileSize ?? 32,
+      mapName: this.getCellMapName(0, 0),
+    });
+
+    this.cellDrafts.set(cellKey(0, 0), this.createCellDraft(0, 0));
+
+    this.picker = new modules.TilePickerWindow({
+      defaultGridSize: this.options.tileSize ?? 32,
+      onPick: (asset: EditorTilesetAsset, sourceRect: any) => this.state.setSourceRect(asset, sourceRect),
+    });
+
+    this.worldMapPanel = new modules.WorldMapPanel({
+      grid: this.worldMapGrid,
+      onSelectCell: (gridX: number, gridY: number) => {
+        void this.selectWorldCell(gridX, gridY, { targetX: this.worldWidth / 2, targetY: this.worldHeight / 2 });
+      },
+      onDeleteCurrentCell: () => { void this.deleteCurrentWorldCell(); },
+    });
+
+    this.panel = new modules.TilesetPanel(this.state, {
+      onSave: () => { void this.save(); },
+      onLoad: () => { void this.load(); },
+      onExport: () => this.exportJson(),
+      onClear: () => this.clearAll(),
+      onPickAsset: (asset: EditorTilesetAsset) => this.pickAsset(asset),
+      onFillAll: () => { void this.fillAll(); },
+      onRandomFill: (chancePercent: number) => { void this.fillRandom(chancePercent); },
+      onToggleWorldMap: () => this.worldMapPanel.toggle(),
+      getMonsterSpawnRules: () => this.worldMapGrid.monsterSpawnRules,
+      setMonsterSpawnRules: (rules: any[]) => this.worldMapGrid.setMonsterSpawnRules(rules),
+    });
+
+    modules.installMonsterTabSaveInterceptor({
+      panel: this.panel.element,
+      getRules: () => this.worldMapGrid.monsterSpawnRules,
+      notify: (message, kind, durationMs) => this.showToast(message, kind, durationMs),
+    });
+
+    this.enabled = true;
+    this.options.world.sortableChildren = true;
+    this.options.world.addChild(this.gridOverlay.layer);
+    this.options.world.addChild(this.placement.layer);
+    this.panel.mount(this.uiRoot);
+    this.picker.mount(this.uiRoot);
+    this.worldMapPanel.mount(this.uiRoot);
+    this.uiRoot.appendChild(this.toast);
+
+    this.options.app.canvas.addEventListener('pointerdown', this.pointerDownHandler);
+    this.options.app.canvas.addEventListener('pointermove', this.pointerMoveHandler);
+    this.options.app.canvas.addEventListener('pointerup', this.pointerUpHandler);
+    this.options.app.canvas.addEventListener('pointercancel', this.pointerUpHandler);
+
+    this.reportStage('MapEditorOriginal DOM mounted. Loading saved map...');
+    void this.load();
+  }
+
+  stop(): void {
+    if (!this.enabled) return;
+    this.persistCurrentCellDraft();
+    this.enabled = false;
+    this.paintingPointerId = null;
+    this.lastPaintKey = null;
+    if (this.toastHideTimeout !== null) {
+      window.clearTimeout(this.toastHideTimeout);
+      this.toastHideTimeout = null;
+    }
+    this.options.app.canvas.removeEventListener('pointerdown', this.pointerDownHandler);
+    this.options.app.canvas.removeEventListener('pointermove', this.pointerMoveHandler);
+    this.options.app.canvas.removeEventListener('pointerup', this.pointerUpHandler);
+    this.options.app.canvas.removeEventListener('pointercancel', this.pointerUpHandler);
+    this.panel?.element.remove();
+    this.picker?.element.remove();
+    this.worldMapPanel?.element.remove();
+    this.toast.remove();
+    if (this.gridOverlay?.layer.parent) this.gridOverlay.layer.parent.removeChild(this.gridOverlay.layer);
+    if (this.placement?.layer.parent) this.placement.layer.parent.removeChild(this.placement.layer);
+  }
+
+  setWorldSize(width: number, height: number): void {
+    this.worldWidth = width;
+    this.worldHeight = height;
+    this.gridOverlay?.setWorldSize(width, height);
+  }
+
+  async transitionWorldCell(transition: WorldCellTransition): Promise<void> {
+    if (this.transitioning || !this.worldMapGrid) return;
+    if (transition.dx === 0 && transition.dy === 0) return;
+    this.transitioning = true;
+    const current = this.worldMapGrid.current;
+    await this.selectWorldCell(current.gridX + transition.dx, current.gridY + transition.dy, {
+      targetX: transition.targetX,
+      targetY: transition.targetY,
+    });
+    this.transitioning = false;
+  }
+
+  private async loadModules(): Promise<LoadedModules> {
+    this.reportStage('MapEditorOriginal loading EditorState...');
+    const editorState = await import('./EditorState');
+    this.reportStage('MapEditorOriginal loading server save hooks...');
+    const serverSaves = await import('./EditorTabServerSaves');
+    this.reportStage('MapEditorOriginal loading TilesetPanel...');
+    const tilesetPanel = await import('./TilesetPanel');
+    this.reportStage('MapEditorOriginal loading TilePlacementSystem...');
+    const placement = await import('./TilePlacementSystem');
+    this.reportStage('MapEditorOriginal loading MapStorage...');
+    const storage = await import('./MapStorage');
+    this.reportStage('MapEditorOriginal loading TilePickerWindow...');
+    const picker = await import('./TilePickerWindow');
+    this.reportStage('MapEditorOriginal loading WorldMapGrid...');
+    const grid = await import('./WorldMapGrid');
+    this.reportStage('MapEditorOriginal loading WorldMapPanel...');
+    const worldPanel = await import('./WorldMapPanel');
+    this.reportStage('MapEditorOriginal loading EditorGridOverlay...');
+    const gridOverlay = await import('./EditorGridOverlay');
+    this.reportStage('MapEditorOriginal modules loaded.');
+
+    return {
+      EditorState: editorState.EditorState,
+      BLACK_SOLID_ASSET: editorState.BLACK_SOLID_ASSET,
+      installMonsterTabSaveInterceptor: serverSaves.installMonsterTabSaveInterceptor,
+      TilesetPanel: tilesetPanel.TilesetPanel,
+      TilePlacementSystem: placement.TilePlacementSystem,
+      MapStorage: storage.MapStorage,
+      TilePickerWindow: picker.TilePickerWindow,
+      WorldMapGrid: grid.WorldMapGrid,
+      WorldMapPanel: worldPanel.WorldMapPanel,
+      EditorGridOverlay: gridOverlay.EditorGridOverlay,
+    };
+  }
 
   private readonly pointerDownHandler = (event: PointerEvent) => {
     if (!this.canPaintFromEvent(event)) return;
@@ -77,116 +238,8 @@ export class MapEditorOriginal {
     if (this.paintingPointerId !== event.pointerId) return;
     this.paintingPointerId = null;
     this.lastPaintKey = null;
-    if (this.options.app.canvas.hasPointerCapture(event.pointerId)) {
-      this.options.app.canvas.releasePointerCapture(event.pointerId);
-    }
+    if (this.options.app.canvas.hasPointerCapture(event.pointerId)) this.options.app.canvas.releasePointerCapture(event.pointerId);
   };
-
-  constructor(private readonly options: MapEditorOptions) {
-    const mapName = options.mapName ?? 'untitled-map';
-    this.worldWidth = options.worldWidth ?? 3000;
-    this.worldHeight = options.worldHeight ?? 3000;
-    this.uiRoot = options.uiRoot ?? document.body;
-    this.toast = createEditorToast();
-    this.storage = new MapStorage(mapName);
-    this.worldMapGrid = new WorldMapGrid({ cellSize: this.worldWidth });
-    this.gridOverlay = new EditorGridOverlay(this.state, { width: this.worldWidth, height: this.worldHeight });
-    this.placement = new TilePlacementSystem(this.state, {
-      tileSize: options.tileSize ?? 32,
-      mapName: this.getCellMapName(0, 0),
-    });
-    this.cellDrafts.set(cellKey(0, 0), this.createCellDraft(0, 0));
-    this.picker = new TilePickerWindow({
-      defaultGridSize: options.tileSize ?? 32,
-      onPick: (asset, sourceRect) => this.state.setSourceRect(asset, sourceRect),
-    });
-    this.worldMapPanel = new WorldMapPanel({
-      grid: this.worldMapGrid,
-      onSelectCell: (gridX, gridY) => {
-        void this.selectWorldCell(gridX, gridY, { targetX: this.worldWidth / 2, targetY: this.worldHeight / 2 });
-      },
-      onDeleteCurrentCell: () => { void this.deleteCurrentWorldCell(); },
-    });
-    this.panel = new TilesetPanel(this.state, {
-      onSave: () => { void this.save(); },
-      onLoad: () => { void this.load(); },
-      onExport: () => this.exportJson(),
-      onClear: () => this.clearAll(),
-      onPickAsset: (asset) => this.pickAsset(asset),
-      onFillAll: () => { void this.fillAll(); },
-      onRandomFill: (chancePercent) => { void this.fillRandom(chancePercent); },
-      onToggleWorldMap: () => this.worldMapPanel.toggle(),
-      getMonsterSpawnRules: () => this.worldMapGrid.monsterSpawnRules,
-      setMonsterSpawnRules: (rules) => this.worldMapGrid.setMonsterSpawnRules(rules),
-    });
-    installMonsterTabSaveInterceptor({
-      panel: this.panel.element,
-      getRules: () => this.worldMapGrid.monsterSpawnRules,
-      notify: (message, kind, durationMs) => this.showToast(message, kind, durationMs),
-    });
-  }
-
-  start(): void {
-    if (this.enabled) return;
-    this.enabled = true;
-    this.options.world.sortableChildren = true;
-    this.options.world.addChild(this.gridOverlay.layer);
-    this.options.world.addChild(this.placement.layer);
-    this.panel.mount(this.uiRoot);
-    this.picker.mount(this.uiRoot);
-    this.worldMapPanel.mount(this.uiRoot);
-    this.uiRoot.appendChild(this.toast);
-    console.log('[EditorBoot] MapEditor DOM mounted.', {
-      panelConnected: this.panel.element.isConnected,
-      pickerConnected: this.picker.element.isConnected,
-      worldMapConnected: this.worldMapPanel.element.isConnected,
-    });
-    this.options.app.canvas.addEventListener('pointerdown', this.pointerDownHandler);
-    this.options.app.canvas.addEventListener('pointermove', this.pointerMoveHandler);
-    this.options.app.canvas.addEventListener('pointerup', this.pointerUpHandler);
-    this.options.app.canvas.addEventListener('pointercancel', this.pointerUpHandler);
-    void this.load();
-  }
-
-  stop(): void {
-    if (!this.enabled) return;
-    this.persistCurrentCellDraft();
-    this.enabled = false;
-    this.paintingPointerId = null;
-    this.lastPaintKey = null;
-    if (this.toastHideTimeout !== null) {
-      window.clearTimeout(this.toastHideTimeout);
-      this.toastHideTimeout = null;
-    }
-    this.options.app.canvas.removeEventListener('pointerdown', this.pointerDownHandler);
-    this.options.app.canvas.removeEventListener('pointermove', this.pointerMoveHandler);
-    this.options.app.canvas.removeEventListener('pointerup', this.pointerUpHandler);
-    this.options.app.canvas.removeEventListener('pointercancel', this.pointerUpHandler);
-    this.panel.element.remove();
-    this.picker.element.remove();
-    this.worldMapPanel.element.remove();
-    this.toast.remove();
-    if (this.gridOverlay.layer.parent) this.gridOverlay.layer.parent.removeChild(this.gridOverlay.layer);
-    if (this.placement.layer.parent) this.placement.layer.parent.removeChild(this.placement.layer);
-  }
-
-  setWorldSize(width: number, height: number): void {
-    this.worldWidth = width;
-    this.worldHeight = height;
-    this.gridOverlay.setWorldSize(width, height);
-  }
-
-  async transitionWorldCell(transition: WorldCellTransition): Promise<void> {
-    if (this.transitioning) return;
-    if (transition.dx === 0 && transition.dy === 0) return;
-    this.transitioning = true;
-    const current = this.worldMapGrid.current;
-    await this.selectWorldCell(current.gridX + transition.dx, current.gridY + transition.dy, {
-      targetX: transition.targetX,
-      targetY: transition.targetY,
-    });
-    this.transitioning = false;
-  }
 
   private canPaintFromEvent(event: PointerEvent): boolean {
     return this.enabled && event.button === 0 && this.paintingPointerId === null && !isEditorUiTarget(event.target);
@@ -273,8 +326,8 @@ export class MapEditorOriginal {
     return this.normalizeCellDraft(gridX, gridY, {
       version: 1,
       name: this.getCellMapName(gridX, gridY),
-      tileSize: this.state.gridSize,
-      worldMap: this.worldMapGrid.snapshot,
+      tileSize: this.state?.gridSize ?? 32,
+      worldMap: this.worldMapGrid?.snapshot,
       placements: [],
     });
   }
@@ -284,19 +337,21 @@ export class MapEditorOriginal {
   }
 
   private withBlackBase(draft: EditorMapDraft): EditorMapDraft {
+    const black = this.modules?.BLACK_SOLID_ASSET;
+    if (!black) return draft;
     const hasBase = draft.placements.some((placement) => placement.id === BLACK_BASE_PLACEMENT_ID);
     if (hasBase) return draft;
     const basePlacement: EditorTilePlacement = {
       id: BLACK_BASE_PLACEMENT_ID,
-      assetId: BLACK_SOLID_ASSET.id,
-      assetUrl: BLACK_SOLID_ASSET.url,
-      categoryId: BLACK_SOLID_ASSET.categoryId,
+      assetId: black.id,
+      assetUrl: black.url,
+      categoryId: black.categoryId,
       x: 0,
       y: 0,
       layer: 'ground',
       scale: 1,
       sourceRect: { x: 0, y: 0, width: this.worldWidth, height: this.worldHeight },
-      solidColor: BLACK_SOLID_ASSET.solidColor,
+      solidColor: black.solidColor,
     };
     return { ...draft, placements: [basePlacement, ...draft.placements] };
   }
@@ -329,8 +384,7 @@ export class MapEditorOriginal {
   }
 
   private getCellMapName(gridX: number, gridY: number): string {
-    const baseName = this.options.mapName ?? 'dalworld-map';
-    return `${baseName}-${gridX}-${gridY}`;
+    return `${this.options.mapName ?? 'dalworld-map'}-${gridX}-${gridY}`;
   }
 
   private pickAsset(asset: EditorTilesetAsset): void {
@@ -347,14 +401,12 @@ export class MapEditorOriginal {
   }
 
   private async fillAll(): Promise<void> {
-    const ok = window.confirm('현재 선택한 타일로 맵 전체를 채울까요?');
-    if (!ok) return;
+    if (!window.confirm('현재 선택한 타일로 맵 전체를 채울까요?')) return;
     await this.placement.fillAll({ width: this.worldWidth, height: this.worldHeight });
   }
 
   private async fillRandom(chancePercent: number): Promise<void> {
-    const ok = window.confirm(`${chancePercent}% 확률로 맵 전체에 랜덤 배치할까요?`);
-    if (!ok) return;
+    if (!window.confirm(`${chancePercent}% 확률로 맵 전체에 랜덤 배치할까요?`)) return;
     await this.placement.fillRandom({ width: this.worldWidth, height: this.worldHeight, chancePercent });
   }
 
@@ -364,11 +416,8 @@ export class MapEditorOriginal {
     const mapSaved = this.storage.save({ ...this.placement.mapDraft, worldMap: worldSave.worldMap });
     try {
       const report = await this.storage.saveWorld(worldSave);
-      const resources = report.resources;
-      const markerSpawns = report.monsterSpawns;
-      const summary = `셀 ${report.cells}개 · 배치 ${report.placements}개 · 자원 ${resources.total}개 · 지역스폰 ${markerSpawns.total}개`;
+      const summary = `셀 ${report.cells}개 · 배치 ${report.placements}개 · 자원 ${report.resources.total}개 · 지역스폰 ${report.monsterSpawns.total}개`;
       this.showToast(mapSaved ? `맵 저장 완료 · ${summary}` : `맵 서버 저장 완료 · 로컬 백업은 용량 부족으로 생략 · ${summary}`, 'success', 4_500);
-      console.info('[MapEditor] Map save completed.', { report, localBackupSaved: mapSaved, cellCount: worldSave.cells.length });
     } catch (error) {
       console.error('[MapEditor] Map server upload failed.', error);
       this.showToast('맵 저장 실패 · 서버에는 아직 반영되지 않았습니다.', 'error', 5_000);
@@ -384,7 +433,6 @@ export class MapEditorOriginal {
       const current = this.worldMapGrid.current;
       const currentDraft = this.cellDrafts.get(cellKey(current.gridX, current.gridY)) ?? this.createCellDraft(current.gridX, current.gridY);
       await this.placement.loadDraft(this.normalizeCellDraft(current.gridX, current.gridY, currentDraft));
-      console.info('[MapEditor] Loaded saved world.', { cells: worldSave.cells.length });
       return;
     }
     const draft = this.storage.load();
@@ -404,8 +452,7 @@ export class MapEditorOriginal {
   }
 
   private clearAll(): void {
-    const ok = window.confirm('현재 배치된 타일을 전부 삭제할까요?');
-    if (!ok) return;
+    if (!window.confirm('현재 배치된 타일을 전부 삭제할까요?')) return;
     const current = this.worldMapGrid.current;
     const draft = this.createCellDraft(current.gridX, current.gridY);
     this.placement.clear();
@@ -441,6 +488,12 @@ export class MapEditorOriginal {
         this.toastHideTimeout = null;
       }, durationMs);
     }
+  }
+
+  private reportStage(message: string): void {
+    console.log('[EditorBoot]', message);
+    const panel = document.getElementById('editor-stage-panel');
+    if (panel) panel.textContent = message;
   }
 }
 
