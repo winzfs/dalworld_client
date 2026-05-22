@@ -142,14 +142,16 @@ export class TilePlacementSystem {
   }
 
   private upsertPlacement(placement: EditorTilePlacement): void {
-    const existing = this.draft.placements.find((item) => item.x === placement.x && item.y === placement.y && item.layer === placement.layer);
-    if (existing) this.removePlacement(existing.id);
+    if (!placement.transparentBlack) {
+      const existing = this.draft.placements.find((item) => item.x === placement.x && item.y === placement.y && item.layer === placement.layer);
+      if (existing) this.removePlacement(existing.id);
+    }
     this.draft.placements.push(placement);
   }
 
   private async createDisplay(placement: EditorTilePlacement, asset: EditorTilesetAsset): Promise<void> {
     const display = await this.createPlacedDisplay(placement, asset);
-    display.zIndex = placement.layer === 'collision' ? 100 : placement.layer === 'object' ? 10 + placement.y / 1000 : 1;
+    display.zIndex = layerSortValue(placement);
     this.displays.set(placement.id, display);
     this.layer.addChild(display);
   }
@@ -172,7 +174,7 @@ export class TilePlacementSystem {
     sprite.x = placement.x;
     sprite.y = placement.y;
     sprite.roundPixels = true;
-    sprite.alpha = placement.transparentBlack ? 0.45 : 1;
+    sprite.alpha = 1;
     sprite.scale.set(((placement.displayWidth ?? renderTexture.width) / renderTexture.width) * scale, ((placement.displayHeight ?? renderTexture.height) / renderTexture.height) * scale);
     return sprite;
   }
@@ -237,8 +239,8 @@ function createPlacement(options: {
     y: snap(options.worldY, options.gridSize),
     layer: options.activeLayer,
     scale: isCollision ? 1 : options.brushScale,
-    displayWidth: sourceRect?.width ?? asset.tileWidth,
-    displayHeight: sourceRect?.height ?? asset.tileHeight,
+    displayWidth: isCollision ? options.gridSize : asset.tileWidth ?? options.gridSize,
+    displayHeight: isCollision ? options.gridSize : asset.tileHeight ?? options.gridSize,
     sourceRect,
     solidColor: isCollision ? undefined : asset.solidColor,
     transparentBlack: !isCollision && asset.solidColor === undefined && options.transparentBlack,
@@ -273,8 +275,8 @@ function assetFromPlacement(placement: EditorTilePlacement, gridSize: number): E
     name: placement.assetId,
     categoryId: placement.categoryId,
     url: placement.assetUrl,
-    tileWidth: placement.displayWidth ?? placement.sourceRect?.width ?? gridSize,
-    tileHeight: placement.displayHeight ?? placement.sourceRect?.height ?? gridSize,
+    tileWidth: placement.displayWidth ?? gridSize,
+    tileHeight: placement.displayHeight ?? gridSize,
     solidColor: placement.solidColor,
   };
 }
@@ -319,7 +321,8 @@ function clampSourceRect(sourceRect: EditorSourceRect, texture: PixiTexture): Ed
 
 function layerSortValue(placement: EditorTilePlacement): number {
   const base = placement.layer === 'collision' ? 100 : placement.layer === 'object' ? 10 : 1;
-  return base + placement.y / 1000;
+  const overlay = placement.transparentBlack ? 0.5 : 0;
+  return base + overlay + placement.y / 1000;
 }
 
 function snap(value: number, size: number): number {
