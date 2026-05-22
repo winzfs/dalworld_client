@@ -44,10 +44,11 @@ export class MapEditor {
     };
   }
 
-  start(): void {
+  async start(): Promise<void> {
     if (!this.loading) {
       this.loading = this.loadAndStart();
     }
+    await this.loading;
   }
 
   stop(): void {
