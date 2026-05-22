@@ -1,4 +1,4 @@
-import type { EditorWorldSave } from './types';
+import type { EditorTilePlacement, EditorWorldSave } from './types';
 
 type ServerWorldMap = {
   version: 1;
@@ -8,7 +8,7 @@ type ServerWorldMap = {
   cells: Array<{
     gridX: number;
     gridY: number;
-    placements: unknown[];
+    placements: EditorTilePlacement[];
   }>;
   monsterSpawnRules?: unknown;
   itemOverrides?: unknown;
