@@ -63,7 +63,7 @@ export class TilesetPanelLite {
   private dragOffsetX = 0;
   private dragOffsetY = 0;
   private randomChancePercent = 30;
-  private lastNonBlackAsset: EditorTilesetAsset | null = this.getCurrentNonBlackAsset();
+  private lastNonBlackAsset: EditorTilesetAsset | null = null;
 
   constructor(
     private readonly state: EditorStateLike,
@@ -112,6 +112,7 @@ export class TilesetPanelLite {
     this.attachDragHandlers();
     this.state.subscribe(() => this.render());
     this.ensureCategory();
+    this.lastNonBlackAsset = this.getCurrentNonBlackAsset() ?? getFirstNonBlackAsset();
     this.render();
   }
 
