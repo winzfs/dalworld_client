@@ -123,7 +123,9 @@ export class EditorApp {
     this.world.addChild(placement.layer);
     mountSafeBootPanel({ state, placement, session, status });
     this.attachPaintingHandlers(state, placement);
-    status('안전 부팅 완료. MapEditorSession 기준으로 기존 UI 패널을 열 수 있습니다.');
+    openClassicEditorUi({ state, placement, session, status });
+    document.querySelectorAll<HTMLElement>('.minimal-editor-panel').forEach((panel) => panel.remove());
+    status('안전 부팅 완료. 기존 Map Editor 패널을 기본 UI로 표시합니다.');
 
     return {
       placement,
