@@ -29,12 +29,12 @@ type LoadedModules = {
     getRules: () => any[];
     notify: (message: string, kind: ToastKind, durationMs?: number) => void;
   }) => void;
-  TilesetPanel: new (state: any, actions: Record<string, unknown>) => any;
+  TilesetPanel: new (state: any, actions: any) => any;
   TilePlacementSystem: new (state: any, options: { tileSize: number; mapName: string }) => any;
   MapStorage: new (mapName: string) => any;
   TilePickerWindow: new (options: { defaultGridSize: number; onPick: (asset: EditorTilesetAsset, sourceRect: any) => void }) => any;
   WorldMapGrid: new (options: { cellSize: number }) => any;
-  WorldMapPanel: new (options: Record<string, unknown>) => any;
+  WorldMapPanel: new (options: any) => any;
   EditorGridOverlay: new (state: any, options: { width: number; height: number }) => any;
 };
 
@@ -43,9 +43,7 @@ const BLACK_BASE_PLACEMENT_ID = 'editor-black-base';
 
 export class MapEditorOriginal {
   state: any = null;
-  placement: any = {
-    mapDraft: { version: 1, name: this.options.mapName ?? 'dalworld-map', tileSize: this.options.tileSize ?? 32, placements: [] },
-  };
+  placement: any;
 
   private modules: LoadedModules | null = null;
   private panel: any = null;
@@ -70,6 +68,14 @@ export class MapEditorOriginal {
     this.worldHeight = options.worldHeight ?? 3000;
     this.uiRoot = options.uiRoot ?? document.body;
     this.toast = createEditorToast();
+    this.placement = {
+      mapDraft: {
+        version: 1,
+        name: options.mapName ?? 'dalworld-map',
+        tileSize: options.tileSize ?? 32,
+        placements: [],
+      },
+    };
   }
 
   async start(): Promise<void> {
