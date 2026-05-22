@@ -56,13 +56,13 @@ export class MapEditorBootMinimal {
     const editorState = await import('./EditorState');
     this.report('MapEditorBootMinimal loading server save hooks...');
     const serverSaves = await import('./EditorTabServerSaves');
-    this.report('MapEditorBootMinimal loading TilesetPanel...');
-    const tilesetPanel = await import('./TilesetPanel');
+    this.report('MapEditorBootMinimal loading TilesetPanelLite...');
+    const tilesetPanel = await import('./TilesetPanelLite');
 
     this.state = new editorState.EditorState();
     this.placement = createPlacementFallback(this.state, this.options.mapName ?? 'dalworld-map', this.options.tileSize ?? 32);
 
-    this.panel = new tilesetPanel.TilesetPanel(this.state, {
+    this.panel = new tilesetPanel.TilesetPanelLite(this.state, {
       onSave: () => this.save(),
       onLoad: () => { void this.load(); },
       onExport: () => this.exportJson(),
@@ -71,8 +71,6 @@ export class MapEditorBootMinimal {
       onFillAll: () => { void this.placement.fillAll({ width: this.worldWidth, height: this.worldHeight }); },
       onRandomFill: (chancePercent: number) => { void this.placement.fillRandom({ width: this.worldWidth, height: this.worldHeight, chancePercent }); },
       onToggleWorldMap: () => this.showToast('월드맵 패널은 임시 비활성화되어 있습니다.', 'info'),
-      getMonsterSpawnRules: () => this.worldMap.monsterSpawnRules ?? [],
-      setMonsterSpawnRules: (rules: any[]) => { this.worldMap.monsterSpawnRules = cloneRules(rules); },
     });
 
     serverSaves.installMonsterTabSaveInterceptor({
@@ -90,7 +88,7 @@ export class MapEditorBootMinimal {
     this.uiRoot.appendChild(this.toast);
     this.attachCanvasHandlers();
     await this.load();
-    this.report('MapEditorBootMinimal DOM mounted.');
+    this.report('MapEditorBootMinimal DOM mounted with TilesetPanelLite.');
   }
 
   stop(): void {
@@ -324,10 +322,6 @@ function fallbackColor(categoryId: string): number {
 
 function createWorldMapDraft(cellSize: number): EditorWorldMapDraft {
   return { version: 1, cellSize, current: { gridX: 0, gridY: 0 }, cells: [{ id: 'cell-0-0', name: 'Cell 0,0', gridX: 0, gridY: 0 }], monsterSpawnRules: [] };
-}
-
-function cloneRules(rules: any[]): any[] {
-  return rules.map((rule) => ({ ...rule, spec: rule.spec ? { ...rule.spec } : undefined }));
 }
 
 function createHiddenWindow(className: string): { element: HTMLElement; mount(root: HTMLElement): void; toggle(): void; open(): void } {
