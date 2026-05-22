@@ -1,4 +1,4 @@
-import type { EditorMapDraft, EditorTilePlacement, EditorWorldSave } from './types';
+import type { EditorMapDraft, EditorTilePlacement, EditorWorldMapDraft, EditorWorldSave } from './types';
 import type { TilePlacementSystem } from './TilePlacementSystem';
 
 type ServerWorldPlacement = EditorTilePlacement;
@@ -31,6 +31,7 @@ export class WorldCellDraftStore {
   private readonly drafts = new Map<string, EditorMapDraft>();
   private readonly knownCellKeys = new Set<string>();
   private activeKey = cellKey(0, 0);
+  private loadedWorldMapMetadata: Pick<EditorWorldMapDraft, 'monsterSpawnRules' | 'itemOverrides'> | null = null;
 
   constructor(private readonly options: WorldCellDraftStoreOptions) {
     this.knownCellKeys.add(this.activeKey);
@@ -54,6 +55,13 @@ export class WorldCellDraftStore {
     }
   }
 
+  setWorldMetadata(metadata: Pick<EditorWorldMapDraft, 'monsterSpawnRules' | 'itemOverrides'>): void {
+    this.loadedWorldMapMetadata = {
+      monsterSpawnRules: cloneMonsterSpawnRules(metadata.monsterSpawnRules),
+      itemOverrides: cloneItemOverrides(metadata.itemOverrides),
+    };
+  }
+
   async switchTo(gridX: number, gridY: number): Promise<EditorMapDraft> {
     this.saveActive();
 
@@ -71,8 +79,13 @@ export class WorldCellDraftStore {
     this.drafts.clear();
     this.knownCellKeys.clear();
 
-    const worldMap = {
-      version: 1 as const,
+    this.loadedWorldMapMetadata = {
+      monsterSpawnRules: cloneMonsterSpawnRules(map.monsterSpawnRules as EditorWorldMapDraft['monsterSpawnRules']),
+      itemOverrides: cloneItemOverrides(map.itemOverrides as EditorWorldMapDraft['itemOverrides']),
+    };
+
+    const worldMap: EditorWorldMapDraft = {
+      version: 1,
       cellSize: map.cellSize || this.options.cellSize || 3000,
       current: { gridX: map.cells[0]?.gridX ?? 0, gridY: map.cells[0]?.gridY ?? 0 },
       cells: map.cells.map((cell) => ({
@@ -81,8 +94,8 @@ export class WorldCellDraftStore {
         gridX: cell.gridX,
         gridY: cell.gridY,
       })),
-      monsterSpawnRules: map.monsterSpawnRules as never,
-      itemOverrides: map.itemOverrides as never,
+      monsterSpawnRules: this.loadedWorldMapMetadata.monsterSpawnRules,
+      itemOverrides: this.loadedWorldMapMetadata.itemOverrides,
     };
 
     for (const cell of map.cells) {
@@ -133,8 +146,8 @@ export class WorldCellDraftStore {
 
     const [currentX, currentY] = parseCellKey(this.activeKey);
     const tileSize = this.options.defaultTileSize || 32;
-    const worldMap = {
-      version: 1 as const,
+    const worldMap: EditorWorldMapDraft = {
+      version: 1,
       cellSize: this.options.cellSize ?? 3000,
       current: { gridX: currentX, gridY: currentY },
       cells: cells.map((cell) => ({
@@ -143,6 +156,8 @@ export class WorldCellDraftStore {
         gridX: cell.gridX,
         gridY: cell.gridY,
       })),
+      monsterSpawnRules: cloneMonsterSpawnRules(this.loadedWorldMapMetadata?.monsterSpawnRules),
+      itemOverrides: cloneItemOverrides(this.loadedWorldMapMetadata?.itemOverrides),
     };
 
     return {
@@ -196,14 +211,8 @@ function optionsDraftClone(draft: EditorMapDraft): EditorMapDraft {
       ...draft.worldMap,
       current: draft.worldMap.current ? { ...draft.worldMap.current } : { gridX: 0, gridY: 0 },
       cells: draft.worldMap.cells.map((cell) => ({ ...cell })),
-      monsterSpawnRules: draft.worldMap.monsterSpawnRules?.map((rule) => ({
-        ...rule,
-        spec: rule.spec ? { ...rule.spec } : undefined,
-      })),
-      itemOverrides: draft.worldMap.itemOverrides?.map((override) => ({
-        ...override,
-        fields: override.fields ? { ...override.fields } : undefined,
-      })),
+      monsterSpawnRules: cloneMonsterSpawnRules(draft.worldMap.monsterSpawnRules),
+      itemOverrides: cloneItemOverrides(draft.worldMap.itemOverrides),
     } : undefined,
     placements: draft.placements.map((placement) => ({
       ...placement,
@@ -211,6 +220,20 @@ function optionsDraftClone(draft: EditorMapDraft): EditorMapDraft {
       gameplay: placement.gameplay ? { ...placement.gameplay } : undefined,
     })),
   };
+}
+
+function cloneMonsterSpawnRules(rules: EditorWorldMapDraft['monsterSpawnRules']): EditorWorldMapDraft['monsterSpawnRules'] {
+  return rules?.map((rule) => ({
+    ...rule,
+    spec: rule.spec ? { ...rule.spec } : undefined,
+  }));
+}
+
+function cloneItemOverrides(overrides: EditorWorldMapDraft['itemOverrides']): EditorWorldMapDraft['itemOverrides'] {
+  return overrides?.map((override) => ({
+    ...override,
+    fields: override.fields ? { ...override.fields } : undefined,
+  }));
 }
 
 function parseCellKey(key: string): [number, number] {
