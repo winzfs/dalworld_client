@@ -43,6 +43,7 @@ const EDITOR_LAYERS: Array<{ id: EditorLayerId; label: string }> = [
 ];
 
 const GRID_SIZE_OPTIONS = [16, 32, 64];
+const BLACK_BRUSH_ID = 'editor-black-base';
 
 export class TilesetPanelLite {
   readonly element: HTMLDivElement;
@@ -182,7 +183,13 @@ export class TilesetPanelLite {
     const paintButton = this.createModeButton('배치', 'paint');
     const pickerButton = this.createModeButton('피커', 'picker');
     const eraseButton = this.createModeButton('삭제', 'erase');
-    const blackButton = button('Black', 'map-editor-action map-editor-black-brush', () => this.state.selectBlackBrush());
+    const blackButton = button('Black', 'map-editor-action map-editor-black-brush', () => {
+      this.state.selectBlackBrush();
+      this.state.setMode('paint');
+    });
+    if (this.state.selectedBrush?.asset.id === BLACK_BRUSH_ID || this.state.selectedAsset?.id === BLACK_BRUSH_ID) {
+      blackButton.classList.add('is-active');
+    }
     const transparentBlackButton = button('검정투명', 'map-editor-action map-editor-transparent-black', () => this.state.toggleTransparentBlack());
     if (this.state.transparentBlack) transparentBlackButton.classList.add('is-active');
     const worldMapButton = button('월드맵', 'map-editor-action', this.actions.onToggleWorldMap);
@@ -245,6 +252,12 @@ export class TilesetPanelLite {
 
       const preview = document.createElement('span');
       preview.className = 'map-editor-asset-preview';
+      preview.style.display = 'inline-block';
+      preview.style.flex = '0 0 auto';
+      preview.style.backgroundPosition = 'center';
+      preview.style.backgroundRepeat = 'no-repeat';
+      preview.style.backgroundSize = asset.tileWidth || asset.tileHeight ? 'contain' : 'cover';
+      preview.style.imageRendering = 'pixelated';
       if (asset.solidColor !== undefined || asset.url.startsWith('solid://')) {
         preview.style.background = `#${(asset.solidColor ?? 0x55d6be).toString(16).padStart(6, '0')}`;
       } else {
