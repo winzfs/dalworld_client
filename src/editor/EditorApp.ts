@@ -4,7 +4,7 @@ import { InputController } from '../game/InputController';
 import type { WorldInfo } from '../protocol/messages';
 import { EditorCameraSystem } from './EditorCameraSystem';
 import { EditorFallbackPanel } from './EditorFallbackPanel';
-import type { LightweightEditorRuntime } from './LightweightEditorRuntime';
+import type { LightweightRuntime } from './createLightweightEditorRuntime';
 
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
 const EDITOR_MODULE_LOAD_TIMEOUT_MS = 5_000;
@@ -17,7 +17,7 @@ export class EditorApp {
   private readonly camera = new Camera(this.world);
   private readonly cameraSystem = new EditorCameraSystem(this.camera);
 
-  private editorRuntime: LightweightEditorRuntime | null = null;
+  private editorRuntime: LightweightRuntime | null = null;
   private fallbackPanel: EditorFallbackPanel | null = null;
   private transitioning = false;
 
@@ -61,27 +61,38 @@ export class EditorApp {
 
   private async loadLightweightRuntime(status: (message: string) => void): Promise<void> {
     try {
-      status('Loading lightweight editor runtime...');
-      this.fallbackPanel?.setStatus('경량 에디터 런타임 로딩 중...');
-      const { LightweightEditorRuntime } = await loadEditorModule(
-        'LightweightEditorRuntime',
-        () => import('./LightweightEditorRuntime'),
+      status('Loading lightweight editor dependencies individually...');
+      this.fallbackPanel?.setStatus('경량 에디터 의존성 개별 로딩 중...');
+
+      const { EditorState } = await loadEditorModule('EditorState', () => import('./EditorState'), status);
+      const { TilesetPanel } = await loadEditorModule('TilesetPanel', () => import('./TilesetPanel'), status);
+      const { TilePlacementSystem } = await loadEditorModule('TilePlacementSystem', () => import('./TilePlacementSystem'), status);
+      const { EditorGridOverlay } = await loadEditorModule('EditorGridOverlay', () => import('./EditorGridOverlay'), status);
+      const { createLightweightEditorRuntime } = await loadEditorModule(
+        'createLightweightEditorRuntime',
+        () => import('./createLightweightEditorRuntime'),
         status,
       );
 
-      this.editorRuntime = new LightweightEditorRuntime({
+      this.editorRuntime = createLightweightEditorRuntime({
         app: this.app,
         world: this.world,
         worldWidth: DEFAULT_WORLD.width,
         worldHeight: DEFAULT_WORLD.height,
         tileSize: 32,
         mapName: 'dalworld-map-lightweight',
+        modules: {
+          EditorState,
+          TilesetPanel,
+          TilePlacementSystem,
+          EditorGridOverlay,
+        },
         notify: (message) => {
           this.fallbackPanel?.setStatus(message);
           status(message);
         },
       });
-      this.editorRuntime.start(document.body);
+
       this.fallbackPanel?.element.remove();
       this.fallbackPanel = null;
       this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
