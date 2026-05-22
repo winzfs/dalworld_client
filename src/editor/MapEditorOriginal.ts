@@ -31,7 +31,6 @@ type LoadedModules = {
   }) => void;
   TilesetPanel: new (state: any, actions: any) => any;
   TilePlacementSystem: new (state: any, options: { tileSize: number; mapName: string }) => any;
-  MapStorage: new (mapName: string) => any;
 };
 
 const DIRECT_SELECT_MAX_SIZE = 96;
@@ -81,7 +80,7 @@ export class MapEditorOriginal {
 
     const mapName = this.options.mapName ?? 'untitled-map';
     this.state = new modules.EditorState();
-    this.storage = new modules.MapStorage(mapName);
+    this.storage = createMapStorageFallback(mapName);
     this.worldMapGrid = createWorldMapGridFallback(this.worldWidth);
     this.worldMapPanel = createWorldMapPanelFallback(() => {
       this.showToast('월드맵 패널은 부팅 안정화 후 다시 연결합니다.', 'info', 2_500);
@@ -178,9 +177,7 @@ export class MapEditorOriginal {
     const tilesetPanel = await import('./TilesetPanel');
     this.reportStage('MapEditorOriginal loading TilePlacementSystem...');
     const placement = await import('./TilePlacementSystem');
-    this.reportStage('MapEditorOriginal loading MapStorage...');
-    const storage = await import('./MapStorage');
-    this.reportStage('MapEditorOriginal modules loaded. World map grid, world map panel, grid overlay, and tile picker skipped.');
+    this.reportStage('MapEditorOriginal modules loaded. Storage, world map grid, world map panel, grid overlay, and tile picker skipped.');
 
     return {
       EditorState: editorState.EditorState,
@@ -188,7 +185,6 @@ export class MapEditorOriginal {
       installMonsterTabSaveInterceptor: serverSaves.installMonsterTabSaveInterceptor,
       TilesetPanel: tilesetPanel.TilesetPanel,
       TilePlacementSystem: placement.TilePlacementSystem,
-      MapStorage: storage.MapStorage,
     };
   }
 
@@ -392,16 +388,14 @@ export class MapEditorOriginal {
   }
 
   private async save(): Promise<void> {
-    this.showToast('맵 저장 중... 셀 단위로 서버에 바로 반영하고 있습니다.', 'info', 0);
+    this.showToast('맵 저장 중... 로컬 백업에 저장합니다. 서버 업로드는 저장 모듈 복구 후 다시 연결합니다.', 'info', 0);
     const worldSave = this.createWorldSave();
     const mapSaved = this.storage.save({ ...this.placement.mapDraft, worldMap: worldSave.worldMap });
-    try {
-      const report = await this.storage.saveWorld(worldSave);
-      const summary = `셀 ${report.cells}개 · 배치 ${report.placements}개 · 자원 ${report.resources.total}개 · 지역스폰 ${report.monsterSpawns.total}개`;
-      this.showToast(mapSaved ? `맵 저장 완료 · ${summary}` : `맵 서버 저장 완료 · 로컬 백업은 용량 부족으로 생략 · ${summary}`, 'success', 4_500);
-    } catch (error) {
-      console.error('[MapEditor] Map server upload failed.', error);
-      this.showToast('맵 저장 실패 · 서버에는 아직 반영되지 않았습니다.', 'error', 5_000);
+    const worldSaved = this.storage.saveWorld(worldSave);
+    if (mapSaved && worldSaved) {
+      this.showToast(`맵 로컬 저장 완료 · 셀 ${worldSave.cells.length}개`, 'success', 4_500);
+    } else {
+      this.showToast('맵 로컬 저장 실패 · 브라우저 저장소 용량 또는 권한을 확인하세요.', 'error', 5_000);
     }
   }
 
@@ -476,6 +470,59 @@ export class MapEditorOriginal {
     const panel = document.getElementById('editor-stage-panel');
     if (panel) panel.textContent = message;
   }
+}
+
+function createMapStorageFallback(mapName: string): any {
+  const draftKey = `dalworld:editor-map:${mapName}`;
+  const worldKey = `dalworld:editor-world:${mapName}`;
+  return {
+    save(draft: EditorMapDraft): boolean {
+      return writeLocalJson(draftKey, draft);
+    },
+    load(): EditorMapDraft | null {
+      return readLocalJson<EditorMapDraft>(draftKey);
+    },
+    saveWorld(world: EditorWorldSave): boolean {
+      return writeLocalJson(worldKey, world);
+    },
+    async loadBestWorld(): Promise<EditorWorldSave | null> {
+      return readLocalJson<EditorWorldSave>(worldKey);
+    },
+    downloadWorldJson(world: EditorWorldSave): void {
+      downloadJson(`${world.name || mapName}-world.json`, world);
+    },
+  };
+}
+
+function writeLocalJson(key: string, value: unknown): boolean {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (error) {
+    console.warn('[MapEditor] Local storage write failed.', error);
+    return false;
+  }
+}
+
+function readLocalJson<T>(key: string): T | null {
+  const raw = window.localStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    console.warn('[MapEditor] Local storage read failed.', error);
+    return null;
+  }
+}
+
+function downloadJson(filename: string, value: unknown): void {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function createTilePickerFallback(onOpen: () => void): { element: HTMLElement; mount(root: HTMLElement): void; open(): void } {
