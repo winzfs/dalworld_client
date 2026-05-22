@@ -66,13 +66,14 @@ export class MapEditorSession {
       this.draftStore.ensureCells(this.worldMapGrid.cells);
     }
     const world = this.draftStore.snapshotWorldSave(this.mapName);
-    const coords = world.cells.map((cell) => `${cell.gridX},${cell.gridY}`).join(' | ');
+    const coords = formatCellCoords(world.cells);
     this.status(`월드 snapshot 생성. cells=${world.cells.length}, coords=${coords}`);
     return world;
   }
 
   async saveWorld(): Promise<void> {
     const world = this.createWorldSnapshot();
+    await this.validateWorldBeforePersistence(world);
     const { saveEditorWorldSaveToServer } = await import('./EditorWorldSaveActions');
     await saveEditorWorldSaveToServer(world, this.status);
   }
@@ -93,8 +94,43 @@ export class MapEditorSession {
 
   async exportWorldJson(): Promise<void> {
     const world = this.createWorldSnapshot();
+    await this.validateWorldBeforePersistence(world);
     const { exportEditorWorldSaveJson } = await import('./EditorWorldSaveActions');
     exportEditorWorldSaveJson(world);
     this.status(`전체 월드 JSON export 완료. cells=${world.cells.length}`);
   }
+
+  private async validateWorldBeforePersistence(world: EditorWorldSave): Promise<void> {
+    const worldCellKeys = new Set(world.cells.map((cell) => cellKey(cell.gridX, cell.gridY)));
+    const gridCells = this.worldMapGrid?.cells ?? [];
+    const missingGridCells = gridCells.filter((cell) => !worldCellKeys.has(cellKey(cell.gridX, cell.gridY)));
+
+    if (missingGridCells.length > 0) {
+      const missing = formatCellCoords(missingGridCells);
+      const message = `저장 중단: 월드맵 UI 셀이 snapshot에 없습니다. missing=${missing}`;
+      this.status(message);
+      throw new Error(message);
+    }
+
+    const { compileRuntimeWorldMap } = await import('../worldMap/compileRuntimeWorldMap');
+    const compiled = compileRuntimeWorldMap(world);
+    const worldCounts = world.cells.map((cell) => `${cell.gridX},${cell.gridY}:${cell.draft.placements.length}`).join(' | ');
+    const compiledCounts = compiled.cells.map((cell) => `${cell.gridX},${cell.gridY}:${cell.placements.length}`).join(' | ');
+
+    if (compiled.cells.length !== world.cells.length) {
+      const message = `저장 중단: snapshot cells와 compiled cells 수가 다릅니다. snapshot=${world.cells.length}, compiled=${compiled.cells.length}`;
+      this.status(message);
+      throw new Error(message);
+    }
+
+    this.status(`저장 검증 완료. snapshot=[${worldCounts}] compiled=[${compiledCounts}]`);
+  }
+}
+
+function cellKey(gridX: number, gridY: number): string {
+  return `${gridX},${gridY}`;
+}
+
+function formatCellCoords(cells: Array<{ gridX: number; gridY: number }>): string {
+  return cells.map((cell) => `${cell.gridX},${cell.gridY}`).join(' | ') || 'none';
 }
