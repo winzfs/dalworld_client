@@ -63,7 +63,7 @@ export class MapEditorBootMinimal {
     this.placement = createPlacementFallback(this.state, this.options.mapName ?? 'dalworld-map', this.options.tileSize ?? 32, (message) => this.report(message));
 
     this.panel = new tilesetPanel.TilesetPanelLite(this.state, {
-      onSave: () => this.save(),
+      onSave: () => { void this.save(); },
       onLoad: () => { void this.load(); },
       onExport: () => this.exportJson(),
       onClear: () => this.clearAll(),
@@ -87,7 +87,7 @@ export class MapEditorBootMinimal {
     this.worldMapPanel.mount(this.uiRoot);
     this.uiRoot.appendChild(this.toast);
     this.attachCanvasHandlers();
-    await this.load();
+    void this.loadLocalBackup();
     this.report('MapEditorBootMinimal DOM mounted with TilesetPanelLite.');
   }
 
@@ -168,23 +168,80 @@ export class MapEditorBootMinimal {
     this.report(`Selected tile: ${asset.name}`);
   }
 
-  private save(): void {
+  private async save(): Promise<void> {
     const world = this.createWorldSave();
-    writeLocalJson(worldKey(this.options.mapName ?? 'dalworld-map'), world);
-    writeLocalJson(draftKey(this.options.mapName ?? 'dalworld-map'), this.placement.mapDraft);
-    this.showToast(`맵 로컬 저장 완료 · 배치 ${this.placement.mapDraft.placements.length}개`, 'success', 3000);
+    writeLocalJson(worldKey(this.mapName), world);
+    writeLocalJson(draftKey(this.mapName), this.placement.mapDraft);
+
+    this.showToast('맵 저장 중... 서버 저장 모듈을 로드합니다.', 'info', 0);
+    try {
+      const storage = await this.createMapStorage();
+      const localSaved = storage.save({ ...this.placement.mapDraft, worldMap: world.worldMap });
+      const report = await storage.saveWorld(world);
+      this.showToast(
+        `${localSaved ? '맵 저장 완료' : '서버 저장 완료'} · 셀 ${report.cells}개 · 배치 ${report.placements}개`,
+        'success',
+        4_500,
+      );
+      this.report(`Saved world to server. cells=${report.cells}, placements=${report.placements}`);
+    } catch (error) {
+      console.warn('[MapEditor] Server save failed. Local backup is kept.', error);
+      this.showToast(`서버 저장 실패 · 로컬 백업 저장됨 · 배치 ${this.placement.mapDraft.placements.length}개`, 'error', 5_000);
+      this.report(`Server save failed. Local backup kept. ${formatError(error)}`);
+    }
   }
 
   private async load(): Promise<void> {
-    const world = readLocalJson<EditorWorldSave>(worldKey(this.options.mapName ?? 'dalworld-map'));
-    if (!world) return;
+    this.showToast('맵 불러오는 중... 서버 저장 모듈을 로드합니다.', 'info', 0);
+    try {
+      const storage = await this.createMapStorage();
+      const world = await storage.loadBestWorld();
+      if (!world) {
+        this.showToast('불러올 서버/로컬 맵이 없습니다.', 'info', 3_000);
+        return;
+      }
+      await this.applyWorldSave(world);
+      this.showToast(`맵 불러오기 완료 · 셀 ${world.cells.length}개`, 'success', 3_500);
+      this.report(`Loaded world via MapStorage. cells=${world.cells.length}`);
+    } catch (error) {
+      console.warn('[MapEditor] MapStorage load failed. Trying local fallback.', error);
+      const loaded = await this.loadLocalBackup();
+      this.showToast(loaded ? '서버 불러오기 실패 · 로컬 백업을 불러왔습니다.' : '맵 불러오기 실패 · 로컬 백업도 없습니다.', loaded ? 'info' : 'error', 4_000);
+      this.report(`MapStorage load failed. ${formatError(error)}`);
+    }
+  }
+
+  private async loadLocalBackup(): Promise<boolean> {
+    const world = readLocalJson<EditorWorldSave>(worldKey(this.mapName));
+    if (world) {
+      await this.applyWorldSave(world);
+      return true;
+    }
+
+    const draft = readLocalJson<EditorMapDraft>(draftKey(this.mapName));
+    if (draft) {
+      this.worldMap = draft.worldMap ?? createWorldMapDraft(this.cellSize);
+      await this.placement.loadDraft(draft);
+      return true;
+    }
+
+    return false;
+  }
+
+  private async applyWorldSave(world: EditorWorldSave): Promise<void> {
     this.worldMap = world.worldMap ?? createWorldMapDraft(this.cellSize);
-    const cell = world.cells.find((entry) => entry.gridX === 0 && entry.gridY === 0) ?? world.cells[0];
+    const current = this.worldMap.current ?? { gridX: 0, gridY: 0 };
+    const cell = world.cells.find((entry) => entry.gridX === current.gridX && entry.gridY === current.gridY) ?? world.cells.find((entry) => entry.gridX === 0 && entry.gridY === 0) ?? world.cells[0];
     if (cell) await this.placement.loadDraft(cell.draft);
   }
 
+  private async createMapStorage(): Promise<any> {
+    const module = await import('./MapStorage');
+    return new module.MapStorage(this.mapName);
+  }
+
   private exportJson(): void {
-    downloadJson(`${this.options.mapName ?? 'dalworld-map'}-world.json`, this.createWorldSave());
+    downloadJson(`${this.mapName}-world.json`, this.createWorldSave());
   }
 
   private clearAll(): void {
@@ -195,11 +252,15 @@ export class MapEditorBootMinimal {
   private createWorldSave(): EditorWorldSave {
     return {
       version: 1,
-      name: this.options.mapName ?? 'dalworld-map',
+      name: this.mapName,
       tileSize: this.state?.gridSize ?? this.options.tileSize ?? 32,
       worldMap: this.worldMap,
       cells: [{ gridX: 0, gridY: 0, draft: { ...this.placement.mapDraft, worldMap: this.worldMap } }],
     };
+  }
+
+  private get mapName(): string {
+    return this.options.mapName ?? 'dalworld-map';
   }
 
   private showToast(message: string, kind: ToastKind, durationMs = 2500): void {
@@ -208,11 +269,13 @@ export class MapEditorBootMinimal {
     this.toast.dataset.kind = kind;
     this.toast.style.opacity = '1';
     this.toast.style.transform = 'translate(-50%, 0)';
-    this.toastTimer = window.setTimeout(() => {
-      this.toast.style.opacity = '0';
-      this.toast.style.transform = 'translate(-50%, -8px)';
-      this.toastTimer = null;
-    }, durationMs);
+    if (durationMs > 0) {
+      this.toastTimer = window.setTimeout(() => {
+        this.toast.style.opacity = '0';
+        this.toast.style.transform = 'translate(-50%, -8px)';
+        this.toastTimer = null;
+      }, durationMs);
+    }
   }
 
   private report(message: string): void {
@@ -369,7 +432,7 @@ function fallbackColor(categoryId: string): number {
 }
 
 function createWorldMapDraft(cellSize: number): EditorWorldMapDraft {
-  return { version: 1, cellSize, current: { gridX: 0, gridY: 0 }, cells: [{ id: 'cell-0-0', name: 'Cell 0,0', gridX: 0, gridY: 0 }], monsterSpawnRules: [] };
+  return { version: 1, cellSize, current: { gridX: 0, gridY: 0 }, cells: [{ id: 'cell-0-0', name: 'Map 0,0', gridX: 0, gridY: 0 }], monsterSpawnRules: [] };
 }
 
 function createHiddenWindow(className: string): { element: HTMLElement; mount(root: HTMLElement): void; toggle(): void; open(): void } {
@@ -422,4 +485,9 @@ function downloadJson(filename: string, value: unknown): void {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
