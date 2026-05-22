@@ -1,9 +1,10 @@
-import type { EditorMapDraft } from './types';
+import type { EditorMapDraft, EditorWorldSave } from './types';
 import type { TilePlacementSystem } from './TilePlacementSystem';
 
 export type WorldCellDraftStoreOptions = {
   placement: TilePlacementSystem;
   defaultTileSize: number;
+  cellSize?: number;
 };
 
 export class WorldCellDraftStore {
@@ -39,6 +40,47 @@ export class WorldCellDraftStore {
     if (key === cellKey(0, 0)) return;
     this.drafts.delete(key);
   }
+
+  snapshotWorldSave(name: string): EditorWorldSave {
+    this.saveActive();
+
+    const cells = Array.from(this.drafts.entries())
+      .map(([key, draft]) => {
+        const [gridX, gridY] = parseCellKey(key);
+        return { gridX, gridY, draft };
+      })
+      .sort((a, b) => (a.gridY - b.gridY) || (a.gridX - b.gridX));
+
+    const [currentX, currentY] = parseCellKey(this.activeKey);
+    const tileSize = this.options.defaultTileSize || 32;
+    const worldMap = {
+      version: 1 as const,
+      cellSize: this.options.cellSize ?? 3000,
+      current: { gridX: currentX, gridY: currentY },
+      cells: cells.map((cell) => ({
+        id: `cell-${cell.gridX}-${cell.gridY}`,
+        name: `Cell ${cell.gridX},${cell.gridY}`,
+        gridX: cell.gridX,
+        gridY: cell.gridY,
+      })),
+    };
+
+    return {
+      version: 1,
+      name,
+      tileSize,
+      worldMap,
+      cells: cells.map((cell) => ({
+        gridX: cell.gridX,
+        gridY: cell.gridY,
+        draft: {
+          ...cell.draft,
+          tileSize: cell.draft.tileSize || tileSize,
+          worldMap,
+        },
+      })),
+    };
+  }
 }
 
 export function cellKey(gridX: number, gridY: number): string {
@@ -52,4 +94,11 @@ function createEmptyCellDraft(gridX: number, gridY: number, tileSize: number): E
     tileSize,
     placements: [],
   };
+}
+
+function parseCellKey(key: string): [number, number] {
+  const [rawX, rawY] = key.split(',');
+  const gridX = Number(rawX);
+  const gridY = Number(rawY);
+  return [Number.isFinite(gridX) ? gridX : 0, Number.isFinite(gridY) ? gridY : 0];
 }
