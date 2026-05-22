@@ -1,5 +1,6 @@
 import type { EditorLayerId, EditorSourceRect, EditorToolMode, EditorTilesetAsset, EditorTilesetCategory } from './types';
 import type { EditorState } from './EditorState';
+import type { MapEditorSession } from './MapEditorSession';
 import type { TilePlacementSystem } from './TilePlacementSystem';
 import type { WorldCellDraftStore } from './WorldCellDraftStore';
 
@@ -14,7 +15,7 @@ const DEFAULT_FALLBACK_ASSET: EditorTilesetAsset = {
   id: 'fallback.grass',
   name: 'grass',
   categoryId: 'fallback',
-  url: '',
+  url: 'solid://fallback-grass',
   tileWidth: 32,
   tileHeight: 32,
   solidColor: 0x527a3a,
@@ -39,6 +40,7 @@ type Options = {
   onExport: () => void;
   onClear: () => void;
   onToggleWorldMap?: () => void;
+  session?: MapEditorSession;
 };
 
 type TilePickerWindowInstance = {
@@ -61,7 +63,7 @@ type WorldMapPanelInstance = {
 let pickerWindow: TilePickerWindowInstance | null = null;
 let worldMapGrid: WorldMapGridInstance | null = null;
 let worldMapPanel: WorldMapPanelInstance | null = null;
-let worldCellStore: WorldCellDraftStore | null = null;
+let fallbackWorldCellStore: WorldCellDraftStore | null = null;
 
 export function mountClassicTilesPanelLite(options: Options): void {
   document.querySelector('.staged-classic-editor-panel')?.remove();
@@ -96,11 +98,13 @@ export function mountClassicTilesPanelLite(options: Options): void {
 
   const note = document.createElement('div');
   note.className = 'map-editor-empty';
-  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + 월드맵 + Fill + Actions + Categories + Assets + Picker + WorldMap 표시 완료';
+  note.textContent = options.session
+    ? 'MapEditorSession 연결됨. 월드맵/저장/불러오기는 session 기준으로 처리됩니다.'
+    : 'Fallback mode: session 없이 기존 단일/임시 경로를 사용합니다.';
 
   panel.append(header, tabs, scale, grid, layers, tools, fill, actions, categories, assets, note);
   document.body.appendChild(panel);
-  options.status('기존 UI 패널 WorldMap 연결 완료.');
+  options.status(options.session ? '기존 UI 패널 Session 연결 완료.' : '기존 UI 패널 Fallback 연결 완료.');
 }
 
 async function toggleWorldMapPanel(options: Options): Promise<void> {
@@ -111,7 +115,7 @@ async function toggleWorldMapPanel(options: Options): Promise<void> {
     }
 
     options.status('월드맵 패널 로딩 중...');
-    const [{ WorldMapGrid }, { WorldMapPanel }, { WorldCellDraftStore }] = await Promise.all([
+    const [{ WorldMapGrid }, { WorldMapPanel }, storeModule] = await Promise.all([
       import('./WorldMapGrid'),
       import('./WorldMapPanel'),
       import('./WorldCellDraftStore'),
@@ -119,10 +123,13 @@ async function toggleWorldMapPanel(options: Options): Promise<void> {
 
     if (!worldMapGrid) {
       worldMapGrid = new WorldMapGrid({ cellSize: DEFAULT_WORLD_SIZE });
+      options.session?.attachWorldMapGrid(worldMapGrid);
+    } else {
+      options.session?.attachWorldMapGrid(worldMapGrid);
     }
 
-    if (!worldCellStore) {
-      worldCellStore = new WorldCellDraftStore({
+    if (!options.session && !fallbackWorldCellStore) {
+      fallbackWorldCellStore = new storeModule.WorldCellDraftStore({
         placement: options.placement,
         defaultTileSize: options.state.gridSize,
         cellSize: DEFAULT_WORLD_SIZE,
@@ -139,11 +146,7 @@ async function toggleWorldMapPanel(options: Options): Promise<void> {
           const current = worldMapGrid?.current;
           if (!current) return;
           if (!window.confirm(`현재 월드맵 셀 ${current.gridX}, ${current.gridY}를 삭제할까요?`)) return;
-          worldCellStore?.deleteCell(current.gridX, current.gridY);
-          worldMapGrid?.deleteCell(current.gridX, current.gridY);
-          const next = worldMapGrid?.current;
-          if (next) void switchWorldCell(next.gridX, next.gridY, options);
-          options.status('월드맵 현재 셀 삭제 완료.');
+          void deleteWorldCell(current.gridX, current.gridY, options);
         },
       });
       worldMapPanel.mount(document.body);
@@ -158,15 +161,34 @@ async function toggleWorldMapPanel(options: Options): Promise<void> {
 }
 
 async function switchWorldCell(gridX: number, gridY: number, options: Options): Promise<void> {
-  if (!worldMapGrid || !worldCellStore) return;
+  if (options.session) {
+    await options.session.switchWorldCell(gridX, gridY);
+    return;
+  }
+
+  if (!worldMapGrid || !fallbackWorldCellStore) return;
   worldMapGrid.selectCell(gridX, gridY);
-  const draft = await worldCellStore.switchTo(gridX, gridY);
+  const draft = await fallbackWorldCellStore.switchTo(gridX, gridY);
   options.status(`월드맵 셀 전환 완료: ${gridX}, ${gridY} / placements=${draft.placements.length}`);
 }
 
+async function deleteWorldCell(gridX: number, gridY: number, options: Options): Promise<void> {
+  if (options.session) {
+    await options.session.deleteWorldCell(gridX, gridY);
+    options.status('월드맵 현재 셀 삭제 완료.');
+    return;
+  }
+
+  fallbackWorldCellStore?.deleteCell(gridX, gridY);
+  worldMapGrid?.deleteCell(gridX, gridY);
+  const next = worldMapGrid?.current;
+  if (next) await switchWorldCell(next.gridX, next.gridY, options);
+  options.status('월드맵 현재 셀 삭제 완료.');
+}
+
 function syncWorldCellsBeforeSnapshot(): void {
-  if (!worldCellStore || !worldMapGrid) return;
-  worldCellStore.ensureCells(worldMapGrid.cells);
+  if (!fallbackWorldCellStore || !worldMapGrid) return;
+  fallbackWorldCellStore.ensureCells(worldMapGrid.cells);
 }
 
 function createLazyCategoryControls(options: Options, assetContainer: HTMLElement): HTMLElement {
@@ -320,38 +342,53 @@ function createActionControls(options: Options): HTMLElement {
   container.className = 'map-editor-actions';
   container.append(
     createActionButton('저장', () => {
-      if (!worldCellStore) {
+      if (options.session) {
+        void options.session.saveWorld().catch((error: unknown) => options.status(`전체 월드 저장 실패: ${formatErrorMessage(error)}`));
+        return;
+      }
+
+      if (!fallbackWorldCellStore) {
         options.status('저장 실행 중...');
         options.onSave();
         return;
       }
       syncWorldCellsBeforeSnapshot();
-      const world = worldCellStore.snapshotWorldSave(DEFAULT_MAP_NAME);
+      const world = fallbackWorldCellStore.snapshotWorldSave(DEFAULT_MAP_NAME);
       options.status(`전체 월드 저장 준비. cells=${world.cells.length}, coords=${world.cells.map((cell) => `${cell.gridX},${cell.gridY}`).join(' | ')}`);
       void import('./EditorWorldSaveActions')
         .then(({ saveEditorWorldSaveToServer }) => saveEditorWorldSaveToServer(world, options.status))
         .catch((error: unknown) => options.status(`전체 월드 저장 실패: ${formatErrorMessage(error)}`));
     }),
     createActionButton('불러오기', () => {
-      if (!worldCellStore) {
+      if (options.session) {
+        void options.session.loadWorld().catch((error: unknown) => options.status(`전체 월드 불러오기 실패: ${formatErrorMessage(error)}`));
+        return;
+      }
+
+      if (!fallbackWorldCellStore) {
         options.status('불러오기 실행 중...');
         options.onLoad();
         return;
       }
       void import('./EditorWorldSaveActions')
         .then(({ loadServerWorldMap }) => loadServerWorldMap(options.status))
-        .then((map) => worldCellStore?.loadFromServerMap(map))
+        .then((map) => fallbackWorldCellStore?.loadFromServerMap(map))
         .then((draft) => options.status(`전체 월드 불러오기 완료. placements=${draft?.placements.length ?? 0}`))
         .catch((error: unknown) => options.status(`전체 월드 불러오기 실패: ${formatErrorMessage(error)}`));
     }),
     createActionButton('JSON', () => {
-      if (!worldCellStore) {
+      if (options.session) {
+        void options.session.exportWorldJson().catch((error: unknown) => options.status(`전체 월드 JSON export 실패: ${formatErrorMessage(error)}`));
+        return;
+      }
+
+      if (!fallbackWorldCellStore) {
         options.status('JSON export 실행 중...');
         options.onExport();
         return;
       }
       syncWorldCellsBeforeSnapshot();
-      const world = worldCellStore.snapshotWorldSave(DEFAULT_MAP_NAME);
+      const world = fallbackWorldCellStore.snapshotWorldSave(DEFAULT_MAP_NAME);
       void import('./EditorWorldSaveActions')
         .then(({ exportEditorWorldSaveJson }) => exportEditorWorldSaveJson(world))
         .then(() => options.status(`전체 월드 JSON export 완료. cells=${world.cells.length}`))
@@ -360,7 +397,7 @@ function createActionControls(options: Options): HTMLElement {
     createActionButton('전체삭제', () => {
       if (!window.confirm('현재 맵 배치를 모두 삭제할까요?')) return;
       options.onClear();
-      worldCellStore?.saveActive();
+      fallbackWorldCellStore?.saveActive();
       options.status('전체삭제 완료.');
     }, 'danger'),
   );
