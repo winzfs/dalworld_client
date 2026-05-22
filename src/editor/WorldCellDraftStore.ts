@@ -16,6 +16,11 @@ type ServerWorldMap = {
   itemOverrides?: unknown;
 };
 
+type WorldCellCoord = {
+  gridX: number;
+  gridY: number;
+};
+
 export type WorldCellDraftStoreOptions = {
   placement: TilePlacementSystem;
   defaultTileSize: number;
@@ -35,7 +40,18 @@ export class WorldCellDraftStore {
   }
 
   saveActive(): void {
-    this.drafts.set(this.activeKey, this.options.placement.mapDraft);
+    this.drafts.set(this.activeKey, optionsDraftClone(this.options.placement.mapDraft));
+  }
+
+  ensureCells(cells: WorldCellCoord[]): void {
+    for (const cell of cells) {
+      const gridX = Number.isFinite(cell.gridX) ? cell.gridX : 0;
+      const gridY = Number.isFinite(cell.gridY) ? cell.gridY : 0;
+      const key = cellKey(gridX, gridY);
+      if (!this.drafts.has(key)) {
+        this.drafts.set(key, createEmptyCellDraft(gridX, gridY, this.options.defaultTileSize));
+      }
+    }
   }
 
   async switchTo(gridX: number, gridY: number): Promise<EditorMapDraft> {
@@ -46,7 +62,7 @@ export class WorldCellDraftStore {
 
     const nextDraft = this.drafts.get(nextKey) ?? createEmptyCellDraft(gridX, gridY, this.options.defaultTileSize);
     this.drafts.set(nextKey, nextDraft);
-    await this.options.placement.replaceDraft(nextDraft);
+    await this.options.placement.replaceDraft(optionsDraftClone(nextDraft));
     return nextDraft;
   }
 
@@ -88,7 +104,7 @@ export class WorldCellDraftStore {
     const first = map.cells[0] ?? { gridX: 0, gridY: 0 };
     this.activeKey = cellKey(first.gridX, first.gridY);
     const draft = this.drafts.get(this.activeKey) ?? createEmptyCellDraft(first.gridX, first.gridY, map.tileSize || 32);
-    await this.options.placement.replaceDraft(draft);
+    await this.options.placement.replaceDraft(optionsDraftClone(draft));
     return draft;
   }
 
@@ -134,6 +150,11 @@ export class WorldCellDraftStore {
           ...cell.draft,
           tileSize: cell.draft.tileSize || tileSize,
           worldMap,
+          placements: cell.draft.placements.map((placement) => ({
+            ...placement,
+            sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
+            gameplay: placement.gameplay ? { ...placement.gameplay } : undefined,
+          })),
         },
       })),
     };
@@ -150,6 +171,30 @@ function createEmptyCellDraft(gridX: number, gridY: number, tileSize: number): E
     name: `Map ${gridX},${gridY}`,
     tileSize,
     placements: [],
+  };
+}
+
+function optionsDraftClone(draft: EditorMapDraft): EditorMapDraft {
+  return {
+    ...draft,
+    worldMap: draft.worldMap ? {
+      ...draft.worldMap,
+      current: draft.worldMap.current ? { ...draft.worldMap.current } : undefined,
+      cells: draft.worldMap.cells.map((cell) => ({ ...cell })),
+      monsterSpawnRules: draft.worldMap.monsterSpawnRules?.map((rule) => ({
+        ...rule,
+        spec: rule.spec ? { ...rule.spec } : undefined,
+      })),
+      itemOverrides: draft.worldMap.itemOverrides?.map((override) => ({
+        ...override,
+        fields: override.fields ? { ...override.fields } : undefined,
+      })),
+    } : undefined,
+    placements: draft.placements.map((placement) => ({
+      ...placement,
+      sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
+      gameplay: placement.gameplay ? { ...placement.gameplay } : undefined,
+    })),
   };
 }
 
