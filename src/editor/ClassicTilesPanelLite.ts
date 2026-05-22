@@ -1,4 +1,4 @@
-import type { EditorLayerId, EditorSourceRect, EditorToolMode, EditorTilesetAsset, EditorTilesetCategory } from './types';
+import type { EditorLayerId, EditorSourceRect, EditorToolMode, EditorTilesetAsset, EditorTilesetCategory, EditorWorldMapDraft } from './types';
 import type { EditorState } from './EditorState';
 import type { MapEditorSession } from './MapEditorSession';
 import type { TilePlacementSystem } from './TilePlacementSystem';
@@ -51,6 +51,7 @@ type TilePickerWindowInstance = {
 type WorldMapGridInstance = {
   readonly current: { gridX: number; gridY: number };
   readonly cells: Array<{ gridX: number; gridY: number }>;
+  load(draft: EditorWorldMapDraft | undefined): void;
   selectCell(gridX: number, gridY: number): void;
   deleteCell(gridX: number, gridY: number): void;
 };
