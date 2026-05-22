@@ -31,18 +31,21 @@ export class MapEditorBootMinimal {
 
   private panel: any = null;
   private picker: any = createHiddenWindow('tile-picker-window is-fallback');
-  private worldMapPanel = createHiddenWindow('world-map-panel is-fallback');
+  private worldMapGrid: any = null;
+  private worldMapPanel: any = createHiddenWindow('world-map-panel is-fallback');
   private readonly uiRoot: HTMLElement;
   private readonly toast = createEditorToast();
   private readonly worldWidth: number;
   private readonly worldHeight: number;
   private readonly cellSize: number;
   private worldMap = createWorldMapDraft(3000);
+  private readonly cellDrafts = new Map<string, EditorMapDraft>();
   private enabled = false;
   private paintingPointerId: number | null = null;
   private lastPaintKey: string | null = null;
   private toastTimer: number | null = null;
   private loadingPicker: Promise<any> | null = null;
+  private transitioning = false;
 
   constructor(private readonly options: MapEditorBootMinimalOptions) {
     this.uiRoot = options.uiRoot ?? document.body;
@@ -71,11 +74,24 @@ export class MapEditorBootMinimal {
     const tilesetPanel = await import('./TilesetPanelLite');
     this.report('MapEditorBootMinimal loading TilePlacementSystem...');
     const placementModule = await import('./TilePlacementSystem');
+    this.report('MapEditorBootMinimal loading WorldMap modules...');
+    const worldGridModule = await import('./WorldMapGrid');
+    const worldPanelModule = await import('./WorldMapPanel');
 
     this.state = new editorState.EditorState();
     this.placement = new placementModule.TilePlacementSystem(this.state, {
       tileSize: this.options.tileSize ?? 32,
-      mapName: this.mapName,
+      mapName: this.getCellMapName(0, 0),
+    });
+
+    this.worldMapGrid = new worldGridModule.WorldMapGrid({ cellSize: this.cellSize });
+    this.worldMap = this.worldMapGrid.snapshot;
+    this.cellDrafts.set(cellKey(0, 0), this.createCellDraft(0, 0));
+
+    this.worldMapPanel = new worldPanelModule.WorldMapPanel({
+      grid: this.worldMapGrid,
+      onSelectCell: (gridX: number, gridY: number) => { void this.selectWorldCell(gridX, gridY); },
+      onDeleteCurrentCell: () => { void this.deleteCurrentWorldCell(); },
     });
 
     this.panel = new tilesetPanel.TilesetPanelLite(this.state, {
@@ -86,12 +102,12 @@ export class MapEditorBootMinimal {
       onPickAsset: (asset: EditorTilesetAsset) => this.pickAsset(asset),
       onFillAll: () => { void this.placement.fillAll({ width: this.worldWidth, height: this.worldHeight }); },
       onRandomFill: (chancePercent: number) => { void this.placement.fillRandom({ width: this.worldWidth, height: this.worldHeight, chancePercent }); },
-      onToggleWorldMap: () => this.showToast('월드맵 패널은 임시 비활성화되어 있습니다.', 'info'),
+      onToggleWorldMap: () => this.worldMapPanel.toggle(),
     });
 
     serverSaves.installMonsterTabSaveInterceptor({
       panel: this.panel.element,
-      getRules: () => this.worldMap.monsterSpawnRules ?? [],
+      getRules: () => this.worldMapGrid?.monsterSpawnRules ?? this.worldMap.monsterSpawnRules ?? [],
       notify: (message: string, kind: ToastKind, durationMs?: number) => this.showToast(message, kind, durationMs),
     });
 
@@ -104,11 +120,12 @@ export class MapEditorBootMinimal {
     this.uiRoot.appendChild(this.toast);
     this.attachCanvasHandlers();
     void this.loadLocalBackup();
-    this.report('MapEditorBootMinimal DOM mounted with original TilePlacementSystem.');
+    this.report('MapEditorBootMinimal DOM mounted with world map panel.');
   }
 
   stop(): void {
     if (!this.enabled) return;
+    this.persistCurrentCellDraft();
     this.enabled = false;
     this.panel?.element.remove();
     this.picker.element.remove();
@@ -122,8 +139,14 @@ export class MapEditorBootMinimal {
     // Grid overlay is intentionally disabled in the minimal boot path.
   }
 
-  async transitionWorldCell(_transition: WorldCellTransition): Promise<void> {
-    this.showToast('월드맵 셀 전환은 임시 비활성화되어 있습니다.', 'info');
+  async transitionWorldCell(transition: WorldCellTransition): Promise<void> {
+    if (!this.worldMapGrid || this.transitioning) return;
+    if (transition.dx === 0 && transition.dy === 0) return;
+    this.transitioning = true;
+    const current = this.worldMapGrid.current;
+    await this.selectWorldCell(current.gridX + transition.dx, current.gridY + transition.dy);
+    this.options.onMoveCameraTo?.(transition.targetX, transition.targetY);
+    this.transitioning = false;
   }
 
   private attachCanvasHandlers(): void {
@@ -177,6 +200,53 @@ export class MapEditorBootMinimal {
     const screenY = clientY - rect.top;
     const transform = this.options.world.worldTransform;
     return { x: (screenX - transform.tx) / transform.a, y: (screenY - transform.ty) / transform.d };
+  }
+
+  private async selectWorldCell(gridX: number, gridY: number): Promise<void> {
+    if (!this.worldMapGrid) return;
+    this.persistCurrentCellDraft();
+    this.worldMapGrid.selectCell(gridX, gridY);
+    this.worldMap = this.worldMapGrid.snapshot;
+    const key = cellKey(gridX, gridY);
+    const draft = this.cellDrafts.get(key) ?? this.createCellDraft(gridX, gridY);
+    this.cellDrafts.set(key, draft);
+    await this.placement.replaceDraft({ ...draft, worldMap: this.worldMap });
+    this.report(`Selected world cell ${gridX},${gridY}`);
+  }
+
+  private async deleteCurrentWorldCell(): Promise<void> {
+    if (!this.worldMapGrid) return;
+    const current = this.worldMapGrid.current;
+    if (!window.confirm(`현재 월드맵 셀(${current.gridX}, ${current.gridY})을 삭제할까요?`)) return;
+    this.cellDrafts.delete(cellKey(current.gridX, current.gridY));
+    this.worldMapGrid.deleteCell(current.gridX, current.gridY);
+    this.worldMap = this.worldMapGrid.snapshot;
+    const next = this.worldMapGrid.current;
+    const nextDraft = this.cellDrafts.get(cellKey(next.gridX, next.gridY)) ?? this.createCellDraft(next.gridX, next.gridY);
+    this.cellDrafts.set(cellKey(next.gridX, next.gridY), nextDraft);
+    await this.placement.replaceDraft({ ...nextDraft, worldMap: this.worldMap });
+    this.report(`Deleted world cell ${current.gridX},${current.gridY}`);
+  }
+
+  private persistCurrentCellDraft(): void {
+    if (!this.worldMapGrid || !this.placement?.mapDraft) return;
+    this.worldMap = this.worldMapGrid.snapshot;
+    const current = this.worldMapGrid.current;
+    this.cellDrafts.set(cellKey(current.gridX, current.gridY), {
+      ...this.placement.mapDraft,
+      name: this.getCellMapName(current.gridX, current.gridY),
+      worldMap: this.worldMap,
+    });
+  }
+
+  private createCellDraft(gridX: number, gridY: number): EditorMapDraft {
+    return {
+      version: 1,
+      name: this.getCellMapName(gridX, gridY),
+      tileSize: this.state?.gridSize ?? this.options.tileSize ?? 32,
+      worldMap: this.worldMapGrid?.snapshot ?? this.worldMap,
+      placements: [],
+    };
   }
 
   private pickAsset(asset: EditorTilesetAsset): void {
@@ -268,8 +338,12 @@ export class MapEditorBootMinimal {
 
     const draft = readLocalJson<EditorMapDraft>(draftKey(this.mapName));
     if (draft) {
-      this.worldMap = draft.worldMap ?? createWorldMapDraft(this.cellSize);
-      await this.placement.loadDraft(draft);
+      this.worldMapGrid?.load(draft.worldMap);
+      this.worldMap = this.worldMapGrid?.snapshot ?? draft.worldMap ?? createWorldMapDraft(this.cellSize);
+      this.cellDrafts.clear();
+      const current = this.worldMap.current ?? { gridX: 0, gridY: 0 };
+      this.cellDrafts.set(cellKey(current.gridX, current.gridY), { ...draft, worldMap: this.worldMap });
+      await this.placement.loadDraft({ ...draft, worldMap: this.worldMap });
       return true;
     }
 
@@ -277,10 +351,18 @@ export class MapEditorBootMinimal {
   }
 
   private async applyWorldSave(world: EditorWorldSave): Promise<void> {
-    this.worldMap = world.worldMap ?? createWorldMapDraft(this.cellSize);
+    if (this.worldMapGrid) this.worldMapGrid.load(world.worldMap);
+    this.worldMap = this.worldMapGrid?.snapshot ?? world.worldMap ?? createWorldMapDraft(this.cellSize);
+    this.cellDrafts.clear();
+    for (const cell of world.cells) {
+      this.cellDrafts.set(cellKey(cell.gridX, cell.gridY), { ...cell.draft, worldMap: this.worldMap });
+    }
     const current = this.worldMap.current ?? { gridX: 0, gridY: 0 };
-    const cell = world.cells.find((entry) => entry.gridX === current.gridX && entry.gridY === current.gridY) ?? world.cells.find((entry) => entry.gridX === 0 && entry.gridY === 0) ?? world.cells[0];
-    if (cell) await this.placement.loadDraft(cell.draft);
+    const draft = this.cellDrafts.get(cellKey(current.gridX, current.gridY))
+      ?? this.cellDrafts.get(cellKey(0, 0))
+      ?? world.cells[0]?.draft
+      ?? this.createCellDraft(0, 0);
+    await this.placement.loadDraft({ ...draft, worldMap: this.worldMap });
   }
 
   private async createMapStorage(): Promise<any> {
@@ -295,16 +377,39 @@ export class MapEditorBootMinimal {
   private clearAll(): void {
     if (!window.confirm('현재 배치된 타일을 전부 삭제할까요?')) return;
     this.placement.clear();
+    this.persistCurrentCellDraft();
   }
 
   private createWorldSave(): EditorWorldSave {
+    this.persistCurrentCellDraft();
+    const worldMap = this.worldMapGrid?.snapshot ?? this.worldMap;
+    const cells: EditorWorldSave['cells'] = [];
+    const seen = new Set<string>();
+
+    for (const cell of worldMap.cells) {
+      const key = cellKey(cell.gridX, cell.gridY);
+      const draft = this.cellDrafts.get(key) ?? this.createCellDraft(cell.gridX, cell.gridY);
+      seen.add(key);
+      cells.push({ gridX: cell.gridX, gridY: cell.gridY, draft: { ...draft, name: this.getCellMapName(cell.gridX, cell.gridY), worldMap } });
+    }
+
+    for (const [key, draft] of this.cellDrafts) {
+      if (seen.has(key)) continue;
+      const [gridX, gridY] = parseCellKey(key);
+      cells.push({ gridX, gridY, draft: { ...draft, name: this.getCellMapName(gridX, gridY), worldMap } });
+    }
+
     return {
       version: 1,
       name: this.mapName,
       tileSize: this.state?.gridSize ?? this.options.tileSize ?? 32,
-      worldMap: this.worldMap,
-      cells: [{ gridX: 0, gridY: 0, draft: { ...this.placement.mapDraft, worldMap: this.worldMap } }],
+      worldMap,
+      cells,
     };
+  }
+
+  private getCellMapName(gridX: number, gridY: number): string {
+    return `${this.mapName}-${gridX}-${gridY}`;
   }
 
   private get mapName(): string {
@@ -388,6 +493,15 @@ function createEditorToast(): HTMLDivElement {
 
 function isEditorUiTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest('.map-editor-panel, .tile-picker-window, .world-map-panel'));
+}
+
+function cellKey(gridX: number, gridY: number): string {
+  return `${gridX}:${gridY}`;
+}
+
+function parseCellKey(key: string): [number, number] {
+  const [x, y] = key.split(':').map((value) => Number(value));
+  return [Number.isFinite(x) ? x : 0, Number.isFinite(y) ? y : 0];
 }
 
 function draftKey(name: string): string { return `dalworld:editor-map:${name}`; }
