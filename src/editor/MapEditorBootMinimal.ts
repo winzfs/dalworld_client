@@ -210,10 +210,12 @@ export class MapEditorBootMinimal {
 
   private screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
     const rect = this.options.app.canvas.getBoundingClientRect();
-    const screenX = clientX - rect.left;
-    const screenY = clientY - rect.top;
-    const transform = this.options.world.worldTransform;
-    return { x: (screenX - transform.tx) / transform.a, y: (screenY - transform.ty) / transform.d };
+    const rendererWidth = this.options.app.renderer.width;
+    const rendererHeight = this.options.app.renderer.height;
+    const rendererX = ((clientX - rect.left) / Math.max(1, rect.width)) * rendererWidth;
+    const rendererY = ((clientY - rect.top) / Math.max(1, rect.height)) * rendererHeight;
+    const local = this.options.world.toLocal({ x: rendererX, y: rendererY });
+    return { x: local.x, y: local.y };
   }
 
   private updateMinimap(): void {
