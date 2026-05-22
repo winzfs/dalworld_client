@@ -312,6 +312,7 @@ function createActionControls(options: Options): HTMLElement {
   container.className = 'map-editor-actions';
   container.append(
     createActionButton('저장', () => {
+      worldCellStore?.saveActive();
       options.status('저장 실행 중...');
       options.onSave();
     }),
@@ -320,12 +321,14 @@ function createActionControls(options: Options): HTMLElement {
       options.onLoad();
     }),
     createActionButton('JSON', () => {
+      worldCellStore?.saveActive();
       options.status('JSON export 실행 중...');
       options.onExport();
     }),
     createActionButton('전체삭제', () => {
       if (!window.confirm('현재 맵 배치를 모두 삭제할까요?')) return;
       options.onClear();
+      worldCellStore?.saveActive();
       options.status('전체삭제 완료.');
     }, 'danger'),
   );
