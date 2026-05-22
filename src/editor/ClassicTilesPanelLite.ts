@@ -1,8 +1,9 @@
-import type { EditorLayerId, EditorToolMode } from './types';
+import type { EditorLayerId, EditorToolMode, EditorTilesetAsset } from './types';
 import type { EditorState } from './EditorState';
 import type { TilePlacementSystem } from './TilePlacementSystem';
 
 const GRID_SIZES = [16, 32, 64] as const;
+const BLACK_SOLID_ASSET_ID = 'editor-solid-black';
 const LAYERS: Array<{ id: EditorLayerId; label: string; extraClass?: string }> = [
   { id: 'ground', label: 'Ground' },
   { id: 'object', label: 'Object' },
@@ -52,11 +53,11 @@ export function mountClassicTilesPanelLite(options: Options): void {
 
   const note = document.createElement('div');
   note.className = 'map-editor-empty';
-  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 표시 완료';
+  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + Black 표시 완료';
 
   panel.append(header, tabs, scale, grid, layers, tools, note);
   document.body.appendChild(panel);
-  options.status('기존 UI 패널 도구 표시 완료.');
+  options.status('기존 UI 패널 Black 표시 완료.');
 }
 
 function createToolControls(options: Options): HTMLElement {
@@ -65,8 +66,14 @@ function createToolControls(options: Options): HTMLElement {
 
   const sync = () => {
     for (const child of Array.from(container.children)) {
-      const button = child as HTMLButtonElement;
-      button.classList.toggle('is-active', button.dataset.mode === options.state.mode);
+      if (!(child instanceof HTMLButtonElement)) continue;
+      if (child.dataset.role === 'transparentBlack') {
+        child.classList.toggle('is-active', options.state.transparentBlack);
+      } else if (child.dataset.role === 'black') {
+        child.classList.toggle('is-active', options.state.selectedAsset?.id === BLACK_SOLID_ASSET_ID);
+      } else {
+        child.classList.toggle('is-active', child.dataset.mode === options.state.mode);
+      }
     }
   };
 
@@ -83,6 +90,41 @@ function createToolControls(options: Options): HTMLElement {
     };
     container.appendChild(button);
   }
+
+  const blackButton = document.createElement('button');
+  blackButton.type = 'button';
+  blackButton.className = 'map-editor-action map-editor-black-brush';
+  blackButton.dataset.role = 'black';
+  blackButton.textContent = 'Black';
+  blackButton.onclick = () => {
+    const blackAsset: EditorTilesetAsset = {
+      id: BLACK_SOLID_ASSET_ID,
+      name: 'Black',
+      categoryId: 'editor',
+      url: 'solid://black',
+      solidColor: 0x000000,
+      tileWidth: options.state.gridSize,
+      tileHeight: options.state.gridSize,
+    };
+    options.state.setLayer('ground');
+    options.state.setBrush({ asset: blackAsset });
+    sync();
+    options.status('Black 브러시 선택됨.');
+  };
+  container.appendChild(blackButton);
+
+  const transparentBlackButton = document.createElement('button');
+  transparentBlackButton.type = 'button';
+  transparentBlackButton.className = 'map-editor-action map-editor-transparent-black';
+  transparentBlackButton.dataset.role = 'transparentBlack';
+  transparentBlackButton.textContent = '검정투명';
+  transparentBlackButton.onclick = () => {
+    options.state.toggleTransparentBlack();
+    sync();
+    options.status(`검정투명: ${options.state.transparentBlack ? 'on' : 'off'}`);
+  };
+  container.appendChild(transparentBlackButton);
+
   sync();
   return container;
 }
