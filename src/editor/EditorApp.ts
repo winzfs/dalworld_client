@@ -43,12 +43,15 @@ export class EditorApp {
     this.drawBackground(DEFAULT_WORLD);
     this.cameraSystem.setWorldSize(DEFAULT_WORLD);
 
+    const status = createEditorStagePanel();
+    status('Pixi initialized. Loading editor UI modules...');
     console.log('[EditorBoot] Loading map editor modules after Pixi init.');
     const [{ MapEditor }, { EditorMinimap }] = await Promise.all([
       import('./MapEditor'),
       import('./EditorMinimap'),
     ]);
 
+    status('Editor UI modules loaded. Creating panels...');
     this.mapEditor = new MapEditor({
       app: this.app,
       world: this.world,
@@ -64,9 +67,13 @@ export class EditorApp {
       onMoveTo: (x, y) => this.cameraSystem.setPosition(x, y),
     });
 
+    status('Starting MapEditor DOM UI...');
     this.mapEditor.start();
+    status(`MapEditor started. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
+
     this.minimap.mount(document.body);
     this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
+    status('EditorApp.start completed.');
     console.log('[EditorBoot] EditorApp.start completed.');
   }
 
@@ -119,4 +126,30 @@ export class EditorApp {
 function getRenderResolution(): number {
   const raw = window.devicePixelRatio || 1;
   return Math.max(1, Math.min(2, raw));
+}
+
+function createEditorStagePanel(): (message: string) => void {
+  document.getElementById('editor-stage-panel')?.remove();
+  const panel = document.createElement('div');
+  panel.id = 'editor-stage-panel';
+  panel.style.cssText = [
+    'position:fixed',
+    'left:10px',
+    'bottom:10px',
+    'z-index:2147483647',
+    'max-width:min(520px,calc(100vw - 20px))',
+    'padding:8px 10px',
+    'border:1px solid rgba(85,214,190,.85)',
+    'border-radius:10px',
+    'background:rgba(8,14,20,.92)',
+    'color:#eafff9',
+    'font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace',
+    'white-space:pre-wrap',
+    'pointer-events:none',
+  ].join(';');
+  document.body.appendChild(panel);
+  return (message: string) => {
+    panel.textContent = message;
+    console.log('[EditorBoot]', message);
+  };
 }
