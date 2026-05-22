@@ -8,51 +8,77 @@ export class EditorFallbackPanel {
 
   constructor(options: EditorFallbackPanelOptions) {
     this.element = document.createElement('div');
-    this.element.className = 'map-editor-panel editor-fallback-panel';
-    this.element.style.left = '20px';
-    this.element.style.top = '20px';
-    this.element.style.zIndex = '2147483646';
+    this.element.className = 'editor-fallback-panel';
+    this.element.style.cssText = [
+      'position:fixed',
+      'right:16px',
+      'bottom:16px',
+      'z-index:2147483646',
+      'width:min(320px,calc(100vw - 32px))',
+      'max-height:220px',
+      'overflow:auto',
+      'border:1px solid rgba(85,214,190,.55)',
+      'border-radius:14px',
+      'background:rgba(8,14,20,.86)',
+      'color:#eafff9',
+      'box-shadow:0 12px 36px rgba(0,0,0,.32)',
+      'font:12px/1.45 system-ui,sans-serif',
+    ].join(';');
 
     const header = document.createElement('div');
-    header.className = 'map-editor-header';
-    header.textContent = 'Map Editor';
+    header.textContent = 'Editor fallback';
+    header.style.cssText = [
+      'display:flex',
+      'align-items:center',
+      'justify-content:space-between',
+      'gap:8px',
+      'padding:8px 10px',
+      'font-weight:800',
+      'color:#9ff5e5',
+      'background:rgba(85,214,190,.12)',
+    ].join(';');
+
+    const collapse = document.createElement('button');
+    collapse.type = 'button';
+    collapse.textContent = '접기';
+    collapse.style.cssText = smallButtonStyle();
 
     const body = document.createElement('div');
     body.style.cssText = [
-      'padding:12px',
+      'padding:10px',
       'display:grid',
-      'gap:10px',
-      'font-size:12px',
-      'line-height:1.45',
+      'gap:8px',
     ].join(';');
 
-    const title = document.createElement('strong');
-    title.textContent = '기본 에디터 패널';
-    title.style.color = '#ffe4a3';
-
-    const description = document.createElement('div');
-    description.textContent = '렌더러와 그리드는 정상입니다. 전체 MapEditor 모듈 로딩이 지연되어 최소 패널로 진입했습니다.';
-    description.style.color = 'rgba(255,255,255,.78)';
+    collapse.onclick = () => {
+      const hidden = body.hidden;
+      body.hidden = !hidden;
+      collapse.textContent = hidden ? '접기' : '열기';
+      this.element.style.width = hidden ? 'min(320px,calc(100vw - 32px))' : 'auto';
+    };
 
     const retry = document.createElement('button');
     retry.type = 'button';
-    retry.className = 'map-editor-action';
-    retry.textContent = '전체 에디터 다시 로드';
+    retry.textContent = '기존 UI 다시 로드';
+    retry.style.cssText = smallButtonStyle();
     retry.onclick = () => options.onRetryMapEditor();
 
     this.status = document.createElement('div');
     this.status.style.cssText = [
-      'padding:8px 9px',
+      'padding:7px 8px',
       'border:1px solid rgba(255,255,255,.12)',
-      'border-radius:10px',
+      'border-radius:9px',
       'background:rgba(0,0,0,.2)',
-      'color:rgba(255,255,255,.72)',
+      'color:rgba(234,255,249,.82)',
       'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace',
       'white-space:pre-wrap',
     ].join(';');
     this.status.textContent = 'MapEditor import 대기 중...';
 
-    body.append(title, description, retry, this.status);
+    const title = document.createElement('span');
+    title.textContent = 'Editor fallback';
+    header.append(title, collapse);
+    body.append(retry, this.status);
     this.element.append(header, body);
   }
 
@@ -63,4 +89,17 @@ export class EditorFallbackPanel {
   setStatus(message: string): void {
     this.status.textContent = message;
   }
+}
+
+function smallButtonStyle(): string {
+  return [
+    'border:1px solid rgba(85,214,190,.42)',
+    'border-radius:8px',
+    'background:rgba(85,214,190,.1)',
+    'color:#eafff9',
+    'padding:5px 8px',
+    'font:inherit',
+    'font-weight:700',
+    'cursor:pointer',
+  ].join(';');
 }
