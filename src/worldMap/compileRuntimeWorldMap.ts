@@ -68,7 +68,8 @@ function isRuntimePlacement(placement: EditorTilePlacement): boolean {
 
 function compilePlacement(placement: EditorTilePlacement): WorldMapPlacement | null {
   const layer = sanitizeLayer(placement.layer);
-  const assetUrl = sanitizeAssetUrl(placement.assetUrl);
+  const assetUrl = sanitizeAssetUrl(placement.assetUrl)
+    ?? createSolidEditorAssetUrl(placement);
 
   if (!layer || !assetUrl) {
     console.warn('[WorldMap] Skipping invalid map placement before upload.', {
@@ -113,6 +114,14 @@ function compilePlacement(placement: EditorTilePlacement): WorldMapPlacement | n
   }
 
   return compiled;
+}
+
+function createSolidEditorAssetUrl(placement: EditorTilePlacement): string | null {
+  if (!isValidColor(placement.solidColor)) return null;
+  const assetId = sanitizeString(placement.assetId, 'solid-editor-tile')
+    .replace(/[^a-zA-Z0-9_.:-]/g, '-')
+    .slice(0, 96);
+  return `solid://${assetId || 'solid-editor-tile'}`;
 }
 
 function compileGameplay(gameplay: EditorPlacementGameplay | undefined): WorldMapPlacementGameplay | undefined {
