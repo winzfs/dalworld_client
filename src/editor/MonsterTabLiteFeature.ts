@@ -4,30 +4,14 @@ import type { EditorMonsterSpawnRule, EditorMonsterType } from './types';
 
 const MONSTER_TYPES: EditorMonsterType[] = ['wild_slime', 'sheep'];
 const DEFAULT_RULES: EditorMonsterSpawnRule[] = [
-  {
-    id: 'world-wild-slime',
-    enabled: true,
-    monsterType: 'wild_slime',
-    scope: 'world',
-    maxAlive: 12,
-    spawnsPerMinute: 2,
-  },
-  {
-    id: 'world-sheep',
-    enabled: true,
-    monsterType: 'sheep',
-    scope: 'world',
-    maxAlive: 8,
-    spawnsPerMinute: 1,
-  },
+  { id: 'world-wild-slime', enabled: true, monsterType: 'wild_slime', scope: 'world', maxAlive: 12, spawnsPerMinute: 2 },
+  { id: 'world-sheep', enabled: true, monsterType: 'sheep', scope: 'world', maxAlive: 8, spawnsPerMinute: 1 },
 ];
 
 let installed = false;
 let currentRules: EditorMonsterSpawnRule[] = cloneRules(DEFAULT_RULES);
 
-export function installMonsterTabLiteFeature(options: {
-  status?: (message: string) => void;
-} = {}): void {
+export function installMonsterTabLiteFeature(options: { status?: (message: string) => void } = {}): void {
   const status = options.status ?? ((message: string) => console.log('[MonsterTabLite]', message));
 
   if (!installed) {
@@ -50,12 +34,11 @@ function enhancePanels(status: (message: string) => void): void {
 }
 
 function wireMonsterTab(panel: HTMLElement, status: (message: string) => void): boolean {
-  const tabsContainer = panel.querySelector<HTMLElement>('.map-editor-tabs');
   const tabs = Array.from(panel.querySelectorAll<HTMLButtonElement>('.map-editor-tab'));
   const tilesTab = tabs.find((tab) => tab.textContent?.trim() === 'Tiles');
   const monstersTab = tabs.find((tab) => tab.textContent?.trim() === 'Monsters');
 
-  if (!tabsContainer || !tilesTab || !monstersTab) {
+  if (!tilesTab || !monstersTab) {
     status('Monsters 탭 연결 대기 중...');
     return false;
   }
@@ -64,13 +47,13 @@ function wireMonsterTab(panel: HTMLElement, status: (message: string) => void): 
   monsterContent.style.display = 'none';
   panel.appendChild(monsterContent);
 
-  const getTilesContentNodes = () => Array.from(panel.children).filter((child) => {
+  const getTilesContentNodes = () => Array.from(panel.children).filter((child): child is HTMLElement => {
     if (!(child instanceof HTMLElement)) return false;
     if (child.classList.contains('map-editor-header')) return false;
     if (child.classList.contains('map-editor-tabs')) return false;
     if (child === monsterContent) return false;
     return true;
-  }) as HTMLElement[];
+  });
 
   const showTiles = () => {
     tabs.forEach((tab) => tab.classList.toggle('is-active', tab === tilesTab));
@@ -95,19 +78,17 @@ function wireMonsterTab(panel: HTMLElement, status: (message: string) => void): 
     event.preventDefault();
     showTiles();
   };
-
   monstersTab.onclick = (event) => {
     event.preventDefault();
     showMonsters();
   };
 
-  tilesTab.addEventListener('click', (event) => {
+  tilesTab.addEventListener('pointerup', (event) => {
     event.preventDefault();
     event.stopPropagation();
     showTiles();
   });
-
-  monstersTab.addEventListener('click', (event) => {
+  monstersTab.addEventListener('pointerup', (event) => {
     event.preventDefault();
     event.stopPropagation();
     showMonsters();
@@ -127,19 +108,15 @@ function createMonsterContent(status: (message: string) => void): HTMLElement {
 
   const actions = document.createElement('div');
   actions.className = 'map-editor-actions';
-
-  const loadButton = createActionButton('불러오기', () => {
-    void loadMonsterRules(root, status);
-  });
-  const addButton = createActionButton('규칙 추가', () => {
-    currentRules = [...currentRules, createDefaultRule()];
-    renderMonsterRules(root, status);
-    status(`몬스터 규칙 추가. rules=${currentRules.length}`);
-  });
-  const saveButton = createActionButton('저장', () => {
-    void saveMonsterRules(root, status);
-  });
-  actions.append(loadButton, addButton, saveButton);
+  actions.append(
+    createActionButton('불러오기', () => void loadMonsterRules(root, status)),
+    createActionButton('규칙 추가', () => {
+      currentRules = [...currentRules, createDefaultRule()];
+      renderMonsterRules(root, status);
+      status(`몬스터 규칙 추가. rules=${currentRules.length}`);
+    }),
+    createActionButton('저장', () => void saveMonsterRules(root, status)),
+  );
 
   const list = document.createElement('div');
   list.dataset.role = 'monster-rules';
@@ -153,7 +130,6 @@ function createMonsterContent(status: (message: string) => void): HTMLElement {
 function renderMonsterRules(root: HTMLElement, status: (message: string) => void): void {
   const list = root.querySelector<HTMLElement>('[data-role="monster-rules"]');
   if (!list) return;
-
   list.replaceChildren();
 
   if (currentRules.length === 0) {
@@ -169,50 +145,25 @@ function renderMonsterRules(root: HTMLElement, status: (message: string) => void
   });
 }
 
-function createRuleEditor(
-  rule: EditorMonsterSpawnRule,
-  index: number,
-  status: (message: string) => void,
-  rerender: () => void,
-): HTMLElement {
+function createRuleEditor(rule: EditorMonsterSpawnRule, index: number, status: (message: string) => void, rerender: () => void): HTMLElement {
   const card = document.createElement('div');
   card.style.cssText = 'display:grid;gap:8px;padding:10px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(0,0,0,.18);';
 
   const title = document.createElement('div');
   title.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;color:#ffe4a3;font-weight:700;';
   title.textContent = `Rule ${index + 1}`;
-
-  const remove = createActionButton('삭제', () => {
+  title.appendChild(createActionButton('삭제', () => {
     currentRules = currentRules.filter((entry) => entry !== rule);
     rerender();
     status(`몬스터 규칙 삭제. rules=${currentRules.length}`);
-  }, 'danger');
-  title.appendChild(remove);
+  }, 'danger'));
 
-  const enabled = createCheckboxField('enabled', rule.enabled, (value) => {
-    rule.enabled = value;
-  });
-  const monsterType = createSelectField('monsterType', rule.monsterType, MONSTER_TYPES, (value) => {
-    rule.monsterType = value as EditorMonsterType;
-    rule.id = rule.id.trim() || createRuleId(rule.monsterType);
-  });
-  const scope = createSelectField('scope', rule.scope, ['world', 'region'], (value) => {
-    rule.scope = value === 'region' ? 'region' : 'world';
-  });
-  const maxAlive = createNumberField('maxAlive', rule.maxAlive, 0, 500, 1, (value) => {
-    rule.maxAlive = value;
-  });
-  const spawnsPerMinute = createNumberField('spawns/min', rule.spawnsPerMinute, 1, 600, 1, (value) => {
-    rule.spawnsPerMinute = value;
-    rule.spawnsPerHour = value * 60;
-  });
+  const spec = rule.spec ?? {};
+  rule.spec = spec;
 
   const specTitle = document.createElement('div');
   specTitle.textContent = 'Spec override';
   specTitle.style.cssText = 'margin-top:4px;color:rgba(255,255,255,.72);font-weight:700;';
-
-  const spec = rule.spec ?? {};
-  rule.spec = spec;
 
   const specGrid = document.createElement('div');
   specGrid.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;';
@@ -223,7 +174,23 @@ function createRuleEditor(
     createOptionalNumberField('attackDamage', spec.attackDamage, 1, 9999, 1, (value) => { spec.attackDamage = value; }),
   );
 
-  card.append(title, enabled, monsterType, scope, maxAlive, spawnsPerMinute, specTitle, specGrid);
+  card.append(
+    title,
+    createCheckboxField('enabled', rule.enabled, (value) => { rule.enabled = value; }),
+    createSelectField('monsterType', rule.monsterType, MONSTER_TYPES, (value) => {
+      rule.monsterType = value as EditorMonsterType;
+      rule.id = rule.id.trim() || createRuleId(rule.monsterType);
+    }),
+    createSelectField('scope', rule.scope, ['world', 'region'], (value) => { rule.scope = value === 'region' ? 'region' : 'world'; }),
+    createNumberField('maxAlive', rule.maxAlive, 0, 500, 1, (value) => { rule.maxAlive = value; }),
+    createNumberField('spawns/min', rule.spawnsPerMinute, 1, 600, 1, (value) => {
+      rule.spawnsPerMinute = value;
+      rule.spawnsPerHour = value * 60;
+    }),
+    specTitle,
+    specGrid,
+  );
+
   return card;
 }
 
@@ -272,15 +239,7 @@ function normalizeRules(rules: EditorMonsterSpawnRule[] | undefined): EditorMons
 }
 
 function createDefaultRule(): EditorMonsterSpawnRule {
-  return {
-    id: createRuleId('wild_slime'),
-    enabled: true,
-    monsterType: 'wild_slime',
-    scope: 'world',
-    maxAlive: 10,
-    spawnsPerMinute: 1,
-    spawnsPerHour: 60,
-  };
+  return { id: createRuleId('wild_slime'), enabled: true, monsterType: 'wild_slime', scope: 'world', maxAlive: 10, spawnsPerMinute: 1, spawnsPerHour: 60 };
 }
 
 function createRuleId(monsterType: EditorMonsterType): string {
@@ -288,10 +247,7 @@ function createRuleId(monsterType: EditorMonsterType): string {
 }
 
 function cloneRules(rules: EditorMonsterSpawnRule[]): EditorMonsterSpawnRule[] {
-  return rules.map((rule) => ({
-    ...rule,
-    spec: rule.spec ? { ...rule.spec } : undefined,
-  }));
+  return rules.map((rule) => ({ ...rule, spec: rule.spec ? { ...rule.spec } : undefined }));
 }
 
 function createCheckboxField(label: string, checked: boolean, onChange: (value: boolean) => void): HTMLElement {
@@ -304,7 +260,7 @@ function createCheckboxField(label: string, checked: boolean, onChange: (value: 
   return wrapper;
 }
 
-function createSelectField(label: string, value: string, values: string[], onChange: (value: string) => void): HTMLElement {
+function createSelectField(label: string, value: string, values: readonly string[], onChange: (value: string) => void): HTMLElement {
   const wrapper = createFieldWrapper(label);
   const select = document.createElement('select');
   select.className = 'map-editor-scale-input';
