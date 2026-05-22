@@ -1,6 +1,7 @@
 import type { EditorLayerId, EditorSourceRect, EditorToolMode, EditorTilesetAsset, EditorTilesetCategory } from './types';
 import type { EditorState } from './EditorState';
 import type { TilePlacementSystem } from './TilePlacementSystem';
+import type { WorldCellDraftStore } from './WorldCellDraftStore';
 
 const GRID_SIZES = [16, 32, 64] as const;
 const BLACK_SOLID_ASSET_ID = 'editor-solid-black';
@@ -58,6 +59,7 @@ type WorldMapPanelInstance = {
 let pickerWindow: TilePickerWindowInstance | null = null;
 let worldMapGrid: WorldMapGridInstance | null = null;
 let worldMapPanel: WorldMapPanelInstance | null = null;
+let worldCellStore: WorldCellDraftStore | null = null;
 
 export function mountClassicTilesPanelLite(options: Options): void {
   document.querySelector('.staged-classic-editor-panel')?.remove();
@@ -107,27 +109,37 @@ async function toggleWorldMapPanel(options: Options): Promise<void> {
     }
 
     options.status('월드맵 패널 로딩 중...');
-    const [{ WorldMapGrid }, { WorldMapPanel }] = await Promise.all([
+    const [{ WorldMapGrid }, { WorldMapPanel }, { WorldCellDraftStore }] = await Promise.all([
       import('./WorldMapGrid'),
       import('./WorldMapPanel'),
+      import('./WorldCellDraftStore'),
     ]);
 
     if (!worldMapGrid) {
       worldMapGrid = new WorldMapGrid({ cellSize: DEFAULT_WORLD_SIZE });
     }
 
+    if (!worldCellStore) {
+      worldCellStore = new WorldCellDraftStore({
+        placement: options.placement,
+        defaultTileSize: options.state.gridSize,
+      });
+    }
+
     if (!worldMapPanel) {
       worldMapPanel = new WorldMapPanel({
         grid: worldMapGrid as never,
         onSelectCell: (gridX: number, gridY: number) => {
-          worldMapGrid?.selectCell(gridX, gridY);
-          options.status(`월드맵 셀 선택: ${gridX}, ${gridY} / 타일 데이터 전환은 다음 단계에서 복구`);
+          void switchWorldCell(gridX, gridY, options);
         },
         onDeleteCurrentCell: () => {
           const current = worldMapGrid?.current;
           if (!current) return;
           if (!window.confirm(`현재 월드맵 셀 ${current.gridX}, ${current.gridY}를 삭제할까요?`)) return;
+          worldCellStore?.deleteCell(current.gridX, current.gridY);
           worldMapGrid?.deleteCell(current.gridX, current.gridY);
+          const next = worldMapGrid?.current;
+          if (next) void switchWorldCell(next.gridX, next.gridY, options);
           options.status('월드맵 현재 셀 삭제 완료.');
         },
       });
@@ -140,6 +152,13 @@ async function toggleWorldMapPanel(options: Options): Promise<void> {
   } catch (error) {
     options.status(`월드맵 패널 로딩 실패: ${formatErrorMessage(error)}`);
   }
+}
+
+async function switchWorldCell(gridX: number, gridY: number, options: Options): Promise<void> {
+  if (!worldMapGrid || !worldCellStore) return;
+  worldMapGrid.selectCell(gridX, gridY);
+  const draft = await worldCellStore.switchTo(gridX, gridY);
+  options.status(`월드맵 셀 전환 완료: ${gridX}, ${gridY} / placements=${draft.placements.length}`);
 }
 
 function createLazyCategoryControls(options: Options, assetContainer: HTMLElement): HTMLElement {
