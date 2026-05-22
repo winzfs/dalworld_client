@@ -1,4 +1,4 @@
-import { Assets, Container as PixiContainer, Graphics, Sprite } from 'pixi.js';
+import { Assets, Container as PixiContainer, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import type { Application, Container } from 'pixi.js';
 import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset, EditorWorldMapDraft, EditorWorldSave } from './types';
 
@@ -22,12 +22,14 @@ export type WorldCellTransition = {
 
 type ToastKind = 'info' | 'success' | 'error';
 
+const DIRECT_SELECT_MAX_SIZE = 96;
+
 export class MapEditorBootMinimal {
   state: any = null;
   placement: any;
 
   private panel: any = null;
-  private picker = createHiddenWindow('tile-picker-window is-fallback');
+  private picker: any = createHiddenWindow('tile-picker-window is-fallback');
   private worldMapPanel = createHiddenWindow('world-map-panel is-fallback');
   private readonly uiRoot: HTMLElement;
   private readonly toast = createEditorToast();
@@ -39,6 +41,7 @@ export class MapEditorBootMinimal {
   private paintingPointerId: number | null = null;
   private lastPaintKey: string | null = null;
   private toastTimer: number | null = null;
+  private loadingPicker: Promise<any> | null = null;
 
   constructor(private readonly options: MapEditorBootMinimalOptions) {
     this.uiRoot = options.uiRoot ?? document.body;
@@ -166,6 +169,38 @@ export class MapEditorBootMinimal {
   private pickAsset(asset: EditorTilesetAsset): void {
     this.state.selectAsset(asset);
     this.report(`Selected tile: ${asset.name}`);
+    void this.openPickerIfNeeded(asset);
+  }
+
+  private async openPickerIfNeeded(asset: EditorTilesetAsset): Promise<void> {
+    if (!(await shouldOpenPicker(asset))) return;
+    try {
+      const picker = await this.ensurePicker();
+      picker.open(asset);
+      this.report(`TilePicker opened: ${asset.name}`);
+    } catch (error) {
+      console.warn('[MapEditor] TilePicker failed. Using full asset selection.', error);
+      this.report(`TilePicker failed. Full asset selected. ${formatError(error)}`);
+    }
+  }
+
+  private async ensurePicker(): Promise<any> {
+    if (this.picker?.open && !this.picker.element.classList.contains('is-fallback')) return this.picker;
+    if (!this.loadingPicker) {
+      this.loadingPicker = import('./TilePickerWindow').then((module) => {
+        this.picker.element.remove();
+        this.picker = new module.TilePickerWindow({
+          defaultGridSize: this.state?.gridSize ?? this.options.tileSize ?? 32,
+          onPick: (asset: EditorTilesetAsset, sourceRect: any) => {
+            this.state.setSourceRect(asset, sourceRect);
+            this.report(`Picked source rect ${sourceRect.x},${sourceRect.y},${sourceRect.width}x${sourceRect.height}`);
+          },
+        });
+        this.picker.mount(this.uiRoot);
+        return this.picker;
+      });
+    }
+    return this.loadingPicker;
   }
 
   private async save(): Promise<void> {
@@ -294,8 +329,10 @@ function createPlacementFallback(state: any, mapName: string, tileSize: number, 
   const displays = new Map<string, PixiContainer>();
 
   const getGridSize = () => state?.gridSize ?? tileSize;
-  const getBrushAsset = (): EditorTilesetAsset | null => {
-    return (state?.selectedBrush?.asset ?? state?.selectedAsset ?? null) as EditorTilesetAsset | null;
+  const getBrush = (): { asset: EditorTilesetAsset; sourceRect?: { x: number; y: number; width: number; height: number } } | null => {
+    if (state?.selectedBrush?.asset) return state.selectedBrush;
+    if (state?.selectedAsset) return { asset: state.selectedAsset };
+    return null;
   };
 
   const redraw = () => {
@@ -329,12 +366,13 @@ function createPlacementFallback(state: any, mapName: string, tileSize: number, 
     }
     if (state.mode === 'picker') return;
 
-    const asset = getBrushAsset();
-    if (!asset) {
+    const brush = getBrush();
+    if (!brush) {
       report('No tile selected. Select a tile first.');
       return;
     }
 
+    const asset = brush.asset;
     const gridSize = getGridSize();
     const sx = Math.floor(x / gridSize) * gridSize;
     const sy = Math.floor(y / gridSize) * gridSize;
@@ -348,8 +386,9 @@ function createPlacementFallback(state: any, mapName: string, tileSize: number, 
       y: sy,
       layer: state.activeLayer,
       scale: state.brushScale ?? 1,
-      displayWidth: asset.tileWidth ?? gridSize,
-      displayHeight: asset.tileHeight ?? gridSize,
+      displayWidth: brush.sourceRect?.width ?? asset.tileWidth ?? gridSize,
+      displayHeight: brush.sourceRect?.height ?? asset.tileHeight ?? gridSize,
+      sourceRect: brush.sourceRect ? { ...brush.sourceRect } : undefined,
       solidColor: asset.solidColor,
     };
     draft.placements.push(placement);
@@ -399,7 +438,10 @@ function createDisplay(placement: EditorTilePlacement, gridSize: number, report:
       .then((texture) => {
         if (container.destroyed) return;
         placeholder.destroy();
-        const sprite = new Sprite(texture);
+        const spriteTexture = placement.sourceRect
+          ? new Texture({ source: texture.source, frame: new Rectangle(placement.sourceRect.x, placement.sourceRect.y, placement.sourceRect.width, placement.sourceRect.height) })
+          : texture;
+        const sprite = new Sprite(spriteTexture);
         sprite.width = width;
         sprite.height = height;
         sprite.roundPixels = true;
@@ -417,6 +459,24 @@ function createDisplay(placement: EditorTilePlacement, gridSize: number, report:
   fill.rect(0, 0, width, height).fill({ color, alpha: placement.layer === 'collision' ? 0.42 : 0.92 });
   container.addChildAt(fill, 0);
   return container;
+}
+
+async function shouldOpenPicker(asset: EditorTilesetAsset): Promise<boolean> {
+  if (asset.tileWidth && asset.tileHeight) return false;
+  if (asset.solidColor !== undefined) return false;
+  if (!isImageAssetUrl(asset.url)) return false;
+  const size = await loadImageSize(asset.url);
+  if (!size) return false;
+  return size.width > DIRECT_SELECT_MAX_SIZE || size.height > DIRECT_SELECT_MAX_SIZE;
+}
+
+function loadImageSize(url: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
 }
 
 function isImageAssetUrl(url: string): boolean {
