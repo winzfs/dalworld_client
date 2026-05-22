@@ -1,10 +1,10 @@
-import { BLACK_SOLID_ASSET, type EditorState } from './EditorState';
-import { TILESET_CATEGORIES } from './tilesetManifest';
+import type { EditorState } from './EditorState';
 import type { TilePlacementSystem } from './TilePlacementSystem';
-import type { EditorSourceRect, EditorTilesetAsset } from './types';
+import type { EditorSourceRect, EditorTilesetAsset, EditorTilesetCategory } from './types';
 
 const DIRECT_SELECT_MAX_SIZE = 96;
 const GRID_SIZE_OPTIONS = [16, 32, 64];
+const BLACK_SOLID_ASSET_ID = 'editor-solid-black';
 const LAYERS = [
   { id: 'ground', label: 'Ground' },
   { id: 'object', label: 'Object' },
@@ -44,6 +44,8 @@ class ClassicTilesPanelLite {
   private dragging = false;
   private dragOffsetX = 0;
   private dragOffsetY = 0;
+  private categories: EditorTilesetCategory[] = [];
+  private loadError = '';
   private readonly unsubscribe: () => void;
 
   constructor(private readonly options: Options) {
@@ -53,6 +55,7 @@ class ClassicTilesPanelLite {
     this.unsubscribe = options.state.subscribe(() => this.render());
     this.attachDragHandlers();
     this.render();
+    void this.loadCategories();
   }
 
   mount(parent: HTMLElement): void {
@@ -63,6 +66,20 @@ class ClassicTilesPanelLite {
   destroy(): void {
     this.unsubscribe();
     this.element.remove();
+  }
+
+  private async loadCategories(): Promise<void> {
+    try {
+      this.options.status('tilesetManifest import started for classic-lite panel...');
+      const { TILESET_CATEGORIES } = await import('./tilesetManifest');
+      this.categories = TILESET_CATEGORIES;
+      this.loadError = '';
+      this.options.status(`기존 UI 형태 패널 준비 완료. categories=${TILESET_CATEGORIES.length}`);
+    } catch (error) {
+      this.loadError = `타일셋 로딩 실패: ${formatErrorMessage(error)}`;
+      this.options.status(this.loadError);
+    }
+    this.render();
   }
 
   private render(): void {
@@ -193,9 +210,19 @@ class ClassicTilesPanelLite {
   }
 
   private createBlackButton(): HTMLButtonElement {
-    const button = this.createButton('Black', 'map-editor-action', () => this.options.state.selectBlackBrush());
+    const button = this.createButton('Black', 'map-editor-action', () => {
+      const blackAsset: EditorTilesetAsset = {
+        id: BLACK_SOLID_ASSET_ID,
+        name: 'Black',
+        categoryId: 'editor',
+        url: 'solid://black',
+        solidColor: 0x000000,
+      };
+      this.options.state.setLayer('ground');
+      this.options.state.setBrush({ asset: blackAsset });
+    });
     button.classList.add('map-editor-black-brush');
-    if (this.options.state.selectedAsset?.id === BLACK_SOLID_ASSET.id) button.classList.add('is-active');
+    if (this.options.state.selectedAsset?.id === BLACK_SOLID_ASSET_ID) button.classList.add('is-active');
     return button;
   }
 
@@ -260,7 +287,7 @@ class ClassicTilesPanelLite {
     container.className = 'map-editor-categories';
     container.hidden = this.activeTab !== 'tiles';
 
-    for (const category of TILESET_CATEGORIES.filter((item) => item.id !== 'monsters')) {
+    for (const category of this.categories.filter((item) => item.id !== 'monsters')) {
       const button = this.createButton(category.name, 'map-editor-category', () => this.options.state.setActiveCategory(category.id));
       if (category.id === this.options.state.activeCategoryId) button.classList.add('is-active');
       container.appendChild(button);
@@ -273,8 +300,24 @@ class ClassicTilesPanelLite {
     container.className = 'map-editor-assets';
     container.hidden = this.activeTab !== 'tiles';
 
-    const category = TILESET_CATEGORIES.find((item) => item.id === this.options.state.activeCategoryId)
-      ?? TILESET_CATEGORIES.find((item) => item.id !== 'monsters');
+    if (this.loadError) {
+      const error = document.createElement('div');
+      error.className = 'map-editor-empty';
+      error.textContent = this.loadError;
+      container.appendChild(error);
+      return container;
+    }
+
+    if (this.categories.length === 0) {
+      const loading = document.createElement('div');
+      loading.className = 'map-editor-empty';
+      loading.textContent = '타일셋 로딩 중...';
+      container.appendChild(loading);
+      return container;
+    }
+
+    const category = this.categories.find((item) => item.id === this.options.state.activeCategoryId)
+      ?? this.categories.find((item) => item.id !== 'monsters');
     if (!category) return container;
 
     for (const asset of category.assets) {
@@ -309,19 +352,23 @@ class ClassicTilesPanelLite {
   }
 
   private async openPicker(asset: EditorTilesetAsset): Promise<void> {
-    this.options.status(`타일셋 부분 선택 로딩: ${asset.name}`);
-    const { TilePickerWindow } = await import('./TilePickerWindow');
-    if (!pickerWindow) {
-      pickerWindow = new TilePickerWindow({
-        defaultGridSize: this.options.state.gridSize,
-        onPick: (pickedAsset: EditorTilesetAsset, sourceRect: EditorSourceRect) => {
-          this.options.state.setSourceRect(pickedAsset, sourceRect);
-          this.options.status(`부분 선택됨: ${pickedAsset.name}`);
-        },
-      });
-      pickerWindow.mount(document.body);
+    try {
+      this.options.status(`타일셋 부분 선택 로딩: ${asset.name}`);
+      const { TilePickerWindow } = await import('./TilePickerWindow');
+      if (!pickerWindow) {
+        pickerWindow = new TilePickerWindow({
+          defaultGridSize: this.options.state.gridSize,
+          onPick: (pickedAsset: EditorTilesetAsset, sourceRect: EditorSourceRect) => {
+            this.options.state.setSourceRect(pickedAsset, sourceRect);
+            this.options.status(`부분 선택됨: ${pickedAsset.name}`);
+          },
+        });
+        pickerWindow.mount(document.body);
+      }
+      pickerWindow.open(asset);
+    } catch (error) {
+      this.options.status(`부분 선택 로딩 실패: ${formatErrorMessage(error)}`);
     }
-    pickerWindow.open(asset);
   }
 
   private createMonsterPlaceholder(): HTMLElement {
@@ -373,4 +420,9 @@ function loadImageSize(url: string): Promise<{ width: number; height: number } |
     image.onerror = () => resolve(null);
     image.src = url;
   });
+}
+
+function formatErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
