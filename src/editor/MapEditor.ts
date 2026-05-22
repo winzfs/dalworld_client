@@ -1,8 +1,6 @@
 import type { Application, Container } from 'pixi.js';
 import type { EditorMapDraft } from './types';
 
-const ORIGINAL_IMPORT_TIMEOUT_MS = 5000;
-
 export type MapEditorOptions = {
   app: Application;
   world: Container;
@@ -21,17 +19,17 @@ export type WorldCellTransition = {
   targetY: number;
 };
 
-type OriginalEditor = {
+type EditorInstance = {
   readonly placement: { readonly mapDraft: EditorMapDraft };
-  start(): void | Promise<void>;
+  start(): Promise<void> | void;
   stop(): void;
   setWorldSize(width: number, height: number): void;
   transitionWorldCell(transition: WorldCellTransition): Promise<void>;
 };
 
 export class MapEditor {
-  private instance: OriginalEditor | null = null;
-  private loading: Promise<OriginalEditor> | null = null;
+  private instance: EditorInstance | null = null;
+  private loading: Promise<EditorInstance> | null = null;
 
   constructor(private readonly options: MapEditorOptions) {}
 
@@ -47,9 +45,7 @@ export class MapEditor {
   }
 
   async start(): Promise<void> {
-    if (!this.loading) {
-      this.loading = this.loadAndStart();
-    }
+    if (!this.loading) this.loading = this.loadAndStart();
     await this.loading;
   }
 
@@ -66,27 +62,21 @@ export class MapEditor {
     await editor.transitionWorldCell(transition);
   }
 
-  private async ensureLoaded(): Promise<OriginalEditor> {
+  private async ensureLoaded(): Promise<EditorInstance> {
     if (this.instance) return this.instance;
     if (!this.loading) this.loading = this.loadAndStart();
     return this.loading;
   }
 
-  private async loadAndStart(): Promise<OriginalEditor> {
-    this.reportStage('MapEditorOriginal import started...');
-    const module = await withTimeout(
-      import('./MapEditorOriginal'),
-      ORIGINAL_IMPORT_TIMEOUT_MS,
-      'MapEditorOriginal import timed out',
-    );
-
-    this.reportStage('MapEditorOriginal import resolved. Creating instance...');
-    const editor = new module.MapEditorOriginal(this.options);
+  private async loadAndStart(): Promise<EditorInstance> {
+    this.reportStage('MapEditorBootMinimal import started...');
+    const module = await import('./MapEditorBootMinimal');
+    this.reportStage('MapEditorBootMinimal import resolved. Creating instance...');
+    const editor = new module.MapEditorBootMinimal(this.options);
     this.instance = editor;
-
-    this.reportStage('MapEditorOriginal instance created. Mounting DOM...');
+    this.reportStage('MapEditorBootMinimal instance created. Mounting DOM...');
     await editor.start();
-    this.reportStage('MapEditorOriginal started.');
+    this.reportStage('MapEditorBootMinimal started.');
     return editor;
   }
 
@@ -95,15 +85,4 @@ export class MapEditor {
     const panel = document.getElementById('editor-stage-panel');
     if (panel) panel.textContent = message;
   }
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  let timeoutId: number | null = null;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
-  });
-
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timeoutId !== null) window.clearTimeout(timeoutId);
-  });
 }
