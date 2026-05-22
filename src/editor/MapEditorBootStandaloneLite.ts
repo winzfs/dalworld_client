@@ -5,6 +5,7 @@ import type { EditorMapDraft, EditorTilePlacement } from './types';
 type Layer = 'ground' | 'object' | 'collision';
 type Mode = 'paint' | 'erase';
 type Brush = { id: string; name: string; color: number; categoryId: string };
+type ButtonAction = [string, () => void];
 
 export type WorldCellTransition = { dx: -1 | 0 | 1; dy: -1 | 0 | 1; targetX: number; targetY: number };
 export type MapEditorBootStandaloneLiteOptions = {
@@ -59,8 +60,8 @@ export class MapEditorBootStandaloneLite {
     if (this.placement.layer.parent) this.placement.layer.parent.removeChild(this.placement.layer);
   }
 
-  setWorldSize(): void {}
-  async transitionWorldCell(): Promise<void> { this.setStatus('월드맵 전환은 임시 비활성화되어 있습니다.'); }
+  setWorldSize(_width?: number, _height?: number): void {}
+  async transitionWorldCell(_transition?: WorldCellTransition): Promise<void> { this.setStatus('월드맵 전환은 임시 비활성화되어 있습니다.'); }
 
   private buildPanel(): HTMLElement {
     const panel = document.createElement('section');
@@ -68,14 +69,14 @@ export class MapEditorBootStandaloneLite {
     panel.style.cssText = 'position:fixed;left:16px;top:16px;z-index:9999;width:330px;max-height:calc(100vh - 32px);overflow:auto;background:rgba(23,18,15,.96);color:#f7f1df;border:1px solid rgba(255,209,102,.35);border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.35);font:13px system-ui,sans-serif;';
     const header = div('Map Editor', 'padding:12px 14px;font-weight:800;color:#ffe39a;background:rgba(255,209,102,.16);border-radius:16px 16px 0 0;');
     const body = div('', 'padding:12px;display:grid;gap:12px;');
-    body.append(section('Brush', this.buttonGrid(BRUSHES.map((brush) => [brush.name, () => { this.brush = brush; this.setStatus(`Brush: ${brush.name}`); }]))));
-    body.append(section('Layer', this.buttonGrid((['ground', 'object', 'collision'] as Layer[]).map((layer) => [layer, () => { this.layer = layer; this.setStatus(`Layer: ${layer}`); }]))));
-    body.append(section('Mode', this.buttonGrid((['paint', 'erase'] as Mode[]).map((mode) => [mode, () => { this.mode = mode; this.setStatus(`Mode: ${mode}`); }]))));
+    body.append(section('Brush', this.buttonGrid(BRUSHES.map((brush) => action(brush.name, () => { this.brush = brush; this.setStatus(`Brush: ${brush.name}`); })))));
+    body.append(section('Layer', this.buttonGrid((['ground', 'object', 'collision'] as Layer[]).map((layer) => action(layer, () => { this.layer = layer; this.setStatus(`Layer: ${layer}`); })))));
+    body.append(section('Mode', this.buttonGrid((['paint', 'erase'] as Mode[]).map((mode) => action(mode, () => { this.mode = mode; this.setStatus(`Mode: ${mode}`); })))));
     body.append(section('Actions', this.buttonGrid([
-      ['Save', () => this.save()],
-      ['Load', () => this.load()],
-      ['Export', () => this.exportJson()],
-      ['Clear', () => this.clear()],
+      action('Save', () => this.save()),
+      action('Load', () => this.load()),
+      action('Export', () => this.exportJson()),
+      action('Clear', () => this.clear()),
     ])));
     this.status = div('', 'padding:10px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(0,0,0,.25);white-space:pre-wrap;line-height:1.4;');
     body.append(this.status);
@@ -83,7 +84,7 @@ export class MapEditorBootStandaloneLite {
     return panel;
   }
 
-  private buttonGrid(items: Array<[string, () => void]>): HTMLElement {
+  private buttonGrid(items: ButtonAction[]): HTMLElement {
     const wrap = div('', 'display:grid;grid-template-columns:repeat(3,1fr);gap:6px;');
     for (const [text, handler] of items) {
       const button = document.createElement('button');
@@ -171,6 +172,7 @@ function createPlacementStore(name: string, tileSize: number) {
   };
 }
 
+function action(text: string, handler: () => void): ButtonAction { return [text, handler]; }
 function section(title: string, child: HTMLElement): HTMLElement { const wrap = div('', 'display:grid;gap:6px;'); wrap.append(div(title, 'font-weight:800;color:#ffe39a;'), child); return wrap; }
 function div(text: string, style: string): HTMLDivElement { const el = document.createElement('div'); el.textContent = text; el.style.cssText = style; return el; }
 function isUi(target: EventTarget | null): boolean { return target instanceof Element && Boolean(target.closest('.map-editor-panel')); }
