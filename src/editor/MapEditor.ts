@@ -23,7 +23,7 @@ export type WorldCellTransition = {
 
 type OriginalEditor = {
   readonly placement: { readonly mapDraft: EditorMapDraft };
-  start(): void;
+  start(): void | Promise<void>;
   stop(): void;
   setWorldSize(width: number, height: number): void;
   transitionWorldCell(transition: WorldCellTransition): Promise<void>;
@@ -85,7 +85,7 @@ export class MapEditor {
     this.instance = editor;
 
     this.reportStage('MapEditorOriginal instance created. Mounting DOM...');
-    editor.start();
+    await editor.start();
     this.reportStage('MapEditorOriginal started.');
     return editor;
   }
