@@ -4,7 +4,6 @@ import { InputController } from '../game/InputController';
 import type { WorldInfo } from '../protocol/messages';
 import { EditorCameraSystem } from './EditorCameraSystem';
 import { EditorFallbackPanel } from './EditorFallbackPanel';
-import type { EditorGridOverlay } from './EditorGridOverlay';
 import type { EditorState } from './EditorState';
 import type { TilesetPanel } from './TilesetPanel';
 import type { TilePlacementSystem } from './TilePlacementSystem';
@@ -24,10 +23,6 @@ type RuntimeModules = {
     state: EditorState,
     options: { tileSize: number; mapName: string },
   ) => TilePlacementSystem;
-  EditorGridOverlay: new (
-    state: EditorState,
-    options: { width: number; height: number },
-  ) => EditorGridOverlay;
   TilesetPanel: new (
     state: EditorState,
     options: {
@@ -103,14 +98,12 @@ export class EditorApp {
       const { EditorState } = await loadEditorModule('EditorState', () => import('./EditorState'), status);
       const { TilesetPanel } = await loadEditorModule('TilesetPanel', () => import('./TilesetPanel'), status);
       const { TilePlacementSystem } = await loadEditorModule('TilePlacementSystem', () => import('./TilePlacementSystem'), status);
-      const { EditorGridOverlay } = await loadEditorModule('EditorGridOverlay', () => import('./EditorGridOverlay'), status);
 
       this.editorRuntime = this.createInlineLightweightRuntime(
         {
           EditorState,
           TilesetPanel,
           TilePlacementSystem,
-          EditorGridOverlay,
         },
         status,
       );
@@ -134,10 +127,6 @@ export class EditorApp {
       tileSize: 32,
       mapName: 'dalworld-map-lightweight',
     });
-    const gridOverlay = new modules.EditorGridOverlay(state, {
-      width: DEFAULT_WORLD.width,
-      height: DEFAULT_WORLD.height,
-    });
     const panel = new modules.TilesetPanel(state, {
       onSave: () => status('경량 모드에서는 아직 서버 저장을 지원하지 않습니다. Export를 사용해 주세요.'),
       onLoad: () => status('경량 모드에서는 아직 불러오기를 지원하지 않습니다.'),
@@ -159,7 +148,6 @@ export class EditorApp {
       setMonsterSpawnRules: () => undefined,
     });
 
-    this.world.addChild(gridOverlay.layer);
     this.world.addChild(placement.layer);
     panel.mount(document.body);
     this.attachPaintingHandlers(state, placement);
