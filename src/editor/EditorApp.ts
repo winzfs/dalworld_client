@@ -8,12 +8,10 @@ import { EditorFallbackPanel } from './EditorFallbackPanel';
 import type { EditorState } from './EditorState';
 import type { TilePlacementSystem } from './TilePlacementSystem';
 import type {
-  EditorLayerId,
   EditorMapDraft,
   EditorTilePlacement,
   EditorTilesetAsset,
   EditorTilesetCategory,
-  EditorToolMode,
   EditorWorldMapDraft,
   EditorWorldSave,
 } from './types';
@@ -30,10 +28,7 @@ type LightweightRuntime = {
 
 type RuntimeModules = {
   EditorState: new () => EditorState;
-  TilePlacementSystem: new (
-    state: EditorState,
-    options: { tileSize: number; mapName: string },
-  ) => TilePlacementSystem;
+  TilePlacementSystem: new (state: EditorState, options: { tileSize: number; mapName: string }) => TilePlacementSystem;
 };
 
 export class EditorApp {
@@ -94,13 +89,7 @@ export class EditorApp {
       const { EditorState } = await loadEditorModule('EditorState', () => import('./EditorState'), status);
       const { TilePlacementSystem } = await loadEditorModule('TilePlacementSystem', () => import('./TilePlacementSystem'), status);
 
-      this.editorRuntime = this.createInlineLightweightRuntime(
-        {
-          EditorState,
-          TilePlacementSystem,
-        },
-        status,
-      );
+      this.editorRuntime = this.createInlineLightweightRuntime({ EditorState, TilePlacementSystem }, status);
 
       this.fallbackPanel?.element.remove();
       this.fallbackPanel = null;
@@ -123,11 +112,7 @@ export class EditorApp {
     });
 
     this.world.addChild(placement.layer);
-    mountMinimalEditorPanel({
-      state,
-      placement,
-      status,
-    });
+    mountMinimalEditorPanel({ state, placement, status });
     this.attachPaintingHandlers(state, placement);
     status('최소 에디터 준비 완료. 기본 타일을 맵에 터치/드래그해서 배치할 수 있습니다.');
 
@@ -215,22 +200,14 @@ export class EditorApp {
 
   private drawBackground(world: WorldInfo): void {
     this.background.clear();
-    this.background
-      .rect(0, 0, world.width, world.height)
-      .fill({ color: 0x1d2b34 });
+    this.background.rect(0, 0, world.width, world.height).fill({ color: 0x1d2b34 });
 
     const gridSize = 128;
     for (let x = 0; x <= world.width; x += gridSize) {
-      this.background
-        .moveTo(x, 0)
-        .lineTo(x, world.height)
-        .stroke({ width: 1, color: 0x2d3f4f, alpha: 0.28 });
+      this.background.moveTo(x, 0).lineTo(x, world.height).stroke({ width: 1, color: 0x2d3f4f, alpha: 0.28 });
     }
     for (let y = 0; y <= world.height; y += gridSize) {
-      this.background
-        .moveTo(0, y)
-        .lineTo(world.width, y)
-        .stroke({ width: 1, color: 0x2d3f4f, alpha: 0.28 });
+      this.background.moveTo(0, y).lineTo(world.width, y).stroke({ width: 1, color: 0x2d3f4f, alpha: 0.28 });
     }
   }
 }
@@ -241,6 +218,7 @@ function mountMinimalEditorPanel(options: {
   status: (message: string) => void;
 }): void {
   document.querySelectorAll('.editor-fallback-panel').forEach((element) => element.remove());
+
   const panel = document.createElement('div');
   panel.className = 'map-editor-panel minimal-editor-panel';
   panel.style.left = '20px';
@@ -264,45 +242,32 @@ function mountMinimalEditorPanel(options: {
   const stateSummary = document.createElement('div');
   stateSummary.style.cssText = 'padding:8px 9px;border:1px solid rgba(85,214,190,.35);border-radius:10px;background:rgba(85,214,190,.08);color:#dffaf5;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;';
 
-  const toolActions = document.createElement('div');
-  toolActions.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;';
+  const toolActions = createButtonGrid(2);
   const paintButton = createPanelButton('페인트 모드', () => options.state.setMode('paint'));
   const eraseButton = createPanelButton('삭제 모드', () => options.state.setMode('erase'));
   toolActions.append(paintButton, eraseButton);
 
-  const layerActions = document.createElement('div');
-  layerActions.style.cssText = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;';
-  layerActions.append(
-    createPanelButton('Ground', () => options.state.setLayer('ground')),
-    createPanelButton('Object', () => options.state.setLayer('object')),
-    createPanelButton('Collision', () => options.state.setLayer('collision')),
-  );
+  const layerActions = createButtonGrid(3);
+  const groundLayerButton = createPanelButton('Ground', () => options.state.setLayer('ground'));
+  const objectLayerButton = createPanelButton('Object', () => options.state.setLayer('object'));
+  const collisionLayerButton = createPanelButton('Collision', () => options.state.setLayer('collision'));
+  layerActions.append(groundLayerButton, objectLayerButton, collisionLayerButton);
 
-  const brushActions = document.createElement('div');
-  brushActions.style.cssText = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;';
-  brushActions.append(
-    createPanelButton('Scale -', () => options.state.decreaseBrushScale()),
-    createPanelButton('Scale +', () => options.state.increaseBrushScale()),
-    createPanelButton('검정 투명', () => options.state.toggleTransparentBlack()),
-  );
+  const brushActions = createButtonGrid(3);
+  const scaleDownButton = createPanelButton('Scale -', () => options.state.decreaseBrushScale());
+  const scaleUpButton = createPanelButton('Scale +', () => options.state.increaseBrushScale());
+  const transparentBlackButton = createPanelButton('검정 투명', () => options.state.toggleTransparentBlack());
+  brushActions.append(scaleDownButton, scaleUpButton, transparentBlackButton);
 
-  const gridActions = document.createElement('div');
-  gridActions.style.cssText = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;';
-  gridActions.append(
-    createPanelButton('Grid 16', () => options.state.setGridSize(16)),
-    createPanelButton('Grid 32', () => options.state.setGridSize(32)),
-    createPanelButton('Grid 64', () => options.state.setGridSize(64)),
-  );
+  const gridActions = createButtonGrid(3);
+  const grid16Button = createPanelButton('Grid 16', () => options.state.setGridSize(16));
+  const grid32Button = createPanelButton('Grid 32', () => options.state.setGridSize(32));
+  const grid64Button = createPanelButton('Grid 64', () => options.state.setGridSize(64));
+  gridActions.append(grid16Button, grid32Button, grid64Button);
 
-  const actions = document.createElement('div');
-  actions.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;';
-
-  const grassButton = createPanelButton('잔디 선택', () => {
-    options.state.selectAsset(createFallbackAsset('grass', 0x527a3a));
-  });
-  const dirtButton = createPanelButton('흙 선택', () => {
-    options.state.selectAsset(createFallbackAsset('dirt', 0x8a6a3d));
-  });
+  const actions = createButtonGrid(2);
+  const grassButton = createPanelButton('잔디 선택', () => options.state.selectAsset(createFallbackAsset('grass', 0x527a3a)));
+  const dirtButton = createPanelButton('흙 선택', () => options.state.selectAsset(createFallbackAsset('dirt', 0x8a6a3d)));
   const fillButton = createPanelButton('전체 채우기', () => {
     void options.placement.fillAll({ width: DEFAULT_WORLD.width, height: DEFAULT_WORLD.height });
   });
@@ -332,21 +297,20 @@ function mountMinimalEditorPanel(options: {
     const sourceRectText = sourceRect ? ` / rect ${sourceRect.width}x${sourceRect.height}` : '';
     selected.textContent = `선택: ${assetName}${sourceRectText}`;
     stateSummary.textContent = `mode=${options.state.mode} layer=${options.state.activeLayer} grid=${options.state.gridSize} scale=${options.state.brushScale} transparentBlack=${options.state.transparentBlack ? 'on' : 'off'}`;
+
     setPressed(paintButton, options.state.mode === 'paint');
     setPressed(eraseButton, options.state.mode === 'erase');
+    setPressed(groundLayerButton, options.state.activeLayer === 'ground');
+    setPressed(objectLayerButton, options.state.activeLayer === 'object');
+    setPressed(collisionLayerButton, options.state.activeLayer === 'collision');
+    setPressed(grid16Button, options.state.gridSize === 16);
+    setPressed(grid32Button, options.state.gridSize === 32);
+    setPressed(grid64Button, options.state.gridSize === 64);
+    setPressed(transparentBlackButton, options.state.transparentBlack);
   };
   options.state.subscribe(syncSummary);
 
-  actions.append(
-    grassButton,
-    dirtButton,
-    fillButton,
-    clearButton,
-    saveButton,
-    loadButton,
-    exportButton,
-    loadTilesetsButton,
-  );
+  actions.append(grassButton, dirtButton, fillButton, clearButton, saveButton, loadButton, exportButton, loadTilesetsButton);
   body.append(note, selected, stateSummary, toolActions, layerActions, brushActions, gridActions, actions, manifestContainer);
   panel.append(header, body);
   document.body.appendChild(panel);
@@ -402,13 +366,11 @@ async function loadMinimalEditorFromServer(placement: TilePlacementSystem, statu
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-store' },
     });
-    if (!response.ok) {
-      throw new Error(`GET /maps/default failed: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`GET /maps/default failed: ${response.status}`);
+
     const map = await response.json() as GameWorldMap | null;
-    if (!map) {
-      throw new Error('서버에 저장된 맵이 없습니다.');
-    }
+    if (!map) throw new Error('서버에 저장된 맵이 없습니다.');
+
     const draft = createDraftFromServerMap(map);
     await placement.replaceDraft(draft);
     status(`서버 불러오기 완료. placements=${draft.placements.length}`);
@@ -436,10 +398,7 @@ function createSingleCellWorldSave(draft: EditorMapDraft): EditorWorldSave {
       {
         gridX: worldMap.current.gridX,
         gridY: worldMap.current.gridY,
-        draft: {
-          ...draft,
-          worldMap,
-        },
+        draft: { ...draft, worldMap },
       },
     ],
   };
@@ -504,9 +463,7 @@ function renderTilesetCategories(categories: EditorTilesetCategory[], options: {
     title.textContent = category.name;
     title.style.color = '#ffe4a3';
 
-    const grid = document.createElement('div');
-    grid.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;';
-
+    const grid = createButtonGrid(2);
     for (const asset of category.assets) {
       const button = createPanelButton(asset.name, () => {
         options.state.selectAsset(asset);
@@ -519,6 +476,12 @@ function renderTilesetCategories(categories: EditorTilesetCategory[], options: {
     section.append(title, grid);
     options.container.appendChild(section);
   }
+}
+
+function createButtonGrid(columns: number): HTMLDivElement {
+  const grid = document.createElement('div');
+  grid.style.cssText = `display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));gap:8px;`;
+  return grid;
 }
 
 function createPanelButton(label: string, onClick: () => void): HTMLButtonElement {
@@ -578,11 +541,7 @@ function createEditorStagePanel(): (message: string) => void {
   };
 }
 
-async function loadEditorModule<T>(
-  name: string,
-  loader: () => Promise<T>,
-  status: (message: string) => void,
-): Promise<T> {
+async function loadEditorModule<T>(name: string, loader: () => Promise<T>, status: (message: string) => void): Promise<T> {
   let timeoutId: number | null = null;
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = window.setTimeout(() => {
