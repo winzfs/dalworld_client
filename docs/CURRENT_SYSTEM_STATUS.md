@@ -1,6 +1,6 @@
 # DalWorld Client Current System Status
 
-Last updated: 2026-05-21
+Last updated: 2026-05-22
 
 이 문서는 현재 클라이언트 구현 상태를 빠르게 파악하기 위한 기준 문서다.
 AI 작업자는 기능 추가나 수정 전에 이 문서를 확인하고, 실제 코드와 차이가 있으면 문서를 함께 갱신한다.
@@ -71,7 +71,7 @@ DalWorld는 **팰월드, 마인크래프트, 테라리아, 원스휴먼 계열�
 
 - Pixi.js v8 Application 초기화
 - 월드 Container 기반 렌더링
-- WebSocket 네트워크 연결
+- WebSocket 연결과 자동 재연결
 - 서버 welcome 처리
 - 서버 snapshot 처리
 - 플레이어 렌더링
@@ -87,14 +87,12 @@ DalWorld는 **팰월드, 마인크래프트, 테라리아, 원스휴먼 계열�
 - 월드맵 로드와 렌더링
 - 런타임 미니맵
 - 런타임 셀 전환 구조
-- `?editor=1` 맵 에디터 모드
-- 에디터 카메라
-- 에디터 미니맵
-- 에디터 Tiles 탭 맵 저장: 셀/manifest 전용 저장
-- 에디터 Monsters 탭 저장: `/maps/default/monsters` 전용 저장
-- 에디터 Items 탭: 아이템 편집 UI와 `/maps/default/items` 전용 저장
-- 아이템 편집 필드: 이름, 아이콘, 설명, 스택, 최대 스택, 카테고리별 기능값
-- 런타임 `itemOverrides` 적용: 인벤토리/제작 UI의 아이템 정의 조회
+- `?editor=1` / `/editor` / `/editor.html` 맵 에디터 모드
+- 모바일 안정화용 최소 맵 에디터 부팅 경로
+- 최소 맵 에디터 fallback 잔디/흙 타일 선택
+- 최소 맵 에디터 터치/드래그 타일 배치
+- 최소 맵 에디터 전체 채우기/지우기/JSON Export
+- 최소 맵 에디터의 `tilesetManifest` 지연 로드와 실제 에셋 선택/배치
 - 건설 모드 상태
 - 건설 그리드 오버레이
 - 건설 고스트 미리보기
@@ -122,6 +120,10 @@ DalWorld는 **팰월드, 마인크래프트, 테라리아, 원스휴먼 계열�
 
 다음 기능은 연결되어 있으나 추가 검증이 필요하다.
 
+- 최소 맵 에디터의 JSON Export 결과를 정식 서버 저장 포맷과 맞추기
+- 최소 맵 에디터에서 서버 저장/불러오기 복구
+- 최소 맵 에디터의 실제 tilesetManifest 선택 UI 정리
+- 정식 MapEditor/TilesetPanel/EditorMinimap/EditorGridOverlay 기능을 작은 지연 로드 단위로 복구
 - 탭별 에디터 저장 UX 실기기 검증
 - Items 탭의 카테고리별 필드 전체 서버 판정 반영 범위 확장
 - 건설물과 플레이어 충돌의 클라이언트 예측 정확도
@@ -165,6 +167,7 @@ DalWorld는 **팰월드, 마인크래프트, 테라리아, 원스휴먼 계열�
 
 - `src/main.ts`
 - `src/game/GameApp.ts`
+- `src/editor/EditorApp.ts`
 - `src/net/network.ts`
 - `src/protocol/messages.ts`
 
@@ -179,6 +182,8 @@ DalWorld는 **팰월드, 마인크래프트, 테라리아, 원스휴먼 계열�
 - HUD/UI: `src/ui/*`
 - 맵 렌더링: `src/render/GameWorldMapRenderer.ts`
 - 맵 에디터: `src/editor/*`
+- 모바일 안정화용 최소 맵 에디터 부팅: `src/editor/EditorApp.ts`
+- 맵 에디터 부팅 안정화 문서: `docs/map-editor-boot-stability.md`
 - 에디터 탭별 서버 저장 보조: `src/editor/EditorTabServerSaves.ts`
 - 에디터 아이템 override 저장소: `src/editor/ItemEditorStorage.ts`
 - 월드맵 업로드: `src/worldMap/uploadWorldMap.ts`
@@ -197,6 +202,27 @@ DalWorld는 **팰월드, 마인크래프트, 테라리아, 원스휴먼 계열�
 `GameApp.ts`는 현재 많은 시스템을 조립하고, 건설 입력과 에디터 분기까지 포함한다.
 새 기능을 추가할 때는 `GameApp.ts`에 직접 로직을 늘리기보다 별도 시스템으로 분리하는 것을 우선한다.
 현재 작업대/제작 건물 기능은 `src/game/installStationClientFeature.ts`로 분리되어 있으며, `GameApp`은 건설 배치 진입을 위한 public entrypoint만 제공한다.
+
+### 맵 에디터 모바일 부팅 안정성
+
+모바일 Chrome/Android에서 맵 에디터가 `MapEditor import started...`, `TilesetPanel import started...` 같은 상태에서 멈췄던 문제가 있었다.
+현재 `/editor`는 안정화를 위해 `EditorState`, `TilePlacementSystem`만 필수 import하고, 최소 DOM 패널은 `EditorApp.ts` 내부에서 직접 구성한다.
+
+부팅 직후 필수 경로에 다시 넣으면 안 되는 모듈:
+
+```txt
+MapEditor
+EditorMinimap
+EditorGridOverlay
+TilesetPanel
+LightweightEditorRuntime
+createLightweightEditorRuntime
+WorldMapPanel
+TilePickerWindow
+EditorTabServerSaves
+```
+
+맵 에디터 기능을 복구할 때는 반드시 `docs/map-editor-boot-stability.md`를 먼저 확인하고, 기능별 지연 로드 방식으로 붙인다.
 
 ### 장르 방향성 유지
 
@@ -245,20 +271,25 @@ Items 탭은 탭 내부의 `서버 저장` 버튼으로 아이템 설정만 서�
 
 ## 8. 다음 우선순위 제안
 
-1. 타입체크/빌드 오류 수정
-2. 탭별 맵/몬스터/아이템 저장 UX 실기기 검증
-3. 제작 UI 전체 레시피/티어/카테고리 필터 UX 실기기 검증
-4. 배치된 제작 건물별 전용 제작 메뉴/레시피 제한
-5. 건설 실패 UX 정리
-6. GameApp 책임 추가 분리
-7. 전투 입력과 서버 이벤트 반영 구조 추가
-8. 모바일 건설/제작 건물 상호작용 개선
-9. 펫/몬스터 수집 UI 설계
+1. 최소 맵 에디터 서버 저장/불러오기 복구
+2. 최소 맵 에디터 실제 타일셋 UI 정리
+3. 맵 에디터 고급 기능을 지연 로드 단위로 복구
+4. 타입체크/빌드 오류 수정
+5. 탭별 맵/몬스터/아이템 저장 UX 실기기 검증
+6. 제작 UI 전체 레시피/티어/카테고리 필터 UX 실기기 검증
+7. 배치된 제작 건물별 전용 제작 메뉴/레시피 제한
+8. 건설 실패 UX 정리
+9. GameApp 책임 추가 분리
+10. 전투 입력과 서버 이벤트 반영 구조 추가
+11. 모바일 건설/제작 건물 상호작용 개선
+12. 펫/몬스터 수집 UI 설계
 
 ## 9. 작업 체크리스트
 
 - [ ] 현재 기능 상태를 확인했는가?
 - [ ] 게임 방향성이 생존/크래프팅/건설/탐험/성장 루프와 맞는가?
+- [ ] 맵 에디터 작업 시 `docs/map-editor-boot-stability.md`를 확인했는가?
+- [ ] 맵 에디터 부팅 경로에 무거운 모듈을 다시 추가하지 않았는가?
 - [ ] 제작 UI가 서버 확정 전 상태를 임의로 확정하지 않는가?
 - [ ] 아이템/레시피 변경 시 서버와 클라이언트를 함께 수정했는가?
 - [ ] 기존 기능을 덮어쓰지 않았는가?
