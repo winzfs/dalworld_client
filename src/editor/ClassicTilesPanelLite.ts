@@ -13,5 +13,21 @@ type Options = {
 };
 
 export function mountClassicTilesPanelLite(options: Options): void {
-  options.status('기존 UI 패널 열기 클릭 확인 완료. 패널 본문은 모바일 멈춤 원인 분리를 위해 임시 비활성화됨.');
+  const panel = document.createElement('div');
+  panel.className = 'map-editor-panel staged-classic-editor-panel';
+  panel.style.left = '20px';
+  panel.style.top = '20px';
+  panel.style.zIndex = '2147483646';
+
+  const header = document.createElement('div');
+  header.className = 'map-editor-header';
+  header.textContent = 'Map Editor';
+
+  const note = document.createElement('div');
+  note.className = 'map-editor-empty';
+  note.textContent = '패널 껍데기 표시 완료';
+
+  panel.append(header, note);
+  document.body.appendChild(panel);
+  options.status('기존 UI 패널 껍데기 표시 완료.');
 }
