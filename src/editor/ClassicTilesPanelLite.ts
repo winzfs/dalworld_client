@@ -48,6 +48,7 @@ type TilePickerWindowInstance = {
 
 type WorldMapGridInstance = {
   readonly current: { gridX: number; gridY: number };
+  readonly cells: Array<{ gridX: number; gridY: number }>;
   selectCell(gridX: number, gridY: number): void;
   deleteCell(gridX: number, gridY: number): void;
 };
@@ -161,6 +162,11 @@ async function switchWorldCell(gridX: number, gridY: number, options: Options): 
   worldMapGrid.selectCell(gridX, gridY);
   const draft = await worldCellStore.switchTo(gridX, gridY);
   options.status(`월드맵 셀 전환 완료: ${gridX}, ${gridY} / placements=${draft.placements.length}`);
+}
+
+function syncWorldCellsBeforeSnapshot(): void {
+  if (!worldCellStore || !worldMapGrid) return;
+  worldCellStore.ensureCells(worldMapGrid.cells);
 }
 
 function createLazyCategoryControls(options: Options, assetContainer: HTMLElement): HTMLElement {
@@ -319,7 +325,9 @@ function createActionControls(options: Options): HTMLElement {
         options.onSave();
         return;
       }
+      syncWorldCellsBeforeSnapshot();
       const world = worldCellStore.snapshotWorldSave(DEFAULT_MAP_NAME);
+      options.status(`전체 월드 저장 준비. cells=${world.cells.length}, coords=${world.cells.map((cell) => `${cell.gridX},${cell.gridY}`).join(' | ')}`);
       void import('./EditorWorldSaveActions')
         .then(({ saveEditorWorldSaveToServer }) => saveEditorWorldSaveToServer(world, options.status))
         .catch((error: unknown) => options.status(`전체 월드 저장 실패: ${formatErrorMessage(error)}`));
@@ -342,6 +350,7 @@ function createActionControls(options: Options): HTMLElement {
         options.onExport();
         return;
       }
+      syncWorldCellsBeforeSnapshot();
       const world = worldCellStore.snapshotWorldSave(DEFAULT_MAP_NAME);
       void import('./EditorWorldSaveActions')
         .then(({ exportEditorWorldSaveJson }) => exportEditorWorldSaveJson(world))
