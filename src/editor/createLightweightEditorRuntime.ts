@@ -1,33 +1,22 @@
 import type { Application, Container } from 'pixi.js';
+import type { EditorGridOverlay } from './EditorGridOverlay';
+import type { EditorState } from './EditorState';
+import type { TilesetPanel } from './TilesetPanel';
+import type { TilePlacementSystem } from './TilePlacementSystem';
 import type { EditorMapDraft, EditorTilesetAsset } from './types';
 
-type EditorStateLike = {
-  gridSize: number;
-  activeLayer: string;
-  selectAsset: (asset: EditorTilesetAsset) => void;
-};
-
-type TilePlacementSystemLike = {
-  layer: Container;
-  mapDraft: EditorMapDraft;
-  placeAt: (worldX: number, worldY: number) => Promise<void>;
-  fillAll: (options: { width: number; height: number }) => Promise<void>;
-  fillRandom: (options: { width: number; height: number; chancePercent: number }) => Promise<void>;
-  clear: () => void;
-};
-
 type RuntimeModules = {
-  EditorState: new () => EditorStateLike;
+  EditorState: new () => EditorState;
   TilePlacementSystem: new (
-    state: EditorStateLike,
+    state: EditorState,
     options: { tileSize: number; mapName: string },
-  ) => TilePlacementSystemLike;
+  ) => TilePlacementSystem;
   EditorGridOverlay: new (
-    state: EditorStateLike,
+    state: EditorState,
     options: { width: number; height: number },
-  ) => { layer: Container };
+  ) => EditorGridOverlay;
   TilesetPanel: new (
-    state: EditorStateLike,
+    state: EditorState,
     options: {
       onSave: () => void;
       onLoad: () => void;
@@ -40,7 +29,7 @@ type RuntimeModules = {
       getMonsterSpawnRules: () => unknown[];
       setMonsterSpawnRules: (rules: unknown[]) => void;
     },
-  ) => { mount: (parent: HTMLElement) => void };
+  ) => TilesetPanel;
 };
 
 export type LightweightRuntimeOptions = {
@@ -55,7 +44,7 @@ export type LightweightRuntimeOptions = {
 };
 
 export type LightweightRuntime = {
-  placement: TilePlacementSystemLike;
+  placement: TilePlacementSystem;
   transitionWorldCell: () => Promise<void>;
 };
 
@@ -101,8 +90,8 @@ export function createLightweightEditorRuntime(options: LightweightRuntimeOption
 function attachPaintingHandlers(options: {
   app: Application;
   world: Container;
-  state: EditorStateLike;
-  placement: TilePlacementSystemLike;
+  state: EditorState;
+  placement: TilePlacementSystem;
 }): void {
   let paintingPointerId: number | null = null;
   let lastPaintKey: string | null = null;
