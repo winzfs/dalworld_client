@@ -1,5 +1,20 @@
-import type { EditorMapDraft, EditorWorldSave } from './types';
+import type { EditorMapDraft, EditorTilePlacement, EditorWorldSave } from './types';
 import type { TilePlacementSystem } from './TilePlacementSystem';
+
+type ServerWorldPlacement = EditorTilePlacement;
+type ServerWorldMap = {
+  version: 1;
+  name: string;
+  tileSize: number;
+  cellSize: number;
+  cells: Array<{
+    gridX: number;
+    gridY: number;
+    placements: ServerWorldPlacement[];
+  }>;
+  monsterSpawnRules?: unknown;
+  itemOverrides?: unknown;
+};
 
 export type WorldCellDraftStoreOptions = {
   placement: TilePlacementSystem;
@@ -33,6 +48,48 @@ export class WorldCellDraftStore {
     this.drafts.set(nextKey, nextDraft);
     await this.options.placement.replaceDraft(nextDraft);
     return nextDraft;
+  }
+
+  async loadFromServerMap(map: ServerWorldMap): Promise<EditorMapDraft> {
+    this.drafts.clear();
+
+    const worldMap = {
+      version: 1 as const,
+      cellSize: map.cellSize || this.options.cellSize || 3000,
+      current: { gridX: map.cells[0]?.gridX ?? 0, gridY: map.cells[0]?.gridY ?? 0 },
+      cells: map.cells.map((cell) => ({
+        id: `cell-${cell.gridX}-${cell.gridY}`,
+        name: `Cell ${cell.gridX},${cell.gridY}`,
+        gridX: cell.gridX,
+        gridY: cell.gridY,
+      })),
+      monsterSpawnRules: map.monsterSpawnRules as never,
+      itemOverrides: map.itemOverrides as never,
+    };
+
+    for (const cell of map.cells) {
+      this.drafts.set(cellKey(cell.gridX, cell.gridY), {
+        version: 1,
+        name: `${map.name || 'Map'} ${cell.gridX},${cell.gridY}`,
+        tileSize: map.tileSize || this.options.defaultTileSize || 32,
+        worldMap,
+        placements: cell.placements.map((placement) => ({
+          ...placement,
+          sourceRect: placement.sourceRect ? { ...placement.sourceRect } : undefined,
+          gameplay: placement.gameplay ? { ...placement.gameplay } : undefined,
+        })),
+      });
+    }
+
+    if (this.drafts.size === 0) {
+      this.drafts.set(cellKey(0, 0), createEmptyCellDraft(0, 0, map.tileSize || this.options.defaultTileSize || 32));
+    }
+
+    const first = map.cells[0] ?? { gridX: 0, gridY: 0 };
+    this.activeKey = cellKey(first.gridX, first.gridY);
+    const draft = this.drafts.get(this.activeKey) ?? createEmptyCellDraft(first.gridX, first.gridY, map.tileSize || 32);
+    await this.options.placement.replaceDraft(draft);
+    return draft;
   }
 
   deleteCell(gridX: number, gridY: number): void {
