@@ -35,7 +35,6 @@ type LoadedModules = {
   TilePickerWindow: new (options: { defaultGridSize: number; onPick: (asset: EditorTilesetAsset, sourceRect: any) => void }) => any;
   WorldMapGrid: new (options: { cellSize: number }) => any;
   WorldMapPanel: new (options: any) => any;
-  EditorGridOverlay: new (state: any, options: { width: number; height: number }) => any;
 };
 
 const DIRECT_SELECT_MAX_SIZE = 96;
@@ -50,7 +49,6 @@ export class MapEditorOriginal {
   private picker: any = null;
   private worldMapGrid: any = null;
   private worldMapPanel: any = null;
-  private gridOverlay: any = null;
   private storage: any = null;
   private readonly uiRoot: HTMLElement;
   private readonly toast: HTMLDivElement;
@@ -88,7 +86,6 @@ export class MapEditorOriginal {
     this.state = new modules.EditorState();
     this.storage = new modules.MapStorage(mapName);
     this.worldMapGrid = new modules.WorldMapGrid({ cellSize: this.worldWidth });
-    this.gridOverlay = new modules.EditorGridOverlay(this.state, { width: this.worldWidth, height: this.worldHeight });
     this.placement = new modules.TilePlacementSystem(this.state, {
       tileSize: this.options.tileSize ?? 32,
       mapName: this.getCellMapName(0, 0),
@@ -130,7 +127,6 @@ export class MapEditorOriginal {
 
     this.enabled = true;
     this.options.world.sortableChildren = true;
-    this.options.world.addChild(this.gridOverlay.layer);
     this.options.world.addChild(this.placement.layer);
     this.panel.mount(this.uiRoot);
     this.picker.mount(this.uiRoot);
@@ -164,14 +160,12 @@ export class MapEditorOriginal {
     this.picker?.element.remove();
     this.worldMapPanel?.element.remove();
     this.toast.remove();
-    if (this.gridOverlay?.layer.parent) this.gridOverlay.layer.parent.removeChild(this.gridOverlay.layer);
     if (this.placement?.layer.parent) this.placement.layer.parent.removeChild(this.placement.layer);
   }
 
   setWorldSize(width: number, height: number): void {
     this.worldWidth = width;
     this.worldHeight = height;
-    this.gridOverlay?.setWorldSize(width, height);
   }
 
   async transitionWorldCell(transition: WorldCellTransition): Promise<void> {
@@ -203,9 +197,7 @@ export class MapEditorOriginal {
     const grid = await import('./WorldMapGrid');
     this.reportStage('MapEditorOriginal loading WorldMapPanel...');
     const worldPanel = await import('./WorldMapPanel');
-    this.reportStage('MapEditorOriginal loading EditorGridOverlay...');
-    const gridOverlay = await import('./EditorGridOverlay');
-    this.reportStage('MapEditorOriginal modules loaded.');
+    this.reportStage('MapEditorOriginal modules loaded. Grid overlay skipped.');
 
     return {
       EditorState: editorState.EditorState,
@@ -217,7 +209,6 @@ export class MapEditorOriginal {
       TilePickerWindow: picker.TilePickerWindow,
       WorldMapGrid: grid.WorldMapGrid,
       WorldMapPanel: worldPanel.WorldMapPanel,
-      EditorGridOverlay: gridOverlay.EditorGridOverlay,
     };
   }
 
