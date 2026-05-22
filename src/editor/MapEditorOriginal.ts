@@ -1,5 +1,5 @@
 import type { Application, Container } from 'pixi.js';
-import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset, EditorWorldSave } from './types';
+import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset, EditorWorldMapDraft, EditorWorldSave } from './types';
 
 export type MapEditorOptions = {
   app: Application;
@@ -33,7 +33,6 @@ type LoadedModules = {
   TilePlacementSystem: new (state: any, options: { tileSize: number; mapName: string }) => any;
   MapStorage: new (mapName: string) => any;
   TilePickerWindow: new (options: { defaultGridSize: number; onPick: (asset: EditorTilesetAsset, sourceRect: any) => void }) => any;
-  WorldMapGrid: new (options: { cellSize: number }) => any;
 };
 
 const DIRECT_SELECT_MAX_SIZE = 96;
@@ -84,7 +83,7 @@ export class MapEditorOriginal {
     const mapName = this.options.mapName ?? 'untitled-map';
     this.state = new modules.EditorState();
     this.storage = new modules.MapStorage(mapName);
-    this.worldMapGrid = new modules.WorldMapGrid({ cellSize: this.worldWidth });
+    this.worldMapGrid = createWorldMapGridFallback(this.worldWidth);
     this.worldMapPanel = createWorldMapPanelFallback(() => {
       this.showToast('월드맵 패널은 부팅 안정화 후 다시 연결합니다.', 'info', 2_500);
     });
@@ -186,9 +185,7 @@ export class MapEditorOriginal {
     const storage = await import('./MapStorage');
     this.reportStage('MapEditorOriginal loading TilePickerWindow...');
     const picker = await import('./TilePickerWindow');
-    this.reportStage('MapEditorOriginal loading WorldMapGrid...');
-    const grid = await import('./WorldMapGrid');
-    this.reportStage('MapEditorOriginal modules loaded. World map panel and grid overlay skipped.');
+    this.reportStage('MapEditorOriginal modules loaded. World map grid, world map panel, and grid overlay skipped.');
 
     return {
       EditorState: editorState.EditorState,
@@ -198,7 +195,6 @@ export class MapEditorOriginal {
       TilePlacementSystem: placement.TilePlacementSystem,
       MapStorage: storage.MapStorage,
       TilePickerWindow: picker.TilePickerWindow,
-      WorldMapGrid: grid.WorldMapGrid,
     };
   }
 
@@ -482,6 +478,32 @@ export class MapEditorOriginal {
     const panel = document.getElementById('editor-stage-panel');
     if (panel) panel.textContent = message;
   }
+}
+
+function createWorldMapGridFallback(cellSize: number): any {
+  const snapshot: EditorWorldMapDraft = {
+    version: 1,
+    cellSize,
+    current: { gridX: 0, gridY: 0 },
+    cells: [{ id: 'cell-0-0', name: 'Cell 0,0', gridX: 0, gridY: 0 }],
+    monsterSpawnRules: [],
+  };
+  return {
+    get current() { return snapshot.current; },
+    get snapshot() { return { ...snapshot, current: { ...snapshot.current }, cells: snapshot.cells.map((cell) => ({ ...cell })), monsterSpawnRules: snapshot.monsterSpawnRules?.map((rule) => ({ ...rule, spec: rule.spec ? { ...rule.spec } : undefined })) }; },
+    get monsterSpawnRules() { return snapshot.monsterSpawnRules ?? []; },
+    setMonsterSpawnRules(rules: any[]) { snapshot.monsterSpawnRules = rules.map((rule) => ({ ...rule, spec: rule.spec ? { ...rule.spec } : undefined })); },
+    selectCell(gridX: number, gridY: number) { snapshot.current = { gridX, gridY }; },
+    deleteCell() { snapshot.current = { gridX: 0, gridY: 0 }; },
+    load(draft: EditorWorldMapDraft | undefined) {
+      if (!draft) return;
+      snapshot.version = draft.version ?? 1;
+      snapshot.cellSize = draft.cellSize ?? cellSize;
+      snapshot.current = draft.current ? { ...draft.current } : { gridX: 0, gridY: 0 };
+      snapshot.cells = draft.cells?.map((cell) => ({ ...cell })) ?? [{ id: 'cell-0-0', name: 'Cell 0,0', gridX: 0, gridY: 0 }];
+      snapshot.monsterSpawnRules = draft.monsterSpawnRules?.map((rule) => ({ ...rule, spec: rule.spec ? { ...rule.spec } : undefined })) ?? [];
+    },
+  };
 }
 
 function createWorldMapPanelFallback(onToggle: () => void): { element: HTMLElement; mount(root: HTMLElement): void; toggle(): void } {
