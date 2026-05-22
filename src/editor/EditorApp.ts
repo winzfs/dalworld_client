@@ -11,7 +11,6 @@ import type {
   EditorMapDraft,
   EditorTilePlacement,
   EditorTilesetAsset,
-  EditorTilesetCategory,
   EditorWorldMapDraft,
   EditorWorldSave,
 } from './types';
@@ -94,8 +93,8 @@ export class EditorApp {
       this.fallbackPanel?.element.remove();
       this.fallbackPanel = null;
       this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
-      status(`Minimal editor ready. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
-      console.log('[EditorBoot] Minimal editor ready.');
+      status(`Safe editor boot ready. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
+      console.log('[EditorBoot] Safe editor boot ready.');
     } catch (error) {
       const message = `Minimal editor failed: ${formatErrorMessage(error)}`;
       this.fallbackPanel?.setStatus(message);
@@ -112,9 +111,9 @@ export class EditorApp {
     });
 
     this.world.addChild(placement.layer);
-    mountMinimalEditorPanel({ state, placement, status });
+    mountSafeBootPanel({ state, placement, status });
     this.attachPaintingHandlers(state, placement);
-    status('최소 에디터 준비 완료. 기본 타일을 맵에 터치/드래그해서 배치할 수 있습니다.');
+    status('안전 부팅 완료. 기존 Map Editor UI를 지연 로드할 수 있습니다.');
 
     return {
       placement,
@@ -212,7 +211,7 @@ export class EditorApp {
   }
 }
 
-function mountMinimalEditorPanel(options: {
+function mountSafeBootPanel(options: {
   state: EditorState;
   placement: TilePlacementSystem;
   status: (message: string) => void;
@@ -227,13 +226,13 @@ function mountMinimalEditorPanel(options: {
 
   const header = document.createElement('div');
   header.className = 'map-editor-header';
-  header.textContent = 'Map Editor - Minimal';
+  header.textContent = 'Map Editor - Safe Boot';
 
   const body = document.createElement('div');
   body.style.cssText = 'padding:12px;display:grid;gap:10px;font-size:12px;line-height:1.45;max-height:min(70vh,620px);overflow:auto;';
 
   const note = document.createElement('div');
-  note.textContent = '모바일 안정화용 최소 에디터입니다. 타일 배치, 서버 저장/불러오기, JSON 내보내기를 지원합니다.';
+  note.textContent = '모바일 안전 부팅 패널입니다. 기존 Map Editor UI는 버튼으로 지연 로드합니다.';
   note.style.color = 'rgba(255,255,255,.78)';
 
   const selected = document.createElement('div');
@@ -253,43 +252,19 @@ function mountMinimalEditorPanel(options: {
   const collisionLayerButton = createPanelButton('Collision', () => options.state.setLayer('collision'));
   layerActions.append(groundLayerButton, objectLayerButton, collisionLayerButton);
 
-  const brushActions = createButtonGrid(3);
-  const scaleDownButton = createPanelButton('Scale -', () => options.state.decreaseBrushScale());
-  const scaleUpButton = createPanelButton('Scale +', () => options.state.increaseBrushScale());
-  const transparentBlackButton = createPanelButton('검정 투명', () => options.state.toggleTransparentBlack());
-  brushActions.append(scaleDownButton, scaleUpButton, transparentBlackButton);
-
-  const gridActions = createButtonGrid(3);
-  const grid16Button = createPanelButton('Grid 16', () => options.state.setGridSize(16));
-  const grid32Button = createPanelButton('Grid 32', () => options.state.setGridSize(32));
-  const grid64Button = createPanelButton('Grid 64', () => options.state.setGridSize(64));
-  gridActions.append(grid16Button, grid32Button, grid64Button);
-
   const actions = createButtonGrid(2);
   const grassButton = createPanelButton('잔디 선택', () => options.state.selectAsset(createFallbackAsset('grass', 0x527a3a)));
   const dirtButton = createPanelButton('흙 선택', () => options.state.selectAsset(createFallbackAsset('dirt', 0x8a6a3d)));
-  const fillButton = createPanelButton('전체 채우기', () => {
-    void options.placement.fillAll({ width: DEFAULT_WORLD.width, height: DEFAULT_WORLD.height });
-  });
-  const clearButton = createPanelButton('지우기', () => options.placement.clear());
   const saveButton = createPanelButton('서버 저장', () => {
     void saveMinimalEditorToServer(options.placement, options.status);
   });
   const loadButton = createPanelButton('서버 불러오기', () => {
     void loadMinimalEditorFromServer(options.placement, options.status);
   });
-  const exportButton = createPanelButton('JSON Export', () => exportJson(options.placement.mapDraft));
-
-  const manifestContainer = document.createElement('div');
-  manifestContainer.style.cssText = 'display:grid;gap:8px;';
-  const loadTilesetsButton = createPanelButton('실제 타일셋 불러오기', () => {
-    void loadTilesetManifestIntoPanel({
-      state: options.state,
-      selected,
-      container: manifestContainer,
-      status: options.status,
-    });
+  const classicUiButton = createPanelButton('기존 에디터 UI 열기', () => {
+    void openClassicEditorUi(options);
   });
+  const exportButton = createPanelButton('JSON Export', () => exportJson(options.placement.mapDraft));
 
   const syncSummary = () => {
     const assetName = options.state.selectedBrush?.asset.name ?? '없음';
@@ -303,39 +278,44 @@ function mountMinimalEditorPanel(options: {
     setPressed(groundLayerButton, options.state.activeLayer === 'ground');
     setPressed(objectLayerButton, options.state.activeLayer === 'object');
     setPressed(collisionLayerButton, options.state.activeLayer === 'collision');
-    setPressed(grid16Button, options.state.gridSize === 16);
-    setPressed(grid32Button, options.state.gridSize === 32);
-    setPressed(grid64Button, options.state.gridSize === 64);
-    setPressed(transparentBlackButton, options.state.transparentBlack);
   };
   options.state.subscribe(syncSummary);
 
-  actions.append(grassButton, dirtButton, fillButton, clearButton, saveButton, loadButton, exportButton, loadTilesetsButton);
-  body.append(note, selected, stateSummary, toolActions, layerActions, brushActions, gridActions, actions, manifestContainer);
+  actions.append(grassButton, dirtButton, saveButton, loadButton, classicUiButton, exportButton);
+  body.append(note, selected, stateSummary, toolActions, layerActions, actions);
   panel.append(header, body);
   document.body.appendChild(panel);
 
   options.state.selectAsset(createFallbackAsset('grass', 0x527a3a));
   syncSummary();
-  options.status('최소 에디터 패널 표시 완료.');
+  options.status('안전 부팅 패널 표시 완료. 기존 UI를 지연 로드할 수 있습니다.');
 }
 
-async function loadTilesetManifestIntoPanel(options: {
+async function openClassicEditorUi(options: {
   state: EditorState;
-  selected: HTMLElement;
-  container: HTMLElement;
+  placement: TilePlacementSystem;
   status: (message: string) => void;
 }): Promise<void> {
-  options.container.textContent = '타일셋 로딩 중...';
   try {
-    options.status('tilesetManifest import started...');
-    const { TILESET_CATEGORIES } = await import('./tilesetManifest');
-    options.status(`tilesetManifest loaded. Categories: ${TILESET_CATEGORIES.length}`);
-    renderTilesetCategories(TILESET_CATEGORIES, options);
+    options.status('기존 Map Editor UI 로딩 중...');
+    const { mountClassicEditorPanelBridge } = await import('./ClassicEditorPanelBridge');
+    mountClassicEditorPanelBridge({
+      state: options.state,
+      placement: options.placement,
+      status: options.status,
+      onSave: () => {
+        void saveMinimalEditorToServer(options.placement, options.status);
+      },
+      onLoad: () => {
+        void loadMinimalEditorFromServer(options.placement, options.status);
+      },
+      onExport: () => exportJson(options.placement.mapDraft),
+      onClear: () => options.placement.clear(),
+    });
   } catch (error) {
-    const message = `타일셋 로딩 실패: ${formatErrorMessage(error)}`;
-    options.container.textContent = message;
+    const message = `기존 UI 로딩 실패: ${formatErrorMessage(error)}`;
     options.status(message);
+    console.warn('[EditorBoot] Classic editor UI load failed.', error);
   }
 }
 
@@ -446,122 +426,6 @@ function convertWorldPlacementToEditorPlacement(placement: WorldMapPlacement): E
     transparentBlack: placement.transparentBlack,
     gameplay: placement.gameplay,
   };
-}
-
-function renderTilesetCategories(categories: EditorTilesetCategory[], options: {
-  state: EditorState;
-  selected: HTMLElement;
-  container: HTMLElement;
-  status: (message: string) => void;
-}): void {
-  options.container.replaceChildren();
-
-  const searchInput = document.createElement('input');
-  searchInput.type = 'search';
-  searchInput.placeholder = '타일셋 검색...';
-  searchInput.autocomplete = 'off';
-  searchInput.style.cssText = [
-    'width:100%',
-    'box-sizing:border-box',
-    'padding:9px 10px',
-    'border:1px solid rgba(255,255,255,.16)',
-    'border-radius:10px',
-    'background:rgba(0,0,0,.28)',
-    'color:#fff',
-    'font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace',
-    'outline:none',
-  ].join(';');
-
-  const resultSummary = document.createElement('div');
-  resultSummary.style.cssText = 'color:rgba(255,255,255,.62);font-size:11px;';
-
-  const list = document.createElement('div');
-  list.style.cssText = 'display:grid;gap:8px;';
-
-  const assetButtons = new Map<string, HTMLButtonElement>();
-
-  const updateAssetSelection = () => {
-    const selectedAssetId = options.state.selectedBrush?.asset.id ?? '';
-    for (const [assetId, button] of assetButtons) {
-      setPressed(button, assetId === selectedAssetId);
-    }
-  };
-
-  const render = () => {
-    assetButtons.clear();
-    list.replaceChildren();
-
-    const query = normalizeSearchQuery(searchInput.value);
-    let visibleCategoryCount = 0;
-    let visibleAssetCount = 0;
-
-    for (const category of categories) {
-      const visibleAssets = category.assets.filter((asset) => matchesAssetSearch(category, asset, query));
-      if (visibleAssets.length === 0) continue;
-
-      visibleCategoryCount += 1;
-      visibleAssetCount += visibleAssets.length;
-
-      const details = document.createElement('details');
-      details.open = query.length > 0 || visibleCategoryCount <= 1;
-      details.style.cssText = 'border-top:1px solid rgba(255,255,255,.1);padding-top:6px;';
-
-      const summary = document.createElement('summary');
-      summary.textContent = `${category.name} (${visibleAssets.length})`;
-      summary.style.cssText = 'cursor:pointer;color:#ffe4a3;font-weight:700;padding:4px 0;';
-
-      const grid = createButtonGrid(2);
-      grid.style.marginTop = '6px';
-
-      for (const asset of visibleAssets) {
-        const button = createPanelButton(asset.name, () => {
-          options.state.selectAsset(asset);
-          options.selected.textContent = `선택: ${category.name} / ${asset.name}`;
-          options.status(`선택됨: ${asset.name}`);
-          updateAssetSelection();
-        });
-        assetButtons.set(asset.id, button);
-        grid.appendChild(button);
-      }
-
-      details.append(summary, grid);
-      list.appendChild(details);
-    }
-
-    resultSummary.textContent = query
-      ? `검색 결과: 카테고리 ${visibleCategoryCount}개 / 에셋 ${visibleAssetCount}개`
-      : `전체: 카테고리 ${categories.length}개 / 에셋 ${categories.reduce((sum, item) => sum + item.assets.length, 0)}개`;
-
-    if (visibleAssetCount === 0) {
-      const empty = document.createElement('div');
-      empty.textContent = '검색 결과가 없습니다.';
-      empty.style.cssText = 'padding:10px;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.7);';
-      list.appendChild(empty);
-    }
-
-    updateAssetSelection();
-  };
-
-  searchInput.addEventListener('input', render);
-  options.state.subscribe(updateAssetSelection);
-
-  options.container.append(searchInput, resultSummary, list);
-  render();
-}
-
-function normalizeSearchQuery(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function matchesAssetSearch(category: EditorTilesetCategory, asset: EditorTilesetAsset, query: string): boolean {
-  if (!query) return true;
-  return (
-    category.name.toLowerCase().includes(query) ||
-    category.id.toLowerCase().includes(query) ||
-    asset.name.toLowerCase().includes(query) ||
-    asset.id.toLowerCase().includes(query) ||
-    asset.categoryId.toLowerCase().includes(query)
-  );
 }
 
 function createButtonGrid(columns: number): HTMLDivElement {
