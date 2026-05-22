@@ -1,6 +1,5 @@
-import { Assets, Container as PixiContainer, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import type { Application, Container } from 'pixi.js';
-import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset, EditorWorldMapDraft, EditorWorldSave } from './types';
+import type { EditorMapDraft, EditorTilesetAsset, EditorWorldMapDraft, EditorWorldSave } from './types';
 
 export type MapEditorBootMinimalOptions = {
   app: Application;
@@ -26,7 +25,9 @@ const DIRECT_SELECT_MAX_SIZE = 96;
 
 export class MapEditorBootMinimal {
   state: any = null;
-  placement: any;
+  placement: any = {
+    mapDraft: { version: 1, name: 'dalworld-map', tileSize: 32, placements: [] },
+  };
 
   private panel: any = null;
   private picker: any = createHiddenWindow('tile-picker-window is-fallback');
@@ -49,7 +50,14 @@ export class MapEditorBootMinimal {
     this.worldHeight = options.worldHeight ?? 3000;
     this.cellSize = options.worldWidth ?? 3000;
     this.worldMap = createWorldMapDraft(this.cellSize);
-    this.placement = createPlacementFallback(null, options.mapName ?? 'dalworld-map', options.tileSize ?? 32, (message) => this.report(message));
+    this.placement = {
+      mapDraft: {
+        version: 1,
+        name: this.mapName,
+        tileSize: options.tileSize ?? 32,
+        placements: [],
+      },
+    };
   }
 
   async start(): Promise<void> {
@@ -61,9 +69,14 @@ export class MapEditorBootMinimal {
     const serverSaves = await import('./EditorTabServerSaves');
     this.report('MapEditorBootMinimal loading TilesetPanelLite...');
     const tilesetPanel = await import('./TilesetPanelLite');
+    this.report('MapEditorBootMinimal loading TilePlacementSystem...');
+    const placementModule = await import('./TilePlacementSystem');
 
     this.state = new editorState.EditorState();
-    this.placement = createPlacementFallback(this.state, this.options.mapName ?? 'dalworld-map', this.options.tileSize ?? 32, (message) => this.report(message));
+    this.placement = new placementModule.TilePlacementSystem(this.state, {
+      tileSize: this.options.tileSize ?? 32,
+      mapName: this.mapName,
+    });
 
     this.panel = new tilesetPanel.TilesetPanelLite(this.state, {
       onSave: () => { void this.save(); },
@@ -91,7 +104,7 @@ export class MapEditorBootMinimal {
     this.uiRoot.appendChild(this.toast);
     this.attachCanvasHandlers();
     void this.loadLocalBackup();
-    this.report('MapEditorBootMinimal DOM mounted with TilesetPanelLite.');
+    this.report('MapEditorBootMinimal DOM mounted with original TilePlacementSystem.');
   }
 
   stop(): void {
@@ -101,7 +114,7 @@ export class MapEditorBootMinimal {
     this.picker.element.remove();
     this.worldMapPanel.element.remove();
     this.toast.remove();
-    if (this.placement?.layer.parent) this.placement.layer.parent.removeChild(this.placement.layer);
+    if (this.placement?.layer?.parent) this.placement.layer.parent.removeChild(this.placement.layer);
     this.detachCanvasHandlers();
   }
 
@@ -320,147 +333,6 @@ export class MapEditorBootMinimal {
   }
 }
 
-function createPlacementFallback(state: any, mapName: string, tileSize: number, report: (message: string) => void): any {
-  const layer = new PixiContainer();
-  layer.label = 'editor-minimal-placement-layer';
-  layer.sortableChildren = true;
-  layer.zIndex = 500;
-  const draft: EditorMapDraft = { version: 1, name: mapName, tileSize, placements: [] };
-  const displays = new Map<string, PixiContainer>();
-
-  const getGridSize = () => state?.gridSize ?? tileSize;
-  const getBrush = (): { asset: EditorTilesetAsset; sourceRect?: { x: number; y: number; width: number; height: number } } | null => {
-    if (state?.selectedBrush?.asset) return state.selectedBrush;
-    if (state?.selectedAsset) return { asset: state.selectedAsset };
-    return null;
-  };
-
-  const redraw = () => {
-    layer.removeChildren();
-    displays.clear();
-    for (const placement of draft.placements) {
-      const display = createDisplay(placement, getGridSize(), report);
-      displays.set(placement.id, display);
-      layer.addChild(display);
-    }
-  };
-
-  const removeAt = (x: number, y: number) => {
-    if (!state) return;
-    const gridSize = getGridSize();
-    const sx = Math.floor(x / gridSize) * gridSize;
-    const sy = Math.floor(y / gridSize) * gridSize;
-    const index = draft.placements.findIndex((p) => p.x === sx && p.y === sy && p.layer === state.activeLayer);
-    if (index >= 0) {
-      draft.placements.splice(index, 1);
-      redraw();
-      report(`Removed placement. count=${draft.placements.length}`);
-    }
-  };
-
-  const placeAt = (x: number, y: number) => {
-    if (!state) return;
-    if (state.mode === 'erase') {
-      removeAt(x, y);
-      return;
-    }
-    if (state.mode === 'picker') return;
-
-    const brush = getBrush();
-    if (!brush) {
-      report('No tile selected. Select a tile first.');
-      return;
-    }
-
-    const asset = brush.asset;
-    const gridSize = getGridSize();
-    const sx = Math.floor(x / gridSize) * gridSize;
-    const sy = Math.floor(y / gridSize) * gridSize;
-    removeAt(sx, sy);
-    const placement: EditorTilePlacement = {
-      id: crypto.randomUUID(),
-      assetId: asset.id,
-      assetUrl: asset.url,
-      categoryId: asset.categoryId,
-      x: sx,
-      y: sy,
-      layer: state.activeLayer,
-      scale: state.brushScale ?? 1,
-      displayWidth: brush.sourceRect?.width ?? asset.tileWidth ?? gridSize,
-      displayHeight: brush.sourceRect?.height ?? asset.tileHeight ?? gridSize,
-      sourceRect: brush.sourceRect ? { ...brush.sourceRect } : undefined,
-      solidColor: asset.solidColor,
-    };
-    draft.placements.push(placement);
-    const display = createDisplay(placement, gridSize, report);
-    displays.set(placement.id, display);
-    layer.addChild(display);
-    report(`Placed ${asset.name} at ${sx},${sy}. count=${draft.placements.length}`);
-  };
-
-  return {
-    layer,
-    get mapDraft() { return { ...draft, placements: draft.placements.map((p) => ({ ...p, sourceRect: p.sourceRect ? { ...p.sourceRect } : undefined })) }; },
-    pickAt() { return null; },
-    async placeAt(x: number, y: number) { placeAt(x, y); },
-    async fillAll(options: { width: number; height: number }) {
-      const gridSize = getGridSize();
-      for (let y = 0; y < options.height; y += gridSize) for (let x = 0; x < options.width; x += gridSize) placeAt(x, y);
-    },
-    async fillRandom(options: { width: number; height: number; chancePercent: number }) {
-      const gridSize = getGridSize();
-      const chance = Math.max(0, Math.min(100, options.chancePercent)) / 100;
-      for (let y = 0; y < options.height; y += gridSize) for (let x = 0; x < options.width; x += gridSize) if (Math.random() < chance) placeAt(x, y);
-    },
-    async loadDraft(next: EditorMapDraft) { draft.name = next.name; draft.tileSize = next.tileSize; draft.worldMap = next.worldMap; draft.placements = next.placements.map((p) => ({ ...p, sourceRect: p.sourceRect ? { ...p.sourceRect } : undefined })); redraw(); },
-    async replaceDraft(next: EditorMapDraft) { await this.loadDraft(next); },
-    clear() { draft.placements.length = 0; redraw(); report('Cleared placements.'); },
-  };
-}
-
-function createDisplay(placement: EditorTilePlacement, gridSize: number, report: (message: string) => void): PixiContainer {
-  const container = new PixiContainer();
-  const width = placement.displayWidth ?? placement.sourceRect?.width ?? gridSize;
-  const height = placement.displayHeight ?? placement.sourceRect?.height ?? gridSize;
-  container.x = placement.x;
-  container.y = placement.y;
-  container.zIndex = placement.layer === 'collision' ? 100 : placement.layer === 'object' ? 10 + placement.y / 1000 : 1;
-
-  const outline = new Graphics();
-  outline.rect(0, 0, width, height).stroke({ color: 0xffffff, alpha: 0.28, width: 1 });
-  container.addChild(outline);
-
-  if (isImageAssetUrl(placement.assetUrl) && placement.solidColor === undefined) {
-    const placeholder = new Graphics();
-    placeholder.rect(0, 0, width, height).fill({ color: 0x22313a, alpha: 0.35 });
-    container.addChildAt(placeholder, 0);
-    void Assets.load(placement.assetUrl)
-      .then((texture) => {
-        if (container.destroyed) return;
-        placeholder.destroy();
-        const spriteTexture = placement.sourceRect
-          ? new Texture({ source: texture.source, frame: new Rectangle(placement.sourceRect.x, placement.sourceRect.y, placement.sourceRect.width, placement.sourceRect.height) })
-          : texture;
-        const sprite = new Sprite(spriteTexture);
-        sprite.width = width;
-        sprite.height = height;
-        sprite.roundPixels = true;
-        container.addChildAt(sprite, 0);
-      })
-      .catch((error) => {
-        console.warn('[MapEditor] Failed to load tile asset.', placement.assetUrl, error);
-        report(`Tile image load failed: ${placement.assetUrl}`);
-      });
-    return container;
-  }
-
-  const fill = new Graphics();
-  const color = placement.solidColor ?? fallbackColor(placement.categoryId);
-  fill.rect(0, 0, width, height).fill({ color, alpha: placement.layer === 'collision' ? 0.42 : 0.92 });
-  container.addChildAt(fill, 0);
-  return container;
-}
-
 async function shouldOpenPicker(asset: EditorTilesetAsset): Promise<boolean> {
   if (asset.tileWidth && asset.tileHeight) return false;
   if (asset.solidColor !== undefined) return false;
@@ -481,14 +353,6 @@ function loadImageSize(url: string): Promise<{ width: number; height: number } |
 
 function isImageAssetUrl(url: string): boolean {
   return !url.startsWith('solid://') && !url.startsWith('editor://');
-}
-
-function fallbackColor(categoryId: string): number {
-  if (categoryId === 'nature') return 0x47b881;
-  if (categoryId === 'buildings') return 0xc69054;
-  if (categoryId === 'monsters') return 0x7bdff2;
-  if (categoryId === 'editor') return 0xef476f;
-  return 0x55d6be;
 }
 
 function createWorldMapDraft(cellSize: number): EditorWorldMapDraft {
