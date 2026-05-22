@@ -55,6 +55,11 @@ export class TilePlacementSystem {
   }
 
   async placeAt(worldX: number, worldY: number): Promise<void> {
+    if (this.state.mode === 'picker') {
+      this.pickBrushAt(worldX, worldY);
+      return;
+    }
+
     if (this.state.mode === 'erase') {
       this.eraseAt(worldX, worldY);
       return;
@@ -127,6 +132,20 @@ export class TilePlacementSystem {
     }
 
     this.displays.clear();
+  }
+
+  private pickBrushAt(worldX: number, worldY: number): void {
+    const picked = this.findTopPlacementAt(worldX, worldY, {
+      excludeEditorBase: true,
+    });
+    if (!picked) return;
+
+    const asset = this.getAssetForPlacement(picked);
+    this.state.setLayer(picked.layer);
+    this.state.setBrush({
+      asset,
+      sourceRect: picked.sourceRect ? { ...picked.sourceRect } : undefined,
+    });
   }
 
   private createPlacementAt(worldX: number, worldY: number): EditorTilePlacement | null {
