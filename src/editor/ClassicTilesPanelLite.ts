@@ -4,6 +4,8 @@ import type { TilePlacementSystem } from './TilePlacementSystem';
 
 const GRID_SIZES = [16, 32, 64] as const;
 const BLACK_SOLID_ASSET_ID = 'editor-solid-black';
+const DEFAULT_WORLD_SIZE = 3000;
+const DEFAULT_RANDOM_CHANCE = 30;
 const DEFAULT_FALLBACK_ASSET: EditorTilesetAsset = {
   id: 'fallback.grass',
   name: 'grass',
@@ -59,14 +61,66 @@ export function mountClassicTilesPanelLite(options: Options): void {
   const grid = createGridControls(options);
   const layers = createLayerControls(options);
   const tools = createToolControls(options);
+  const fill = createFillControls(options);
 
   const note = document.createElement('div');
   note.className = 'map-editor-empty';
-  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + 월드맵 표시 완료';
+  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + 월드맵 + Fill 표시 완료';
 
-  panel.append(header, tabs, scale, grid, layers, tools, note);
+  panel.append(header, tabs, scale, grid, layers, tools, fill, note);
   document.body.appendChild(panel);
-  options.status('기존 UI 패널 월드맵 버튼 표시 완료.');
+  options.status('기존 UI 패널 Fill 표시 완료.');
+}
+
+function createFillControls(options: Options): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'map-editor-fill';
+  let randomChancePercent = DEFAULT_RANDOM_CHANCE;
+
+  const fillButton = document.createElement('button');
+  fillButton.type = 'button';
+  fillButton.className = 'map-editor-action';
+  fillButton.textContent = '전체 Fill';
+  fillButton.onclick = () => {
+    if (!window.confirm('현재 선택한 타일로 맵 전체를 채울까요?')) return;
+    void options.placement.fillAll({ width: DEFAULT_WORLD_SIZE, height: DEFAULT_WORLD_SIZE })
+      .then(() => options.status('전체 Fill 완료.'))
+      .catch((error: unknown) => options.status(`전체 Fill 실패: ${formatErrorMessage(error)}`));
+  };
+
+  const chanceInput = document.createElement('input');
+  chanceInput.className = 'map-editor-percent-input';
+  chanceInput.type = 'number';
+  chanceInput.min = '0';
+  chanceInput.max = '100';
+  chanceInput.step = '1';
+  chanceInput.value = String(randomChancePercent);
+  chanceInput.onchange = () => {
+    randomChancePercent = clampPercent(Number(chanceInput.value));
+    chanceInput.value = String(randomChancePercent);
+    options.status(`랜덤 Fill 확률: ${randomChancePercent}%`);
+  };
+
+  const percent = document.createElement('span');
+  percent.className = 'map-editor-percent-suffix';
+  percent.textContent = '%';
+
+  const randomButton = document.createElement('button');
+  randomButton.type = 'button';
+  randomButton.className = 'map-editor-action';
+  randomButton.textContent = '랜덤 Fill';
+  randomButton.onclick = () => {
+    if (!window.confirm(`${randomChancePercent}% 확률로 맵 전체에 랜덤 배치할까요?`)) return;
+    void options.placement.fillRandom({
+      width: DEFAULT_WORLD_SIZE,
+      height: DEFAULT_WORLD_SIZE,
+      chancePercent: randomChancePercent,
+    }).then(() => options.status(`랜덤 Fill 완료. chance=${randomChancePercent}%`))
+      .catch((error: unknown) => options.status(`랜덤 Fill 실패: ${formatErrorMessage(error)}`));
+  };
+
+  container.append(fillButton, chanceInput, percent, randomButton);
+  return container;
 }
 
 function createToolControls(options: Options): HTMLElement {
@@ -296,4 +350,14 @@ function createTabButton(label: string, active: boolean, onClick: () => void): H
   button.textContent = label;
   button.onclick = onClick;
   return button;
+}
+
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_RANDOM_CHANCE;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function formatErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
