@@ -9,6 +9,7 @@ const DEFAULT_WORLD_SIZE = 3000;
 const DEFAULT_RANDOM_CHANCE = 30;
 const DIRECT_SELECT_MAX_SIZE = 96;
 const MONSTER_CATEGORY_ID = 'monsters';
+const DEFAULT_MAP_NAME = 'dalworld-map-lightweight';
 const DEFAULT_FALLBACK_ASSET: EditorTilesetAsset = {
   id: 'fallback.grass',
   name: 'grass',
@@ -123,6 +124,7 @@ async function toggleWorldMapPanel(options: Options): Promise<void> {
       worldCellStore = new WorldCellDraftStore({
         placement: options.placement,
         defaultTileSize: options.state.gridSize,
+        cellSize: DEFAULT_WORLD_SIZE,
       });
     }
 
@@ -312,18 +314,31 @@ function createActionControls(options: Options): HTMLElement {
   container.className = 'map-editor-actions';
   container.append(
     createActionButton('저장', () => {
-      worldCellStore?.saveActive();
-      options.status('저장 실행 중...');
-      options.onSave();
+      if (!worldCellStore) {
+        options.status('저장 실행 중...');
+        options.onSave();
+        return;
+      }
+      const world = worldCellStore.snapshotWorldSave(DEFAULT_MAP_NAME);
+      void import('./EditorWorldSaveActions')
+        .then(({ saveEditorWorldSaveToServer }) => saveEditorWorldSaveToServer(world, options.status))
+        .catch((error: unknown) => options.status(`전체 월드 저장 실패: ${formatErrorMessage(error)}`));
     }),
     createActionButton('불러오기', () => {
       options.status('불러오기 실행 중...');
       options.onLoad();
     }),
     createActionButton('JSON', () => {
-      worldCellStore?.saveActive();
-      options.status('JSON export 실행 중...');
-      options.onExport();
+      if (!worldCellStore) {
+        options.status('JSON export 실행 중...');
+        options.onExport();
+        return;
+      }
+      const world = worldCellStore.snapshotWorldSave(DEFAULT_MAP_NAME);
+      void import('./EditorWorldSaveActions')
+        .then(({ exportEditorWorldSaveJson }) => exportEditorWorldSaveJson(world))
+        .then(() => options.status(`전체 월드 JSON export 완료. cells=${world.cells.length}`))
+        .catch((error: unknown) => options.status(`전체 월드 JSON export 실패: ${formatErrorMessage(error)}`));
     }),
     createActionButton('전체삭제', () => {
       if (!window.confirm('현재 맵 배치를 모두 삭제할까요?')) return;
