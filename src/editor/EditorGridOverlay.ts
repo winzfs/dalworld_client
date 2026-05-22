@@ -1,5 +1,5 @@
 import { Container, Graphics } from 'pixi.js';
-import { EditorState } from './EditorState';
+import type { EditorState } from './EditorState';
 
 export type EditorGridOverlayOptions = {
   width: number;
