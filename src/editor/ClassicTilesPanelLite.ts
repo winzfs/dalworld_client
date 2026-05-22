@@ -44,7 +44,20 @@ type TilePickerWindowInstance = {
   open(asset: EditorTilesetAsset): void;
 };
 
+type WorldMapGridInstance = {
+  readonly current: { gridX: number; gridY: number };
+  selectCell(gridX: number, gridY: number): void;
+  deleteCell(gridX: number, gridY: number): void;
+};
+
+type WorldMapPanelInstance = {
+  mount(parent: HTMLElement): void;
+  toggle(): void;
+};
+
 let pickerWindow: TilePickerWindowInstance | null = null;
+let worldMapGrid: WorldMapGridInstance | null = null;
+let worldMapPanel: WorldMapPanelInstance | null = null;
 
 export function mountClassicTilesPanelLite(options: Options): void {
   document.querySelector('.staged-classic-editor-panel')?.remove();
@@ -79,11 +92,54 @@ export function mountClassicTilesPanelLite(options: Options): void {
 
   const note = document.createElement('div');
   note.className = 'map-editor-empty';
-  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + 월드맵 + Fill + Actions + Categories + Assets + Picker 표시 완료';
+  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + 월드맵 + Fill + Actions + Categories + Assets + Picker + WorldMap 표시 완료';
 
   panel.append(header, tabs, scale, grid, layers, tools, fill, actions, categories, assets, note);
   document.body.appendChild(panel);
-  options.status('기존 UI 패널 Picker 연결 완료.');
+  options.status('기존 UI 패널 WorldMap 연결 완료.');
+}
+
+async function toggleWorldMapPanel(options: Options): Promise<void> {
+  try {
+    if (options.onToggleWorldMap) {
+      options.onToggleWorldMap();
+      return;
+    }
+
+    options.status('월드맵 패널 로딩 중...');
+    const [{ WorldMapGrid }, { WorldMapPanel }] = await Promise.all([
+      import('./WorldMapGrid'),
+      import('./WorldMapPanel'),
+    ]);
+
+    if (!worldMapGrid) {
+      worldMapGrid = new WorldMapGrid({ cellSize: DEFAULT_WORLD_SIZE });
+    }
+
+    if (!worldMapPanel) {
+      worldMapPanel = new WorldMapPanel({
+        grid: worldMapGrid as never,
+        onSelectCell: (gridX: number, gridY: number) => {
+          worldMapGrid?.selectCell(gridX, gridY);
+          options.status(`월드맵 셀 선택: ${gridX}, ${gridY} / 타일 데이터 전환은 다음 단계에서 복구`);
+        },
+        onDeleteCurrentCell: () => {
+          const current = worldMapGrid?.current;
+          if (!current) return;
+          if (!window.confirm(`현재 월드맵 셀 ${current.gridX}, ${current.gridY}를 삭제할까요?`)) return;
+          worldMapGrid?.deleteCell(current.gridX, current.gridY);
+          options.status('월드맵 현재 셀 삭제 완료.');
+        },
+      });
+      worldMapPanel.mount(document.body);
+    }
+
+    worldMapPanel.toggle();
+    const current = worldMapGrid.current;
+    options.status(`월드맵 패널 토글 완료. 현재 셀=${current.gridX},${current.gridY}`);
+  } catch (error) {
+    options.status(`월드맵 패널 로딩 실패: ${formatErrorMessage(error)}`);
+  }
 }
 
 function createLazyCategoryControls(options: Options, assetContainer: HTMLElement): HTMLElement {
@@ -388,8 +444,7 @@ function createToolControls(options: Options): HTMLElement {
   worldMapButton.dataset.role = 'worldMap';
   worldMapButton.textContent = '월드맵';
   worldMapButton.onclick = () => {
-    options.onToggleWorldMap?.();
-    options.status('월드맵 버튼 클릭됨. 월드맵 패널은 다음 단계에서 안전하게 복구합니다.');
+    void toggleWorldMapPanel(options);
   };
   container.appendChild(worldMapButton);
 
