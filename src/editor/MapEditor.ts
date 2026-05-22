@@ -1,2 +1,2 @@
-export { MapEditorBootMinimal as MapEditor } from './MapEditorBootMinimal';
-export type { MapEditorBootMinimalOptions as MapEditorOptions, WorldCellTransition } from './MapEditorBootMinimal';
+export { MapEditorBootParallel as MapEditor } from './MapEditorBootParallel';
+export type { MapEditorBootParallelOptions as MapEditorOptions, WorldCellTransition } from './MapEditorBootParallel';
