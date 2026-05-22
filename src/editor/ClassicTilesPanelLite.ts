@@ -62,11 +62,11 @@ export function mountClassicTilesPanelLite(options: Options): void {
 
   const note = document.createElement('div');
   note.className = 'map-editor-empty';
-  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + Black 표시 완료';
+  note.textContent = '패널 껍데기 + 탭 + 스케일 + Grid + 레이어 + 도구 + 월드맵 표시 완료';
 
   panel.append(header, tabs, scale, grid, layers, tools, note);
   document.body.appendChild(panel);
-  options.status('기존 UI 패널 Black 표시 완료.');
+  options.status('기존 UI 패널 월드맵 버튼 표시 완료.');
 }
 
 function createToolControls(options: Options): HTMLElement {
@@ -142,6 +142,17 @@ function createToolControls(options: Options): HTMLElement {
     options.status(`검정투명: ${options.state.transparentBlack ? 'on' : 'off'}`);
   };
   container.appendChild(transparentBlackButton);
+
+  const worldMapButton = document.createElement('button');
+  worldMapButton.type = 'button';
+  worldMapButton.className = 'map-editor-action';
+  worldMapButton.dataset.role = 'worldMap';
+  worldMapButton.textContent = '월드맵';
+  worldMapButton.onclick = () => {
+    options.onToggleWorldMap?.();
+    options.status('월드맵 버튼 클릭됨. 월드맵 패널은 다음 단계에서 안전하게 복구합니다.');
+  };
+  container.appendChild(worldMapButton);
 
   sync();
   return container;
