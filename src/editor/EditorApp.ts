@@ -52,14 +52,7 @@ export class EditorApp {
       status,
     );
 
-    status('MapEditor loaded. Loading EditorMinimap module...');
-    const { EditorMinimap } = await loadEditorModule(
-      'EditorMinimap',
-      () => import('./EditorMinimap'),
-      status,
-    );
-
-    status('Editor UI modules loaded. Creating panels...');
+    status('MapEditor loaded. Creating main editor UI...');
     this.mapEditor = new MapEditor({
       app: this.app,
       world: this.world,
@@ -69,24 +62,39 @@ export class EditorApp {
       worldHeight: DEFAULT_WORLD.height,
       onMoveCameraTo: (x, y) => this.cameraSystem.setPosition(x, y),
     });
-    this.minimap = new EditorMinimap({
-      worldWidth: DEFAULT_WORLD.width,
-      worldHeight: DEFAULT_WORLD.height,
-      onMoveTo: (x, y) => this.cameraSystem.setPosition(x, y),
-    });
 
     status('Starting MapEditor DOM UI...');
     this.mapEditor.start();
     status(`MapEditor started. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
 
-    this.minimap.mount(document.body);
     this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
-    status('EditorApp.start completed.');
-    console.log('[EditorBoot] EditorApp.start completed.');
+    status('EditorApp.start completed without minimap. Loading minimap in background...');
+    console.log('[EditorBoot] EditorApp.start completed without minimap.');
+    void this.loadMinimapInBackground(status);
+  }
+
+  private async loadMinimapInBackground(status: (message: string) => void): Promise<void> {
+    try {
+      const { EditorMinimap } = await loadEditorModule(
+        'EditorMinimap',
+        () => import('./EditorMinimap'),
+        status,
+      );
+      this.minimap = new EditorMinimap({
+        worldWidth: DEFAULT_WORLD.width,
+        worldHeight: DEFAULT_WORLD.height,
+        onMoveTo: (x, y) => this.cameraSystem.setPosition(x, y),
+      });
+      this.minimap.mount(document.body);
+      status('EditorMinimap mounted.');
+    } catch (error) {
+      console.warn('[EditorBoot] EditorMinimap failed to load. Editor will continue without minimap.', error);
+      status(`EditorMinimap skipped: ${formatErrorMessage(error)}`);
+    }
   }
 
   private update(dt: number): void {
-    if (!this.mapEditor || !this.minimap) return;
+    if (!this.mapEditor) return;
 
     const transition = this.cameraSystem.update({
       input: this.input.state,
@@ -96,9 +104,11 @@ export class EditorApp {
       dt,
     });
 
-    const view = this.cameraSystem.getView();
-    this.minimap.setPlacements(this.mapEditor.placement.mapDraft.placements);
-    this.minimap.render({ ...view, screenWidth: this.app.renderer.width, screenHeight: this.app.renderer.height });
+    if (this.minimap) {
+      const view = this.cameraSystem.getView();
+      this.minimap.setPlacements(this.mapEditor.placement.mapDraft.placements);
+      this.minimap.render({ ...view, screenWidth: this.app.renderer.width, screenHeight: this.app.renderer.height });
+    }
 
     if (transition && !this.transitioning) {
       this.transitioning = true;
