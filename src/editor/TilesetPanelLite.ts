@@ -63,6 +63,7 @@ export class TilesetPanelLite {
   private dragOffsetX = 0;
   private dragOffsetY = 0;
   private randomChancePercent = 30;
+  private lastNonBlackAsset: EditorTilesetAsset | null = this.getCurrentNonBlackAsset();
 
   constructor(
     private readonly state: EditorStateLike,
@@ -127,6 +128,8 @@ export class TilesetPanelLite {
   }
 
   private render(): void {
+    const currentNonBlack = this.getCurrentNonBlackAsset();
+    if (currentNonBlack) this.lastNonBlackAsset = currentNonBlack;
     this.renderScaleControls();
     this.renderGridControls();
     this.renderLayerControls();
@@ -183,17 +186,35 @@ export class TilesetPanelLite {
     const paintButton = this.createModeButton('배치', 'paint');
     const pickerButton = this.createModeButton('피커', 'picker');
     const eraseButton = this.createModeButton('삭제', 'erase');
-    const blackButton = button('Black', 'map-editor-action map-editor-black-brush', () => {
-      this.state.selectBlackBrush();
-      this.state.setMode('paint');
-    });
-    if (this.state.selectedBrush?.asset.id === BLACK_BRUSH_ID || this.state.selectedAsset?.id === BLACK_BRUSH_ID) {
-      blackButton.classList.add('is-active');
-    }
+    const blackButton = button('Black', 'map-editor-action map-editor-black-brush', () => this.toggleBlackBrush());
+    if (this.isBlackBrushActive()) blackButton.classList.add('is-active');
     const transparentBlackButton = button('검정투명', 'map-editor-action map-editor-transparent-black', () => this.state.toggleTransparentBlack());
     if (this.state.transparentBlack) transparentBlackButton.classList.add('is-active');
     const worldMapButton = button('월드맵', 'map-editor-action', this.actions.onToggleWorldMap);
     this.toolContainer.append(paintButton, pickerButton, eraseButton, blackButton, transparentBlackButton, worldMapButton);
+  }
+
+  private toggleBlackBrush(): void {
+    if (this.isBlackBrushActive()) {
+      const fallback = this.lastNonBlackAsset ?? getFirstNonBlackAsset();
+      if (fallback) this.state.selectAsset(fallback);
+      this.state.setMode('paint');
+      return;
+    }
+
+    const current = this.getCurrentNonBlackAsset();
+    if (current) this.lastNonBlackAsset = current;
+    this.state.selectBlackBrush();
+    this.state.setMode('paint');
+  }
+
+  private isBlackBrushActive(): boolean {
+    return this.state.selectedBrush?.asset.id === BLACK_BRUSH_ID || this.state.selectedAsset?.id === BLACK_BRUSH_ID;
+  }
+
+  private getCurrentNonBlackAsset(): EditorTilesetAsset | null {
+    const asset = this.state.selectedBrush?.asset ?? this.state.selectedAsset ?? null;
+    return asset && asset.id !== BLACK_BRUSH_ID ? asset : null;
   }
 
   private renderFillControls(): void {
@@ -308,6 +329,14 @@ export class TilesetPanelLite {
 
 function getVisibleCategories() {
   return TILESET_CATEGORIES.filter((category) => category.id !== 'monsters');
+}
+
+function getFirstNonBlackAsset(): EditorTilesetAsset | null {
+  for (const category of getVisibleCategories()) {
+    const asset = category.assets.find((item) => item.id !== BLACK_BRUSH_ID);
+    if (asset) return asset;
+  }
+  return null;
 }
 
 function button(text: string, className: string, onClick: () => void): HTMLButtonElement {
