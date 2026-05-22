@@ -325,8 +325,16 @@ function createActionControls(options: Options): HTMLElement {
         .catch((error: unknown) => options.status(`전체 월드 저장 실패: ${formatErrorMessage(error)}`));
     }),
     createActionButton('불러오기', () => {
-      options.status('불러오기 실행 중...');
-      options.onLoad();
+      if (!worldCellStore) {
+        options.status('불러오기 실행 중...');
+        options.onLoad();
+        return;
+      }
+      void import('./EditorWorldSaveActions')
+        .then(({ loadServerWorldMap }) => loadServerWorldMap(options.status))
+        .then((map) => worldCellStore?.loadFromServerMap(map))
+        .then((draft) => options.status(`전체 월드 불러오기 완료. placements=${draft?.placements.length ?? 0}`))
+        .catch((error: unknown) => options.status(`전체 월드 불러오기 실패: ${formatErrorMessage(error)}`));
     }),
     createActionButton('JSON', () => {
       if (!worldCellStore) {
