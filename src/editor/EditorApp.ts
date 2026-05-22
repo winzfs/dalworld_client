@@ -7,6 +7,7 @@ import type { MapEditor as MapEditorInstance } from './MapEditor';
 import type { EditorMinimap as EditorMinimapInstance } from './EditorMinimap';
 
 const DEFAULT_WORLD: WorldInfo = { width: 3000, height: 3000, tickRate: 20 };
+const EDITOR_MODULE_LOAD_TIMEOUT_MS = 5_000;
 
 export class EditorApp {
   private readonly app = new Application();
@@ -44,12 +45,19 @@ export class EditorApp {
     this.cameraSystem.setWorldSize(DEFAULT_WORLD);
 
     const status = createEditorStagePanel();
-    status('Pixi initialized. Loading editor UI modules...');
-    console.log('[EditorBoot] Loading map editor modules after Pixi init.');
-    const [{ MapEditor }, { EditorMinimap }] = await Promise.all([
-      import('./MapEditor'),
-      import('./EditorMinimap'),
-    ]);
+    status('Pixi initialized. Loading MapEditor module...');
+    const { MapEditor } = await loadEditorModule(
+      'MapEditor',
+      () => import('./MapEditor'),
+      status,
+    );
+
+    status('MapEditor loaded. Loading EditorMinimap module...');
+    const { EditorMinimap } = await loadEditorModule(
+      'EditorMinimap',
+      () => import('./EditorMinimap'),
+      status,
+    );
 
     status('Editor UI modules loaded. Creating panels...');
     this.mapEditor = new MapEditor({
@@ -152,4 +160,35 @@ function createEditorStagePanel(): (message: string) => void {
     panel.textContent = message;
     console.log('[EditorBoot]', message);
   };
+}
+
+async function loadEditorModule<T>(
+  name: string,
+  loader: () => Promise<T>,
+  status: (message: string) => void,
+): Promise<T> {
+  let timeoutId: number | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      status(`${name} import timed out after ${EDITOR_MODULE_LOAD_TIMEOUT_MS}ms.`);
+      reject(new Error(`${name} import timed out.`));
+    }, EDITOR_MODULE_LOAD_TIMEOUT_MS);
+  });
+
+  try {
+    status(`${name} import started...`);
+    const module = await Promise.race([loader(), timeout]);
+    status(`${name} import resolved.`);
+    return module;
+  } catch (error) {
+    status(`${name} import failed: ${formatErrorMessage(error)}`);
+    throw error;
+  } finally {
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
+  }
+}
+
+function formatErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
