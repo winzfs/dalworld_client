@@ -239,8 +239,8 @@ function createPlacement(options: {
     y: snap(options.worldY, options.gridSize),
     layer: options.activeLayer,
     scale: isCollision ? 1 : options.brushScale,
-    displayWidth: isCollision ? options.gridSize : asset.tileWidth ?? options.gridSize,
-    displayHeight: isCollision ? options.gridSize : asset.tileHeight ?? options.gridSize,
+    displayWidth: options.gridSize,
+    displayHeight: options.gridSize,
     sourceRect,
     solidColor: isCollision ? undefined : asset.solidColor,
     transparentBlack: !isCollision && asset.solidColor === undefined && options.transparentBlack,
@@ -251,8 +251,8 @@ function createPlacement(options: {
 function createSolidDisplay(placement: EditorTilePlacement, asset: EditorTilesetAsset, gridSize: number): Graphics {
   const tile = new Graphics();
   const scale = placement.scale || 1;
-  const width = (placement.displayWidth ?? asset.tileWidth ?? gridSize) * scale;
-  const height = (placement.displayHeight ?? asset.tileHeight ?? gridSize) * scale;
+  const width = (placement.displayWidth ?? gridSize) * scale;
+  const height = (placement.displayHeight ?? gridSize) * scale;
   tile.x = placement.x;
   tile.y = placement.y;
   tile.rect(0, 0, width, height).fill({ color: placement.solidColor ?? asset.solidColor ?? fallbackColor(asset.categoryId), alpha: 1 });
