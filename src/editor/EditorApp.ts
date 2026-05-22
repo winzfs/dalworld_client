@@ -49,7 +49,7 @@ export class EditorApp {
     const status = createEditorStagePanel();
     this.showFallbackPanel(status);
 
-    status('Pixi initialized. Loading original MapEditor UI...');
+    status('Pixi initialized. Loading staged MapEditor UI...');
     await this.loadFullMapEditor(status);
   }
 
@@ -60,7 +60,7 @@ export class EditorApp {
       },
     });
     this.fallbackPanel.mount(document.body);
-    this.fallbackPanel.setStatus('렌더러 준비 완료. 원래 MapEditor UI 로딩 중...');
+    this.fallbackPanel.setStatus('렌더러 준비 완료. 단계별 MapEditor UI 로딩 중...');
   }
 
   private async loadFullMapEditor(status: (message: string) => void): Promise<void> {
@@ -73,8 +73,8 @@ export class EditorApp {
         status,
       );
 
-      status('MapEditor loaded. Creating original editor UI...');
-      this.fallbackPanel?.setStatus('MapEditor loaded. Creating original editor UI...');
+      status('MapEditor loaded. Creating staged editor UI...');
+      this.fallbackPanel?.setStatus('MapEditor loaded. Creating staged editor UI...');
       this.mapEditor = new MapEditor({
         app: this.app,
         world: this.world,
@@ -85,15 +85,14 @@ export class EditorApp {
         onMoveCameraTo: (x, y) => this.cameraSystem.setPosition(x, y),
       });
 
-      status('Starting MapEditor DOM UI...');
+      status('Starting staged MapEditor DOM UI...');
       await this.mapEditor.start();
-      this.fallbackPanel?.element.remove();
-      this.fallbackPanel = null;
-      status(`MapEditor started. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
+      this.fallbackPanel?.setStatus('단계별 에디터 UI가 로드되었습니다. 기존 UI는 모듈별로 복구 중입니다.');
+      status(`MapEditor staged UI started. Panel count: ${document.querySelectorAll('.map-editor-panel').length}`);
 
       this.app.ticker.add((ticker) => this.update(ticker.deltaMS / 1000));
-      status('EditorApp.start completed with original MapEditor UI.');
-      console.log('[EditorBoot] EditorApp.start completed with original MapEditor UI.');
+      status('EditorApp.start completed with fallback and staged MapEditor UI.');
+      console.log('[EditorBoot] EditorApp.start completed with fallback and staged MapEditor UI.');
     } catch (error) {
       const message = `MapEditor import failed or timed out: ${formatErrorMessage(error)}`;
       this.fallbackPanel?.setStatus(message);
