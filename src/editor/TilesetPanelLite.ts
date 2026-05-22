@@ -43,7 +43,7 @@ const EDITOR_LAYERS: Array<{ id: EditorLayerId; label: string }> = [
 ];
 
 const GRID_SIZE_OPTIONS = [16, 32, 64];
-const BLACK_BRUSH_ID = 'editor-black-base';
+const BLACK_BRUSH_ID = 'editor-solid-black';
 
 export class TilesetPanelLite {
   readonly element: HTMLDivElement;
@@ -253,7 +253,13 @@ export class TilesetPanelLite {
       const preview = document.createElement('span');
       preview.className = 'map-editor-asset-preview';
       preview.style.display = 'inline-block';
-      preview.style.flex = '0 0 auto';
+      preview.style.width = '32px';
+      preview.style.height = '32px';
+      preview.style.minWidth = '32px';
+      preview.style.minHeight = '32px';
+      preview.style.flex = '0 0 32px';
+      preview.style.borderRadius = '6px';
+      preview.style.backgroundColor = 'rgba(255,255,255,.08)';
       preview.style.backgroundPosition = 'center';
       preview.style.backgroundRepeat = 'no-repeat';
       preview.style.backgroundSize = asset.tileWidth || asset.tileHeight ? 'contain' : 'cover';
