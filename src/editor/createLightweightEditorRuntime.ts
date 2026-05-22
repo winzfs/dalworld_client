@@ -3,7 +3,7 @@ import type { EditorGridOverlay } from './EditorGridOverlay';
 import type { EditorState } from './EditorState';
 import type { TilesetPanel } from './TilesetPanel';
 import type { TilePlacementSystem } from './TilePlacementSystem';
-import type { EditorMapDraft, EditorTilesetAsset } from './types';
+import type { EditorMapDraft, EditorMonsterSpawnRule, EditorTilesetAsset } from './types';
 
 type RuntimeModules = {
   EditorState: new () => EditorState;
@@ -26,8 +26,8 @@ type RuntimeModules = {
       onFillAll: () => void;
       onRandomFill: (chancePercent: number) => void;
       onToggleWorldMap: () => void;
-      getMonsterSpawnRules: () => unknown[];
-      setMonsterSpawnRules: (rules: unknown[]) => void;
+      getMonsterSpawnRules: () => EditorMonsterSpawnRule[];
+      setMonsterSpawnRules: (rules: EditorMonsterSpawnRule[]) => void;
     },
   ) => TilesetPanel;
 };
