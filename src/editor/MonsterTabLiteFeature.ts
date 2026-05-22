@@ -28,65 +28,92 @@ let currentRules: EditorMonsterSpawnRule[] = cloneRules(DEFAULT_RULES);
 export function installMonsterTabLiteFeature(options: {
   status?: (message: string) => void;
 } = {}): void {
-  if (installed) return;
-  installed = true;
-
   const status = options.status ?? ((message: string) => console.log('[MonsterTabLite]', message));
-  const observer = new MutationObserver(() => enhancePanels(status));
-  observer.observe(document.body, { childList: true, subtree: true });
+
+  if (!installed) {
+    installed = true;
+    const observer = new MutationObserver(() => enhancePanels(status));
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
   enhancePanels(status);
 }
 
 function enhancePanels(status: (message: string) => void): void {
   document.querySelectorAll<HTMLElement>('.staged-classic-editor-panel').forEach((panel) => {
     if (panel.dataset.monsterLiteInstalled === 'true') return;
-    panel.dataset.monsterLiteInstalled = 'true';
-    wireMonsterTab(panel, status);
+    if (wireMonsterTab(panel, status)) {
+      panel.dataset.monsterLiteInstalled = 'true';
+      status('Monsters 탭 패널 연결 완료.');
+    }
   });
 }
 
-function wireMonsterTab(panel: HTMLElement, status: (message: string) => void): void {
+function wireMonsterTab(panel: HTMLElement, status: (message: string) => void): boolean {
+  const tabsContainer = panel.querySelector<HTMLElement>('.map-editor-tabs');
   const tabs = Array.from(panel.querySelectorAll<HTMLButtonElement>('.map-editor-tab'));
   const tilesTab = tabs.find((tab) => tab.textContent?.trim() === 'Tiles');
   const monstersTab = tabs.find((tab) => tab.textContent?.trim() === 'Monsters');
-  const contentNodes = Array.from(panel.children).filter((child) => child !== panel.firstElementChild && child !== tilesTab?.parentElement);
 
-  if (!monstersTab) return;
+  if (!tabsContainer || !tilesTab || !monstersTab) {
+    status('Monsters 탭 연결 대기 중...');
+    return false;
+  }
 
   const monsterContent = createMonsterContent(status);
-  monsterContent.hidden = true;
+  monsterContent.style.display = 'none';
   panel.appendChild(monsterContent);
+
+  const getTilesContentNodes = () => Array.from(panel.children).filter((child) => {
+    if (!(child instanceof HTMLElement)) return false;
+    if (child.classList.contains('map-editor-header')) return false;
+    if (child.classList.contains('map-editor-tabs')) return false;
+    if (child === monsterContent) return false;
+    return true;
+  }) as HTMLElement[];
 
   const showTiles = () => {
     tabs.forEach((tab) => tab.classList.toggle('is-active', tab === tilesTab));
-    contentNodes.forEach((node) => {
-      if (node instanceof HTMLElement) node.hidden = false;
+    getTilesContentNodes().forEach((node) => {
+      node.style.display = '';
     });
-    monsterContent.hidden = true;
+    monsterContent.style.display = 'none';
     status('Tiles 탭 선택됨.');
   };
 
   const showMonsters = () => {
     tabs.forEach((tab) => tab.classList.toggle('is-active', tab === monstersTab));
-    contentNodes.forEach((node) => {
-      if (node instanceof HTMLElement) node.hidden = true;
+    getTilesContentNodes().forEach((node) => {
+      node.style.display = 'none';
     });
-    monsterContent.hidden = false;
+    monsterContent.style.display = 'grid';
     renderMonsterRules(monsterContent, status);
     status(`Monsters 탭 선택됨. rules=${currentRules.length}`);
   };
 
-  tilesTab?.addEventListener('click', (event) => {
+  tilesTab.onclick = (event) => {
     event.preventDefault();
-    event.stopImmediatePropagation();
     showTiles();
-  }, { capture: true });
+  };
+
+  monstersTab.onclick = (event) => {
+    event.preventDefault();
+    showMonsters();
+  };
+
+  tilesTab.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    showTiles();
+  });
 
   monstersTab.addEventListener('click', (event) => {
     event.preventDefault();
-    event.stopImmediatePropagation();
+    event.stopPropagation();
     showMonsters();
-  }, { capture: true });
+  });
+
+  return true;
 }
 
 function createMonsterContent(status: (message: string) => void): HTMLElement {
