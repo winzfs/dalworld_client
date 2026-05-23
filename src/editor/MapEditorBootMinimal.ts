@@ -1,5 +1,5 @@
 import type { Application, Container } from 'pixi.js';
-import type { EditorMapDraft, EditorTilesetAsset, EditorWorldMapDraft, EditorWorldSave } from './types';
+import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset, EditorWorldMapDraft, EditorWorldSave } from './types';
 
 export type MapEditorBootMinimalOptions = {
   app: Application;
@@ -120,6 +120,7 @@ export class MapEditorBootMinimal {
       onPickAsset: (asset: EditorTilesetAsset) => this.pickAsset(asset),
       onFillAll: () => { void this.fillAll(); },
       onRandomFill: (chancePercent: number) => { void this.fillRandom(chancePercent); },
+      onGenerateTerrain: () => { void this.generateTerrain(); },
       onToggleWorldMap: () => this.worldMapPanel.toggle(),
     });
 
@@ -259,6 +260,43 @@ export class MapEditorBootMinimal {
     const after = this.placement.mapDraft.placements.length;
     this.showToast(`랜덤 Fill 완료 · ${Math.max(0, after - before)}개 추가 · 총 ${after}개`, 'success', 3_500);
     this.report(`Random fill completed. chance=${chancePercent}, before=${before}, after=${after}`);
+  }
+
+  private async generateTerrain(): Promise<void> {
+    const brush = this.state?.selectedBrush;
+    if (!brush) {
+      this.showToast('지형생성 실패 · 먼저 ground 타일을 선택하세요.', 'error', 3_000);
+      return;
+    }
+
+    if (!window.confirm('현재 셀의 ground 레이어를 새 지형으로 교체할까요? Object/Block 레이어는 유지됩니다.')) return;
+
+    this.showToast('지형 생성 중...', 'info', 0);
+    try {
+      const generator = await import('./generation/TerrainGenerator');
+      const generatedGround = generator.generateBasicGroundTerrain({
+        brush,
+        width: this.worldWidth,
+        height: this.worldHeight,
+        gridSize: this.state.gridSize ?? this.options.tileSize ?? 32,
+      });
+      const currentDraft = this.placement.mapDraft as EditorMapDraft;
+      const keptPlacements = currentDraft.placements.filter((placement: EditorTilePlacement) => placement.layer !== 'ground');
+      const nextDraft: EditorMapDraft = {
+        ...currentDraft,
+        tileSize: this.state.gridSize ?? currentDraft.tileSize,
+        worldMap: this.worldMapGrid?.snapshot ?? currentDraft.worldMap,
+        placements: [...keptPlacements, ...generatedGround],
+      };
+      await this.placement.replaceDraft(nextDraft);
+      this.persistCurrentCellDraft();
+      this.showToast(`지형 생성 완료 · ground ${generatedGround.length}개`, 'success', 3_500);
+      this.report(`Generated terrain. ground=${generatedGround.length}, kept=${keptPlacements.length}`);
+    } catch (error) {
+      console.warn('[MapEditor] Terrain generation failed.', error);
+      this.showToast(`지형 생성 실패 · ${formatError(error)}`, 'error', 5_000);
+      this.report(`Terrain generation failed. ${formatError(error)}`);
+    }
   }
 
   private async selectWorldCell(gridX: number, gridY: number): Promise<void> {
