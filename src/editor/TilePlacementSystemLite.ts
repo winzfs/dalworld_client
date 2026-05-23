@@ -143,7 +143,7 @@ export class TilePlacementSystem {
 
   private upsertPlacement(placement: EditorTilePlacement): void {
     if (!placement.transparentBlack) {
-      const existing = this.draft.placements.find((item) => item.x === placement.x && item.y === placement.y && item.layer === placement.layer);
+      const existing = this.draft.placements.find((item) => hasSameReplaceFootprint(item, placement, this.state.gridSize));
       if (existing) this.removePlacement(existing.id);
     }
     this.draft.placements.push(placement);
@@ -246,6 +246,25 @@ function createPlacement(options: {
     transparentBlack: !isCollision && asset.solidColor === undefined && options.transparentBlack,
     gameplay: isCollision ? undefined : inferGameplay(asset),
   };
+}
+
+function hasSameReplaceFootprint(a: EditorTilePlacement, b: EditorTilePlacement, fallbackSize: number): boolean {
+  return a.layer === b.layer
+    && a.x === b.x
+    && a.y === b.y
+    && (a.transparentBlack ?? false) === false
+    && (b.transparentBlack ?? false) === false
+    && getPlacementRenderWidth(a, fallbackSize) === getPlacementRenderWidth(b, fallbackSize)
+    && getPlacementRenderHeight(a, fallbackSize) === getPlacementRenderHeight(b, fallbackSize)
+    && (a.scale ?? 1) === (b.scale ?? 1);
+}
+
+function getPlacementRenderWidth(placement: EditorTilePlacement, fallbackSize: number): number {
+  return placement.displayWidth ?? placement.sourceRect?.width ?? fallbackSize;
+}
+
+function getPlacementRenderHeight(placement: EditorTilePlacement, fallbackSize: number): number {
+  return placement.displayHeight ?? placement.sourceRect?.height ?? fallbackSize;
 }
 
 function createSolidDisplay(placement: EditorTilePlacement, asset: EditorTilesetAsset, gridSize: number): Graphics {
