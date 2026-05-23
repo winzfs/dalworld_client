@@ -1,4 +1,4 @@
-import type { EditorTerrainTileRole, EditorTilePlacement } from '../types';
+import type { EditorTerrainMaterial, EditorTerrainTileRole, EditorTilePlacement } from '../types';
 import type { BasicTerrainGenerationOptions } from './TerrainGenerator';
 import { generateWorldPlanTerrainDebug } from './TerrainWorldPlanDebug';
 
@@ -21,20 +21,25 @@ const OVERLAY_ROLES = new Set<EditorTerrainTileRole>([
   'innerBottomRight',
 ]);
 
+const VISUAL_BASE_MATERIALS = new Set<EditorTerrainMaterial>(['grass', 'dirt', 'sand']);
+
 export async function generateWorldPlanTerrainLayered(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
   const placements = await generateWorldPlanTerrainDebug(options) as DebugPlacement[];
+  const gridSize = normalizeGridSize(options.gridSize);
+  const byCell = createTerrainCellMap(placements, gridSize);
   const visualBaseCandidates = placements.filter((placement) =>
     placement.layer === 'ground'
-    && !placement.feature
-    && (placement.terrainMaterial === 'grass' || placement.terrainMaterial === 'dirt' || placement.terrainMaterial === 'sand')
-    && placement.sourceRect,
+    && placement.sourceRect
+    && placement.terrainMaterial
+    && VISUAL_BASE_MATERIALS.has(placement.terrainMaterial),
   );
 
   if (visualBaseCandidates.length === 0) return placements;
 
   const layered: EditorTilePlacement[] = [];
   for (const placement of placements) {
-    if (shouldAddUnderlay(placement)) {
+    const role = resolvePlacementRole(placement, byCell, gridSize);
+    if (shouldAddUnderlay(placement, role)) {
       const underlaySource = findNearestVisualBase(visualBaseCandidates, placement);
       if (underlaySource) layered.push(createVisualUnderlay(underlaySource, placement));
     }
@@ -44,11 +49,31 @@ export async function generateWorldPlanTerrainLayered(options: BasicTerrainGener
   return layered;
 }
 
-function shouldAddUnderlay(placement: DebugPlacement): boolean {
+function createTerrainCellMap(placements: EditorTilePlacement[], gridSize: number): Map<string, EditorTilePlacement> {
+  const map = new Map<string, EditorTilePlacement>();
+  for (const placement of placements) {
+    if (placement.layer !== 'ground' || !placement.terrainMaterial) continue;
+    const column = Math.round(placement.x / gridSize);
+    const row = Math.round(placement.y / gridSize);
+    map.set(`${column}:${row}`, placement);
+  }
+  return map;
+}
+
+function resolvePlacementRole(placement: DebugPlacement, byCell: Map<string, EditorTilePlacement>, gridSize: number): EditorTerrainTileRole | undefined {
+  if (placement.layer !== 'ground' || !placement.terrainMaterial) return undefined;
+  if (placement.terrainDebugRole) return placement.terrainDebugRole;
+  const column = Math.round(placement.x / gridSize);
+  const row = Math.round(placement.y / gridSize);
+  const material = placement.terrainMaterial;
+  return resolveRole(column, row, (x, y) => byCell.get(`${x}:${y}`)?.terrainMaterial === material);
+}
+
+function shouldAddUnderlay(placement: DebugPlacement, role: EditorTerrainTileRole | undefined): boolean {
   if (placement.layer !== 'ground') return false;
-  if (placement.terrainMaterial !== 'rock') return false;
-  const role = placement.terrainDebugRole;
-  if (!role) return true;
+  if (!placement.terrainMaterial) return false;
+  if (placement.terrainMaterial === 'grass' && role === 'center') return false;
+  if (!role) return false;
   return OVERLAY_ROLES.has(role);
 }
 
@@ -86,4 +111,28 @@ function createVisualUnderlay(source: EditorTilePlacement, target: EditorTilePla
     terrainMaterial: undefined,
     terrainMovementMode: undefined,
   };
+}
+
+function resolveRole(column: number, row: number, same: (column: number, row: number) => boolean): EditorTerrainTileRole {
+  const top = same(column, row - 1);
+  const bottom = same(column, row + 1);
+  const left = same(column - 1, row);
+  const right = same(column + 1, row);
+  if (!top && !left) return 'outerTopLeft';
+  if (!top && !right) return 'outerTopRight';
+  if (!bottom && !left) return 'outerBottomLeft';
+  if (!bottom && !right) return 'outerBottomRight';
+  if (!top) return 'edgeTop';
+  if (!bottom) return 'edgeBottom';
+  if (!left) return 'edgeLeft';
+  if (!right) return 'edgeRight';
+  if (!same(column - 1, row - 1)) return 'innerTopLeft';
+  if (!same(column + 1, row - 1)) return 'innerTopRight';
+  if (!same(column - 1, row + 1)) return 'innerBottomLeft';
+  if (!same(column + 1, row + 1)) return 'innerBottomRight';
+  return 'center';
+}
+
+function normalizeGridSize(value: number | undefined): number {
+  return !Number.isFinite(value) || (value as number) <= 0 ? 32 : Math.max(1, Math.round(value as number));
 }
