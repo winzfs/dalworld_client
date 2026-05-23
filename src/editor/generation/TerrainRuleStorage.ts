@@ -35,14 +35,14 @@ export class TerrainRuleStorage {
     const settings = this.getTilesetMaterialByKey(rule.tilesetId, rule.tilesetUrl, current);
     const material = rule.material ?? settings.material;
     const movementMode = rule.movementMode ?? settings.movementMode ?? getDefaultMovementMode(material);
-    const ruleWithSettings: EditorTerrainTileRule = {
+    const normalizedRule = normalizeRule({
       ...rule,
       material,
       movementMode,
       blocksMovement: rule.blocksMovement ?? settings.blocksMovement ?? movementMode === 'blocked',
-    };
-    const nextRules = current.rules.filter((item) => item.id !== rule.id);
-    nextRules.push(ruleWithSettings);
+    });
+    const nextRules = current.rules.filter((item) => item.id !== normalizedRule.id);
+    nextRules.push(normalizedRule);
     const next: EditorTerrainRuleSet = {
       version: 1,
       rules: nextRules,
@@ -82,10 +82,10 @@ export class TerrainRuleStorage {
     };
     const nextTilesets = (current.tilesets ?? []).filter((item) => !isSameTileset(item, nextTileset));
     nextTilesets.push(nextTileset);
-    const nextRules = current.rules.map((rule) => (
+    const nextRules = current.rules.map((rule) => normalizeRule(
       rule.tilesetId === asset.id && rule.tilesetUrl === asset.url
         ? { ...rule, material, movementMode: normalizedMovement, blocksMovement }
-        : rule
+        : rule,
     ));
     const next: EditorTerrainRuleSet = {
       version: 1,
@@ -151,7 +151,8 @@ export class TerrainRuleStorage {
   }
 
   private mirrorSave(ruleSet: EditorTerrainRuleSet): void {
-    const payload = JSON.stringify(ruleSet);
+    const normalized = normalizeRuleSet(ruleSet);
+    const payload = JSON.stringify(normalized);
     window.localStorage.setItem(this.key, payload);
     window.localStorage.setItem(this.legacyKey, payload);
   }
@@ -197,22 +198,49 @@ function normalizeRuleSet(ruleSet: EditorTerrainRuleSet): EditorTerrainRuleSet {
   const lookup = new Map<string, EditorTerrainTilesetMaterial>();
   for (const item of tilesets) lookup.set(`${item.tilesetId}:${item.tilesetUrl}`, item);
 
+  const deduped = new Map<string, EditorTerrainTileRule>();
+  for (const rule of ruleSet.rules ?? []) {
+    const saved = lookup.get(`${rule.tilesetId}:${rule.tilesetUrl}`);
+    const material = rule.material ?? saved?.material ?? 'grass';
+    const movementMode = normalizeMovementMode(rule.movementMode ?? saved?.movementMode, material);
+    const normalized = normalizeRule({
+      ...rule,
+      material,
+      movementMode,
+      blocksMovement: rule.blocksMovement ?? saved?.blocksMovement ?? movementMode === 'blocked',
+    });
+    deduped.set(createRuleIdentity(normalized), normalized);
+  }
+
   return {
     version: 1,
-    rules: (ruleSet.rules ?? []).map((rule) => {
-      const saved = lookup.get(`${rule.tilesetId}:${rule.tilesetUrl}`);
-      const material = rule.material ?? saved?.material ?? 'grass';
-      const movementMode = normalizeMovementMode(rule.movementMode ?? saved?.movementMode, material);
-      return {
-        ...rule,
-        material,
-        movementMode,
-        blocksMovement: rule.blocksMovement ?? saved?.blocksMovement ?? movementMode === 'blocked',
-      };
-    }),
+    rules: [...deduped.values()],
     tilesets,
     updatedAt: ruleSet.updatedAt ?? Date.now(),
   };
+}
+
+function normalizeRule(rule: EditorTerrainTileRule): EditorTerrainTileRule {
+  const scale = normalizeScale(rule.scale);
+  return {
+    ...rule,
+    scale,
+    id: createRuleId(rule, scale),
+  };
+}
+
+function createRuleIdentity(rule: EditorTerrainTileRule): string {
+  return createRuleId(rule, normalizeScale(rule.scale));
+}
+
+function createRuleId(rule: EditorTerrainTileRule, scale: number): string {
+  const rect = rule.sourceRect;
+  return `${rule.tilesetId}:${rule.tilesetUrl}:${rule.tileSize}:${rect.x}:${rect.y}:${rect.width}:${rect.height}:${rule.role}:scale-${normalizeScale(scale)}`;
+}
+
+function normalizeScale(value: number | undefined): number {
+  if (!Number.isFinite(value) || (value as number) <= 0) return 1;
+  return Math.max(0.1, Math.min(10, Math.round((value as number) * 10) / 10));
 }
 
 function getDefaultMovementMode(material: EditorTerrainMaterial): EditorTerrainMovementMode {
