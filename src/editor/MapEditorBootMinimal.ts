@@ -22,6 +22,7 @@ export type WorldCellTransition = {
 type ToastKind = 'info' | 'success' | 'error';
 
 const DIRECT_SELECT_MAX_SIZE = 96;
+const LEGACY_MAP_NAME = 'dalworld-map';
 
 export class MapEditorBootMinimal {
   state: any = null;
@@ -271,7 +272,9 @@ export class MapEditorBootMinimal {
 
   private async openTerrainPanel(): Promise<void> {
     try {
+      this.restoreTerrainTilesets();
       const panel = await this.ensureTerrainPanel();
+      panel.render?.();
       panel.open();
     } catch (error) {
       console.warn('[MapEditor] Terrain panel failed.', error);
@@ -331,6 +334,7 @@ export class MapEditorBootMinimal {
   }
 
   private async generateTerrain(): Promise<void> {
+    this.restoreTerrainTilesets();
     const fallbackAsset = this.getSelectedTilesetAsset();
     const tilesets = this.terrainTilesets.length > 0
       ? this.terrainTilesets
@@ -463,7 +467,8 @@ export class MapEditorBootMinimal {
   }
 
   private restoreTerrainTilesets(): void {
-    const saved = readLocalJson<EditorTilesetAsset[]>(terrainTilesetsKey(this.mapName));
+    const saved = readLocalJson<EditorTilesetAsset[]>(terrainTilesetsKey(this.mapName))
+      ?? readLocalJson<EditorTilesetAsset[]>(terrainTilesetsKey(LEGACY_MAP_NAME));
     if (!Array.isArray(saved)) return;
     this.terrainTilesets.splice(0, this.terrainTilesets.length);
     const seen = new Set<string>();
@@ -475,12 +480,14 @@ export class MapEditorBootMinimal {
       this.terrainTilesets.push(asset);
     }
     if (this.terrainTilesets.length > 0) {
+      this.persistTerrainTilesets();
       this.report(`Restored terrain tilesets. total=${this.terrainTilesets.length}`);
     }
   }
 
   private persistTerrainTilesets(): void {
     writeLocalJson(terrainTilesetsKey(this.mapName), this.terrainTilesets);
+    writeLocalJson(terrainTilesetsKey(LEGACY_MAP_NAME), this.terrainTilesets);
   }
 
   private async save(): Promise<void> {
