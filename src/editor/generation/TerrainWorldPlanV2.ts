@@ -246,7 +246,7 @@ function pickWeighted(tiles: Tile[], c: number, r: number, seed: number, salt: n
 }
 
 function createPlacement(tile: Tile, x: number, y: number): EditorTilePlacement {
-  return { id: crypto.randomUUID(), assetId: tile.asset.id, assetUrl: tile.asset.url, categoryId: tile.asset.categoryId, x, y, layer: 'ground', scale: 1, displayWidth: Math.max(1, Math.round(tile.sourceRect.width * tile.scale)), displayHeight: Math.max(1, Math.round(tile.sourceRect.height * tile.scale)), sourceRect: { ...tile.sourceRect }, solidColor: undefined, transparentBlack: false, gameplay: undefined, terrainMaterial: tile.material, terrainMovementMode: tile.movementMode };
+  return { id: crypto.randomUUID(), assetId: tile.asset.id, assetUrl: tile.asset.url, categoryId: tile.asset.categoryId, x, y, layer: 'ground', scale: 1, displayWidth: Math.max(1, Math.round(tile.sourceRect.width * tile.scale)), displayHeight: Math.max(1, Math.round(tile.sourceRect.height * tile.scale)), sourceRect: { ...tile.sourceRect }, solidColor: undefined, transparentBlack: true, gameplay: undefined, terrainMaterial: tile.material, terrainMovementMode: tile.movementMode };
 }
 
 function roleAt(c: number, r: number, same: (c: number, r: number) => boolean): EditorTerrainTileRole {
