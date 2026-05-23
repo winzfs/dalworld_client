@@ -4,6 +4,7 @@ export type TerrainGeneratorPanelOptions = {
   getTilesets: () => EditorTilesetAsset[];
   onAddCurrentTileset: () => void;
   onRemoveTileset: (asset: EditorTilesetAsset) => void;
+  onOpenRuleManager: () => void;
   onGenerate: () => void;
 };
 
@@ -95,6 +96,12 @@ export class TerrainGeneratorPanel {
       this.render();
     };
 
+    const ruleButton = document.createElement('button');
+    ruleButton.type = 'button';
+    ruleButton.textContent = '규칙관리';
+    ruleButton.style.cssText = secondaryButtonStyle();
+    ruleButton.onclick = this.options.onOpenRuleManager;
+
     const generateButton = document.createElement('button');
     generateButton.type = 'button';
     generateButton.textContent = '등록 타일셋으로 지형 생성';
@@ -104,7 +111,7 @@ export class TerrainGeneratorPanel {
     this.list.className = 'terrain-generator-list';
     this.list.style.cssText = 'display:flex;flex-direction:column;gap:6px;min-height:32px;';
 
-    this.body.append(help, addButton, this.list, generateButton);
+    this.body.append(help, addButton, ruleButton, this.list, generateButton);
     this.element.append(this.header, this.body);
     this.attachDragHandlers();
     this.render();
@@ -233,6 +240,10 @@ function buttonStyle(): string {
 
 function primaryButtonStyle(): string {
   return 'border:1px solid rgba(56,189,248,.42);border-radius:10px;background:rgba(14,165,233,.22);color:#f8fafc;padding:9px 10px;cursor:pointer;font-weight:900;';
+}
+
+function secondaryButtonStyle(): string {
+  return 'border:1px solid rgba(167,139,250,.45);border-radius:10px;background:rgba(109,40,217,.28);color:#f8fafc;padding:8px 10px;cursor:pointer;font-weight:900;';
 }
 
 function smallDangerButtonStyle(): string {
