@@ -59,7 +59,16 @@ export class TerrainGeneratorPanel {
     this.closeButton.type = 'button';
     this.closeButton.textContent = '×';
     this.closeButton.style.cssText = buttonStyle();
-    this.closeButton.onclick = () => this.close();
+    this.closeButton.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.dragging = false;
+    });
+    this.closeButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.close();
+    });
 
     this.header.append(title, this.closeButton);
 
@@ -104,6 +113,7 @@ export class TerrainGeneratorPanel {
   }
 
   close(): void {
+    this.dragging = false;
     this.element.hidden = true;
   }
 
