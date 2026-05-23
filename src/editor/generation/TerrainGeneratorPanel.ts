@@ -13,6 +13,7 @@ export class TerrainGeneratorPanel {
   private readonly body = document.createElement('div');
   private readonly list = document.createElement('div');
   private readonly closeButton = document.createElement('button');
+  private isOpen = false;
   private dragging = false;
   private dragOffsetX = 0;
   private dragOffsetY = 0;
@@ -28,7 +29,7 @@ export class TerrainGeneratorPanel {
       'z-index:10002',
       'width:320px',
       'max-height:calc(100vh - 96px)',
-      'display:flex',
+      'display:none',
       'flex-direction:column',
       'overflow:hidden',
       'border:1px solid rgba(125,211,252,.42)',
@@ -60,6 +61,11 @@ export class TerrainGeneratorPanel {
     this.closeButton.textContent = '×';
     this.closeButton.style.cssText = buttonStyle();
     this.closeButton.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.dragging = false;
+    });
+    this.closeButton.addEventListener('pointerup', (event) => {
       event.preventDefault();
       event.stopPropagation();
       this.dragging = false;
@@ -108,18 +114,22 @@ export class TerrainGeneratorPanel {
   }
 
   open(): void {
+    this.isOpen = true;
     this.element.hidden = false;
+    this.element.style.display = 'flex';
     this.render();
   }
 
   close(): void {
+    this.isOpen = false;
     this.dragging = false;
     this.element.hidden = true;
+    this.element.style.display = 'none';
   }
 
   toggle(): void {
-    if (this.element.hidden) this.open();
-    else this.close();
+    if (this.isOpen) this.close();
+    else this.open();
   }
 
   render(): void {
