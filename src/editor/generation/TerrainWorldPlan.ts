@@ -1,7 +1,7 @@
 import type { EditorTilePlacement } from '../types';
 import type { BasicTerrainGenerationOptions } from './TerrainGenerator';
-import { generateWorldPlanTerrainLayered } from './TerrainWorldPlanLayered';
+import { generateWorldPlanTerrainLayeredV2 } from './TerrainWorldPlanLayeredV2';
 
 export async function generateWorldPlanTerrain(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
-  return generateWorldPlanTerrainLayered(options);
+  return generateWorldPlanTerrainLayeredV2(options);
 }
