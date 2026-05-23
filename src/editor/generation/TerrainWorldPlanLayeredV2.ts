@@ -119,18 +119,18 @@ function resolveOutsideFinishRole(column: number, row: number, insideMask: Set<s
   const bottomLeft = insideMask.has(`${column - 1}:${row + 1}`);
   const bottomRight = insideMask.has(`${column + 1}:${row + 1}`);
 
-  if (top && left) return 'outerTopLeft';
-  if (top && right) return 'outerTopRight';
-  if (bottom && left) return 'outerBottomLeft';
-  if (bottom && right) return 'outerBottomRight';
-  if (top) return 'edgeTop';
-  if (bottom) return 'edgeBottom';
-  if (left) return 'edgeLeft';
-  if (right) return 'edgeRight';
-  if (topLeft) return 'outerTopLeft';
-  if (topRight) return 'outerTopRight';
-  if (bottomLeft) return 'outerBottomLeft';
-  if (bottomRight) return 'outerBottomRight';
+  if (bottom && right) return 'outerTopLeft';
+  if (bottom && left) return 'outerTopRight';
+  if (top && right) return 'outerBottomLeft';
+  if (top && left) return 'outerBottomRight';
+  if (bottom) return 'edgeTop';
+  if (top) return 'edgeBottom';
+  if (right) return 'edgeLeft';
+  if (left) return 'edgeRight';
+  if (bottomRight) return 'outerTopLeft';
+  if (bottomLeft) return 'outerTopRight';
+  if (topRight) return 'outerBottomLeft';
+  if (topLeft) return 'outerBottomRight';
   return 'center';
 }
 
