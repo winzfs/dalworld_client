@@ -1,11 +1,12 @@
 import { saveEditorItemOverrides } from './ItemEditorStorage';
-import type { EditorItemOverride, EditorMapDraft, EditorPlacementGameplay, EditorTilePlacement, EditorWorldMapDraft, EditorWorldSave } from './types';
+import type { EditorItemOverride, EditorMapDraft, EditorPlacementGameplay, EditorTerrainRuleSet, EditorTilePlacement, EditorWorldMapDraft, EditorWorldSave } from './types';
 import { uploadWorldMap, type UploadedWorldMapReport } from '../worldMap/uploadWorldMap';
 import { fetchRuntimeWorldMap } from '../worldMap/fetchRuntimeWorldMap';
 import type { GameWorldMap, WorldMapItemOverride, WorldMapPlacement, WorldMapPlacementGameplay } from '../worldMap/types';
 
 const STORAGE_PREFIX = 'dalworld:editor-map:';
 const WORLD_STORAGE_PREFIX = 'dalworld:editor-world:';
+const TERRAIN_RULE_STORAGE_PREFIX = 'dalworld:editor-terrain-rules:';
 const DEFAULT_CELL_SIZE = 3000;
 
 export class MapStorage {
@@ -30,15 +31,17 @@ export class MapStorage {
   }
 
   async saveWorld(world: EditorWorldSave): Promise<UploadedWorldMapReport> {
-    const localSaved = this.writeJson(this.worldKey, world);
+    const worldWithTerrainRules = this.attachLocalTerrainRules(world);
+    const localSaved = this.writeJson(this.worldKey, worldWithTerrainRules);
 
     if (!localSaved) {
       console.warn('[MapStorage] Local editor world backup failed. Continuing with server upload.');
     }
 
-    const report = await uploadWorldMap(world);
+    const report = await uploadWorldMap(worldWithTerrainRules);
     console.info('[MapStorage] Uploaded editor world map to server.', {
       ...report,
+      terrainRules: worldWithTerrainRules.worldMap.terrainRuleSet?.rules.length ?? 0,
       localBackupSaved: localSaved,
     });
     return report;
@@ -51,6 +54,7 @@ export class MapStorage {
     try {
       const parsed = JSON.parse(raw) as EditorWorldSave;
       if (!isValidWorldSave(parsed)) return this.migrateSingleDraftToWorld();
+      this.restoreLocalTerrainRules(parsed.worldMap.terrainRuleSet);
       return parsed;
     } catch (error) {
       console.warn('[MapStorage] Failed to parse world save.', error);
@@ -66,10 +70,12 @@ export class MapStorage {
 
     if (serverWorld && serverScore > localScore) {
       this.writeJson(this.worldKey, serverWorld);
+      this.restoreLocalTerrainRules(serverWorld.worldMap.terrainRuleSet);
       console.info('[MapStorage] Using server editor world because it has more content.', {
         localScore,
         serverScore,
         cells: serverWorld.cells.length,
+        terrainRules: serverWorld.worldMap.terrainRuleSet?.rules.length ?? 0,
       });
       return serverWorld;
     }
@@ -79,6 +85,7 @@ export class MapStorage {
         localScore,
         serverScore,
         cells: localWorld.cells.length,
+        terrainRules: localWorld.worldMap.terrainRuleSet?.rules.length ?? 0,
       });
       return localWorld;
     }
@@ -93,11 +100,13 @@ export class MapStorage {
 
       const world = convertRuntimeMapToEditorWorldSave(runtimeMap, this.mapName);
       if (world.worldMap.itemOverrides) saveEditorItemOverrides(world.worldMap.itemOverrides);
+      this.restoreLocalTerrainRules(world.worldMap.terrainRuleSet);
       if (options.writeLocalBackup !== false) this.writeJson(this.worldKey, world);
       console.info('[MapStorage] Restored editor world from server map backup.', {
         cells: world.cells.length,
         placements: world.cells.reduce((sum, cell) => sum + cell.draft.placements.length, 0),
         itemOverrides: world.worldMap.itemOverrides?.length ?? 0,
+        terrainRules: world.worldMap.terrainRuleSet?.rules.length ?? 0,
       });
       return world;
     } catch (error) {
@@ -109,6 +118,7 @@ export class MapStorage {
   clear(): void {
     window.localStorage.removeItem(this.key);
     window.localStorage.removeItem(this.worldKey);
+    window.localStorage.removeItem(this.terrainRuleKey);
   }
 
   downloadJson(draft: EditorMapDraft): void {
@@ -116,14 +126,14 @@ export class MapStorage {
   }
 
   downloadWorldJson(world: EditorWorldSave): void {
-    this.download(`${world.name || this.mapName}-world.json`, world);
+    this.download(`${world.name || this.mapName}-world.json`, this.attachLocalTerrainRules(world));
   }
 
   private migrateSingleDraftToWorld(): EditorWorldSave | null {
     const draft = this.load();
     if (!draft) return null;
 
-    return {
+    return this.attachLocalTerrainRules({
       version: 1,
       name: this.mapName,
       tileSize: draft.tileSize,
@@ -134,7 +144,39 @@ export class MapStorage {
         cells: [{ id: '0:0', name: 'Map 0,0', gridX: 0, gridY: 0 }],
       },
       cells: [{ gridX: 0, gridY: 0, draft }],
+    });
+  }
+
+  private attachLocalTerrainRules(world: EditorWorldSave): EditorWorldSave {
+    const ruleSet = this.loadLocalTerrainRules() ?? world.worldMap.terrainRuleSet;
+    if (!ruleSet) return world;
+    const worldMap = { ...world.worldMap, terrainRuleSet: ruleSet };
+    return {
+      ...world,
+      worldMap,
+      cells: world.cells.map((cell) => ({
+        ...cell,
+        draft: { ...cell.draft, worldMap },
+      })),
     };
+  }
+
+  private loadLocalTerrainRules(): EditorTerrainRuleSet | undefined {
+    const raw = window.localStorage.getItem(this.terrainRuleKey);
+    if (!raw) return undefined;
+    try {
+      const parsed = JSON.parse(raw) as EditorTerrainRuleSet;
+      if (!isValidTerrainRuleSet(parsed)) return undefined;
+      return parsed;
+    } catch (error) {
+      console.warn('[MapStorage] Failed to parse terrain rules.', error);
+      return undefined;
+    }
+  }
+
+  private restoreLocalTerrainRules(ruleSet: EditorTerrainRuleSet | undefined): void {
+    if (!ruleSet || !isValidTerrainRuleSet(ruleSet)) return;
+    this.writeJson(this.terrainRuleKey, ruleSet);
   }
 
   private writeJson(key: string, value: unknown): boolean {
@@ -169,6 +211,10 @@ export class MapStorage {
 
   private get worldKey(): string {
     return `${WORLD_STORAGE_PREFIX}${this.mapName}`;
+  }
+
+  private get terrainRuleKey(): string {
+    return `${TERRAIN_RULE_STORAGE_PREFIX}${this.mapName}`;
   }
 }
 
@@ -290,7 +336,8 @@ function getWorldSaveContentScore(world: EditorWorldSave | null): number {
   const placementScore = world.cells.reduce((sum, cell) => sum + countUserPlacements(cell.draft.placements), 0);
   const spawnRuleScore = world.worldMap.monsterSpawnRules?.length ?? 0;
   const itemScore = world.worldMap.itemOverrides?.length ?? 0;
-  return placementScore + spawnRuleScore + itemScore;
+  const terrainRuleScore = world.worldMap.terrainRuleSet?.rules.length ?? 0;
+  return placementScore + spawnRuleScore + itemScore + terrainRuleScore;
 }
 
 function countUserPlacements(placements: EditorTilePlacement[]): number {
@@ -330,4 +377,8 @@ function isValidWorldSave(value: EditorWorldSave): boolean {
       isValidDraft(cell.draft)
     ))
   );
+}
+
+function isValidTerrainRuleSet(value: EditorTerrainRuleSet): boolean {
+  return Boolean(value && value.version === 1 && Array.isArray(value.rules) && typeof value.updatedAt === 'number');
 }
