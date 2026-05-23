@@ -1,4 +1,4 @@
-import type { EditorSourceRect, EditorTerrainRuleSet, EditorTerrainTileRule, EditorTilePlacement, EditorTilesetAsset } from '../types';
+import type { EditorSourceRect, EditorTerrainRuleSet, EditorTerrainTileRole, EditorTerrainTileRule, EditorTilePlacement, EditorTilesetAsset } from '../types';
 
 export type BasicTerrainGenerationOptions = {
   tilesets: EditorTilesetAsset[];
@@ -16,41 +16,48 @@ type TerrainTile = {
   rule?: EditorTerrainTileRule;
 };
 
+type TerrainTilePool = {
+  all: TerrainTile[];
+  byRole: Map<EditorTerrainTileRole, TerrainTile[]>;
+};
+
 const DEFAULT_MAX_PLACEMENTS = 12000;
 const DEFAULT_TERRAIN_RULE_KEY = 'dalworld:editor-terrain-rules:dalworld-map';
 
 export async function generateBasicGroundTerrain(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
   const gridSize = normalizeGridSize(options.gridSize);
   const terrainRuleSet = options.terrainRuleSet ?? readStoredTerrainRuleSet();
-  const terrainTiles = await collectTerrainTiles(options.tilesets, gridSize, terrainRuleSet);
-  if (terrainTiles.length === 0) return [];
+  const pool = await collectTerrainTilePool(options.tilesets, gridSize, terrainRuleSet);
+  if (pool.all.length === 0) return [];
 
   const width = normalizePositiveInteger(options.width, 3000);
   const height = normalizePositiveInteger(options.height, 3000);
   const maxPlacements = normalizePositiveInteger(options.maxPlacements, DEFAULT_MAX_PLACEMENTS);
+  const columns = Math.max(1, Math.ceil(width / gridSize));
+  const rows = Math.max(1, Math.ceil(height / gridSize));
+  const roleCounters = new Map<EditorTerrainTileRole | 'all', number>();
   const placements: EditorTilePlacement[] = [];
 
-  let index = 0;
-  for (let y = 0; y < height; y += gridSize) {
-    for (let x = 0; x < width; x += gridSize) {
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
       if (placements.length >= maxPlacements) return placements;
-      const tile = terrainTiles[index % terrainTiles.length];
-      placements.push(createGroundPlacement(tile, x, y));
-      index += 1;
+      const role = getRectangularRole(column, row, columns, rows);
+      const tile = pickTileForRole(pool, role, roleCounters);
+      placements.push(createGroundPlacement(tile, column * gridSize, row * gridSize));
     }
   }
 
   return placements;
 }
 
-async function collectTerrainTiles(
+async function collectTerrainTilePool(
   tilesets: EditorTilesetAsset[],
   gridSize: number,
   terrainRuleSet: EditorTerrainRuleSet | undefined,
-): Promise<TerrainTile[]> {
+): Promise<TerrainTilePool> {
   const ruleTiles = collectRuleTerrainTiles(tilesets, terrainRuleSet);
-  if (ruleTiles.length > 0) return ruleTiles;
-  return collectFullTilesetTerrainTiles(tilesets, gridSize);
+  if (ruleTiles.length > 0) return createTilePool(ruleTiles);
+  return createTilePool(await collectFullTilesetTerrainTiles(tilesets, gridSize));
 }
 
 function collectRuleTerrainTiles(
@@ -64,11 +71,7 @@ function collectRuleTerrainTiles(
     tilesetByKey.set(createTilesetKey(asset.id, asset.url), asset);
   }
 
-  const ruleTiles = buildRuleTerrainTiles(tilesetByKey, terrainRuleSet.rules);
-  const centerTiles = ruleTiles.filter((tile) => tile.rule?.role === 'center');
-
-  if (centerTiles.length > 0) return centerTiles;
-  return ruleTiles;
+  return buildRuleTerrainTiles(tilesetByKey, terrainRuleSet.rules);
 }
 
 function buildRuleTerrainTiles(
@@ -121,6 +124,54 @@ async function collectFullTilesetTerrainTiles(tilesets: EditorTilesetAsset[], gr
   }
 
   return result;
+}
+
+function createTilePool(tiles: TerrainTile[]): TerrainTilePool {
+  const byRole = new Map<EditorTerrainTileRole, TerrainTile[]>();
+  for (const tile of tiles) {
+    const role = tile.rule?.role;
+    if (!role) continue;
+    const list = byRole.get(role) ?? [];
+    list.push(tile);
+    byRole.set(role, list);
+  }
+  return { all: tiles, byRole };
+}
+
+function getRectangularRole(
+  column: number,
+  row: number,
+  columns: number,
+  rows: number,
+): EditorTerrainTileRole {
+  const isTop = row === 0;
+  const isBottom = row === rows - 1;
+  const isLeft = column === 0;
+  const isRight = column === columns - 1;
+
+  if (isTop && isLeft) return 'outerTopLeft';
+  if (isTop && isRight) return 'outerTopRight';
+  if (isBottom && isLeft) return 'outerBottomLeft';
+  if (isBottom && isRight) return 'outerBottomRight';
+  if (isTop) return 'edgeTop';
+  if (isBottom) return 'edgeBottom';
+  if (isLeft) return 'edgeLeft';
+  if (isRight) return 'edgeRight';
+  return 'center';
+}
+
+function pickTileForRole(
+  pool: TerrainTilePool,
+  role: EditorTerrainTileRole,
+  counters: Map<EditorTerrainTileRole | 'all', number>,
+): TerrainTile {
+  const candidates = pool.byRole.get(role)
+    ?? pool.byRole.get('center')
+    ?? pool.all;
+  const counterKey = pool.byRole.has(role) ? role : pool.byRole.has('center') ? 'center' : 'all';
+  const index = counters.get(counterKey) ?? 0;
+  counters.set(counterKey, index + 1);
+  return candidates[index % candidates.length];
 }
 
 function createGroundPlacement(tile: TerrainTile, x: number, y: number): EditorTilePlacement {
