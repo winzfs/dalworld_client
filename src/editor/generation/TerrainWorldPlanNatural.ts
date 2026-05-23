@@ -36,10 +36,10 @@ export async function generateWorldPlanTerrainNatural(options: BasicTerrainGener
     const source = pickCandidate(candidates, patchMaterial, point.column, point.row, seed);
     if (!source) continue;
 
-    const opacityRoll = layeredNoise(point.column + 17, point.row - 31, seed + 701, 9, 4, 2);
-    if (opacityRoll < 0.42) continue;
+    const patchRoll = layeredNoise(point.column + 17, point.row - 31, seed + 701, 9, 4, 2);
+    if (patchRoll < 0.42) continue;
 
-    result.push(createVisualPatch(source, placement, opacityRoll));
+    result.push(createVisualPatch(source, placement));
     occupiedOverlayCells.add(key);
   }
 
@@ -100,7 +100,7 @@ function pickCandidate(candidates: MaterialCandidate[], material: EditorTerrainM
   return group.placements[index];
 }
 
-function createVisualPatch(source: EditorTilePlacement, target: EditorTilePlacement, noiseValue: number): EditorTilePlacement {
+function createVisualPatch(source: EditorTilePlacement, target: EditorTilePlacement): EditorTilePlacement {
   return {
     id: crypto.randomUUID(),
     assetId: source.assetId,
@@ -118,7 +118,6 @@ function createVisualPatch(source: EditorTilePlacement, target: EditorTilePlacem
     gameplay: undefined,
     terrainMaterial: undefined,
     terrainMovementMode: undefined,
-    opacity: clamp(0.18 + noiseValue * 0.22, 0.24, 0.38),
   };
 }
 
@@ -155,8 +154,4 @@ function readStoredSeed(): number {
   } catch {
     return 1;
   }
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
