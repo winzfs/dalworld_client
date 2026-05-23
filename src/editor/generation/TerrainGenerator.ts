@@ -1,4 +1,13 @@
-import type { EditorSourceRect, EditorTerrainRuleSet, EditorTerrainTileRole, EditorTerrainTileRule, EditorTilePlacement, EditorTilesetAsset } from '../types';
+import type {
+  EditorSourceRect,
+  EditorTerrainMaterial,
+  EditorTerrainMovementMode,
+  EditorTerrainRuleSet,
+  EditorTerrainTileRole,
+  EditorTerrainTileRule,
+  EditorTilePlacement,
+  EditorTilesetAsset,
+} from '../types';
 
 export type TerrainGenerationShape = 'rect' | 'island';
 
@@ -18,6 +27,8 @@ type TerrainTile = {
   sourceRect: EditorSourceRect;
   scale: number;
   weight: number;
+  material: EditorTerrainMaterial;
+  movementMode: EditorTerrainMovementMode;
   rule?: EditorTerrainTileRule;
 };
 
@@ -110,14 +121,17 @@ function buildRuleTerrainTiles(
     if (!asset || asset.solidColor !== undefined || !isImageAssetUrl(asset.url)) continue;
     const weight = normalizeWeight(rule.weight);
     if (weight <= 0) continue;
-    const key = `${rule.id}:${rule.scale ?? 1}:${weight}`;
+    const key = `${rule.id}:${rule.scale ?? 1}:${weight}:${rule.material ?? 'grass'}:${rule.movementMode ?? 'passable'}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    const material = rule.material ?? 'grass';
     result.push({
       asset,
       sourceRect: { ...rule.sourceRect },
       scale: normalizeScale(rule.scale),
       weight,
+      material,
+      movementMode: rule.movementMode ?? getDefaultMovementMode(material),
       rule,
     });
   }
@@ -145,7 +159,7 @@ async function collectFullTilesetTerrainTiles(tilesets: EditorTilesetAsset[], gr
         const key = JSON.stringify({ assetId: asset.id, assetUrl: asset.url, sourceRect });
         if (seen.has(key)) continue;
         seen.add(key);
-        result.push({ asset, sourceRect, scale: 1, weight: 1 });
+        result.push({ asset, sourceRect, scale: 1, weight: 1, material: 'grass', movementMode: 'passable' });
       }
     }
   }
@@ -311,6 +325,8 @@ function createGroundPlacement(tile: TerrainTile, x: number, y: number): EditorT
     solidColor: undefined,
     transparentBlack: false,
     gameplay: undefined,
+    terrainMaterial: tile.material,
+    terrainMovementMode: tile.movementMode,
   };
 }
 
@@ -358,6 +374,12 @@ function createTilesetKey(id: string, url: string): string {
 
 function isImageAssetUrl(url: string): boolean {
   return !url.startsWith('solid://') && !url.startsWith('editor://');
+}
+
+function getDefaultMovementMode(material: EditorTerrainMaterial): EditorTerrainMovementMode {
+  if (material === 'water') return 'boatOnly';
+  if (material === 'rock') return 'blocked';
+  return 'passable';
 }
 
 function seededNoise(x: number, y: number, seed: number): number {
