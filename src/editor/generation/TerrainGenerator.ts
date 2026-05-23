@@ -21,6 +21,12 @@ type TerrainTilePool = {
   byRole: Map<EditorTerrainTileRole, TerrainTile[]>;
 };
 
+type TerrainMask = {
+  columns: number;
+  rows: number;
+  isFilled(column: number, row: number): boolean;
+};
+
 const DEFAULT_MAX_PLACEMENTS = 12000;
 const DEFAULT_TERRAIN_RULE_KEY = 'dalworld:editor-terrain-rules:dalworld-map';
 
@@ -35,13 +41,15 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
   const maxPlacements = normalizePositiveInteger(options.maxPlacements, DEFAULT_MAX_PLACEMENTS);
   const columns = Math.max(1, Math.ceil(width / gridSize));
   const rows = Math.max(1, Math.ceil(height / gridSize));
+  const mask = createFilledRectMask(columns, rows);
   const roleCounters = new Map<EditorTerrainTileRole | 'all', number>();
   const placements: EditorTilePlacement[] = [];
 
   for (let row = 0; row < rows; row += 1) {
     for (let column = 0; column < columns; column += 1) {
       if (placements.length >= maxPlacements) return placements;
-      const role = getRectangularRole(column, row, columns, rows);
+      if (!mask.isFilled(column, row)) continue;
+      const role = resolveRoleFromMask(mask, column, row);
       const tile = pickTileForRole(pool, role, roleCounters);
       placements.push(createGroundPlacement(tile, column * gridSize, row * gridSize));
     }
@@ -138,25 +146,41 @@ function createTilePool(tiles: TerrainTile[]): TerrainTilePool {
   return { all: tiles, byRole };
 }
 
-function getRectangularRole(
-  column: number,
-  row: number,
-  columns: number,
-  rows: number,
-): EditorTerrainTileRole {
-  const isTop = row === 0;
-  const isBottom = row === rows - 1;
-  const isLeft = column === 0;
-  const isRight = column === columns - 1;
+function createFilledRectMask(columns: number, rows: number): TerrainMask {
+  return {
+    columns,
+    rows,
+    isFilled(column: number, row: number): boolean {
+      return column >= 0 && column < columns && row >= 0 && row < rows;
+    },
+  };
+}
 
-  if (isTop && isLeft) return 'outerTopLeft';
-  if (isTop && isRight) return 'outerTopRight';
-  if (isBottom && isLeft) return 'outerBottomLeft';
-  if (isBottom && isRight) return 'outerBottomRight';
-  if (isTop) return 'edgeTop';
-  if (isBottom) return 'edgeBottom';
-  if (isLeft) return 'edgeLeft';
-  if (isRight) return 'edgeRight';
+function resolveRoleFromMask(mask: TerrainMask, column: number, row: number): EditorTerrainTileRole {
+  const top = mask.isFilled(column, row - 1);
+  const bottom = mask.isFilled(column, row + 1);
+  const left = mask.isFilled(column - 1, row);
+  const right = mask.isFilled(column + 1, row);
+
+  if (!top && !left) return 'outerTopLeft';
+  if (!top && !right) return 'outerTopRight';
+  if (!bottom && !left) return 'outerBottomLeft';
+  if (!bottom && !right) return 'outerBottomRight';
+  if (!top) return 'edgeTop';
+  if (!bottom) return 'edgeBottom';
+  if (!left) return 'edgeLeft';
+  if (!right) return 'edgeRight';
+
+  const topLeft = mask.isFilled(column - 1, row - 1);
+  const topRight = mask.isFilled(column + 1, row - 1);
+  const bottomLeft = mask.isFilled(column - 1, row + 1);
+  const bottomRight = mask.isFilled(column + 1, row + 1);
+
+  if (!topLeft) return 'innerTopLeft';
+  if (!topRight) return 'innerTopRight';
+  if (!bottomLeft) return 'innerBottomLeft';
+  if (!bottomRight) return 'innerBottomRight';
+
   return 'center';
 }
 
