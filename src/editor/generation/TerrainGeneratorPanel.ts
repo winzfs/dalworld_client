@@ -1,4 +1,5 @@
 import type { EditorTerrainRuleSet, EditorTerrainTileRule, EditorTilesetAsset } from '../types';
+import type { TerrainGenerationShape } from './TerrainGenerator';
 
 export type TerrainGeneratorPanelOptions = {
   getTilesets: () => EditorTilesetAsset[];
@@ -15,6 +16,7 @@ export class TerrainGeneratorPanel {
   private readonly body = document.createElement('div');
   private readonly list = document.createElement('div');
   private readonly closeButton = document.createElement('button');
+  private readonly shapeSelect = document.createElement('select');
   private isOpen = false;
   private dragging = false;
   private dragOffsetX = 0;
@@ -88,7 +90,7 @@ export class TerrainGeneratorPanel {
 
     const help = document.createElement('div');
     help.style.cssText = 'line-height:1.45;color:rgba(248,250,252,.72);';
-    help.textContent = '등록한 이미지 타일셋 전체를 현재 그리드 기준으로 분할해 ground 레이어를 생성합니다. Object/Block은 유지됩니다.';
+    help.textContent = '등록한 이미지 타일셋과 규칙을 사용해 ground 레이어를 생성합니다. Object/Block은 유지됩니다.';
 
     const addButton = document.createElement('button');
     addButton.type = 'button';
@@ -98,6 +100,14 @@ export class TerrainGeneratorPanel {
       this.options.onAddCurrentTileset();
       this.render();
     };
+
+    const shapeRow = document.createElement('div');
+    shapeRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const shapeLabel = document.createElement('span');
+    shapeLabel.textContent = '생성 형태';
+    shapeLabel.style.cssText = 'color:rgba(248,250,252,.72);font-weight:800;';
+    this.configureShapeSelect();
+    shapeRow.append(shapeLabel, this.shapeSelect);
 
     const ruleButton = document.createElement('button');
     ruleButton.type = 'button';
@@ -114,7 +124,7 @@ export class TerrainGeneratorPanel {
     this.list.className = 'terrain-generator-list';
     this.list.style.cssText = 'display:flex;flex-direction:column;gap:6px;min-height:32px;';
 
-    this.body.append(help, addButton, ruleButton, this.list, generateButton);
+    this.body.append(help, addButton, shapeRow, ruleButton, this.list, generateButton);
     this.element.append(this.header, this.body);
     this.attachDragHandlers();
     this.render();
@@ -213,6 +223,23 @@ export class TerrainGeneratorPanel {
     }
   }
 
+  private configureShapeSelect(): void {
+    this.shapeSelect.style.cssText = selectStyle();
+    this.shapeSelect.innerHTML = '';
+    this.shapeSelect.append(
+      createShapeOption('rect', '사각형'),
+      createShapeOption('island', '섬/덩어리'),
+    );
+    this.shapeSelect.value = readStoredShape(this.mapName);
+    this.shapeSelect.onchange = () => {
+      writeStoredShape(this.mapName, this.shapeSelect.value as TerrainGenerationShape);
+    };
+  }
+
+  private get mapName(): string {
+    return this.options.mapName ?? 'dalworld-map';
+  }
+
   private async openRuleManager(): Promise<void> {
     const panel = await this.ensureRuleManagerPanel();
     panel.open();
@@ -226,7 +253,7 @@ export class TerrainGeneratorPanel {
       import('./TerrainRuleStorage'),
     ]);
 
-    this.ruleStorage = new storageModule.TerrainRuleStorage(this.options.mapName ?? 'dalworld-map');
+    this.ruleStorage = new storageModule.TerrainRuleStorage(this.mapName);
     this.ruleSet = this.ruleStorage.load();
     this.ruleManagerPanel = new panelModule.TerrainRuleManagerPanel({
       getTilesets: () => this.options.getTilesets(),
@@ -275,6 +302,27 @@ export class TerrainGeneratorPanel {
   }
 }
 
+function createShapeOption(value: TerrainGenerationShape, label: string): HTMLOptionElement {
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = label;
+  return option;
+}
+
+function shapeStorageKey(mapName: string): string {
+  return `dalworld:editor-terrain-shape:${mapName}`;
+}
+
+function readStoredShape(mapName: string): TerrainGenerationShape {
+  const raw = window.localStorage.getItem(shapeStorageKey(mapName));
+  return raw === 'island' ? 'island' : 'rect';
+}
+
+function writeStoredShape(mapName: string, shape: TerrainGenerationShape): void {
+  window.localStorage.setItem(shapeStorageKey(mapName), shape);
+  window.localStorage.setItem('dalworld:editor-terrain-shape:dalworld-map', shape);
+}
+
 function buttonStyle(): string {
   return 'border:1px solid rgba(255,255,255,.18);border-radius:9px;background:rgba(255,255,255,.08);color:#f8fafc;padding:7px 10px;cursor:pointer;font-weight:800;';
 }
@@ -285,6 +333,10 @@ function primaryButtonStyle(): string {
 
 function secondaryButtonStyle(): string {
   return 'border:1px solid rgba(167,139,250,.45);border-radius:10px;background:rgba(109,40,217,.28);color:#f8fafc;padding:8px 10px;cursor:pointer;font-weight:900;';
+}
+
+function selectStyle(): string {
+  return 'flex:1 1 auto;min-width:0;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:7px 8px;font-weight:800;';
 }
 
 function smallDangerButtonStyle(): string {
