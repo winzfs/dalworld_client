@@ -49,6 +49,7 @@ type GridPoint = { column: number; row: number };
 type FamilyRegion = { family: TerrainTileFamily; column: number; row: number; radiusBias: number };
 type FeatureKind = 'water' | 'road';
 type GeneratedCell = { land: boolean; baseFamily: TerrainTileFamily | null; featureKind: FeatureKind | null; featureFamily: TerrainTileFamily | null };
+type TilesetGenerationSettings = { material: EditorTerrainMaterial; movementMode: EditorTerrainMovementMode; scale: number };
 
 const DEFAULT_TERRAIN_RULE_KEY = 'dalworld:editor-terrain-rules:dalworld-map';
 const DEFAULT_TERRAIN_SHAPE_KEY = 'dalworld:editor-terrain-shape:dalworld-map';
@@ -91,8 +92,8 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
     waterFamilies,
     roadFamilies,
     baseRegions: createFamilyRegions(baseFamilies, columns, rows, seed + 17, 1.45),
-    waterRegions: createFamilyRegions(waterFamilies, columns, rows, seed + 307, 1.0),
-    roadRegions: createFamilyRegions(roadFamilies, columns, rows, seed + 419, 1.0),
+    waterRegions: createFamilyRegions(waterFamilies, columns, rows, seed + 307, 1),
+    roadRegions: createFamilyRegions(roadFamilies, columns, rows, seed + 419, 1),
   });
 
   const placements: EditorTilePlacement[] = [];
@@ -185,34 +186,15 @@ function applyBaseTransitionPasses(cells: GeneratedCell[][], baseFamilies: Terra
     const nearWater = hasNeighborFeature(cells, column, row, 'water', 1);
     const nearRoad = hasNeighborFeature(cells, column, row, 'road', 1);
     if (!nearWater && !nearRoad) return;
-    if (nearWater) {
-      const family = pickTransitionFamily(sandFamilies.length > 0 ? sandFamilies : dirtFamilies, column, row, seed + 31);
-      if (family) updates.push({ column, row, family });
-      return;
-    }
-    if (nearRoad && normalizedNoise(Math.floor(column / 2), Math.floor(row / 2), seed + 73) > 0.22) {
-      const family = pickTransitionFamily(dirtFamilies.length > 0 ? dirtFamilies : sandFamilies, column, row, seed + 47);
+    const familyPool = nearWater ? (sandFamilies.length > 0 ? sandFamilies : dirtFamilies) : (dirtFamilies.length > 0 ? dirtFamilies : sandFamilies);
+    const chance = nearWater ? 1 : normalizedNoise(Math.floor(column / 2), Math.floor(row / 2), seed + 73);
+    if (chance > 0.22) {
+      const family = pickTransitionFamily(familyPool, column, row, seed + (nearWater ? 31 : 47));
       if (family) updates.push({ column, row, family });
     }
   });
 
   for (const update of updates) cells[update.row][update.column].baseFamily = update.family;
-}
-
-function hasNeighborFeature(cells: GeneratedCell[][], column: number, row: number, feature: FeatureKind, radius: number): boolean {
-  for (let y = row - radius; y <= row + radius; y += 1) {
-    for (let x = column - radius; x <= column + radius; x += 1) {
-      if (x === column && y === row) continue;
-      if (cells[y]?.[x]?.featureKind === feature) return true;
-    }
-  }
-  return false;
-}
-
-function pickTransitionFamily(families: TerrainTileFamily[], column: number, row: number, seed: number): TerrainTileFamily | null {
-  if (families.length === 0) return null;
-  const index = Math.floor(normalizedNoise(column * 11 + 5, row * 13 + 7, seed) * families.length) % families.length;
-  return families[index] ?? families[0];
 }
 
 async function collectTerrainFamilies(tilesets: EditorTilesetAsset[], gridSize: number, terrainRuleSet: EditorTerrainRuleSet | undefined): Promise<TerrainTileFamily[]> {
@@ -228,22 +210,36 @@ function collectRuleTerrainTiles(tilesets: EditorTilesetAsset[], terrainRuleSet:
   const tilesetByKey = new Map<string, EditorTilesetAsset>();
   for (const asset of tilesets) tilesetByKey.set(createTilesetKey(asset.id, asset.url), asset);
 
+  const settingsByKey = new Map<string, TilesetGenerationSettings>();
+  for (const setting of terrainRuleSet.tilesets ?? []) {
+    const material = setting.material ?? 'grass';
+    settingsByKey.set(createTilesetKey(setting.tilesetId, setting.tilesetUrl), {
+      material,
+      movementMode: setting.movementMode ?? getDefaultMovementMode(material),
+      scale: normalizeScale(setting.scale),
+    });
+  }
+
   const result: TerrainTile[] = [];
   const seen = new Set<string>();
   for (const rule of terrainRuleSet.rules) {
-    const scale = normalizeScale(rule.scale);
-    if (!doesRuleFitGrid(rule, scale, gridSize)) continue;
-    const asset = tilesetByKey.get(createTilesetKey(rule.tilesetId, rule.tilesetUrl));
+    const assetKey = createTilesetKey(rule.tilesetId, rule.tilesetUrl);
+    const asset = tilesetByKey.get(assetKey);
     if (!asset || asset.solidColor !== undefined || !isImageAssetUrl(asset.url)) continue;
+
+    const settings = settingsByKey.get(assetKey);
+    const material = rule.material ?? settings?.material ?? 'grass';
+    const movementMode = rule.movementMode ?? settings?.movementMode ?? getDefaultMovementMode(material);
+    const scale = normalizeScale(settings?.scale ?? rule.scale);
+    if (!doesRuleFitGrid(rule, scale, gridSize)) continue;
+
     const weight = normalizeWeight(rule.weight);
     if (weight <= 0) continue;
-    const material = rule.material ?? 'grass';
-    const movementMode = rule.movementMode ?? getDefaultMovementMode(material);
     const role = rule.role ?? 'center';
-    const key = `${rule.tilesetId}:${rule.tilesetUrl}:${rule.sourceRect.x}:${rule.sourceRect.y}:${rule.sourceRect.width}:${rule.sourceRect.height}:${role}:${scale}:${weight}:${material}:${movementMode}`;
+    const key = `${assetKey}:${rule.sourceRect.x}:${rule.sourceRect.y}:${rule.sourceRect.width}:${rule.sourceRect.height}:${role}:${scale}:${weight}:${material}:${movementMode}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    result.push({ asset, sourceRect: { ...rule.sourceRect }, scale, weight, material, movementMode, role, rule: { ...rule, role, scale } });
+    result.push({ asset, sourceRect: { ...rule.sourceRect }, scale, weight, material, movementMode, role, rule: { ...rule, role } });
   }
   return result;
 }
@@ -261,11 +257,9 @@ async function collectFullTilesetTerrainTiles(tilesets: EditorTilesetAsset[], gr
     if (!asset || asset.solidColor !== undefined || !isImageAssetUrl(asset.url)) continue;
     const size = await loadImageSize(asset.url);
     if (!size) continue;
-    const stepX = Math.max(1, Math.round(gridSize));
-    const stepY = Math.max(1, Math.round(gridSize));
-    for (let y = 0; y + stepY <= size.height; y += stepY) {
-      for (let x = 0; x + stepX <= size.width; x += stepX) {
-        const sourceRect = { x, y, width: stepX, height: stepY };
+    for (let y = 0; y + gridSize <= size.height; y += gridSize) {
+      for (let x = 0; x + gridSize <= size.width; x += gridSize) {
+        const sourceRect = { x, y, width: gridSize, height: gridSize };
         const key = JSON.stringify({ assetId: asset.id, assetUrl: asset.url, sourceRect });
         if (seen.has(key)) continue;
         seen.add(key);
@@ -294,7 +288,9 @@ function createFamilies(tiles: TerrainTile[]): TerrainTileFamily[] {
   return [...familyMap.values()].filter((family) => family.all.length > 0);
 }
 
-function createFamilyKey(tile: TerrainTile): string { return `${tile.asset.id}:${tile.asset.url}:${tile.material}:${tile.movementMode}`; }
+function createFamilyKey(tile: TerrainTile): string {
+  return `${tile.asset.id}:${tile.asset.url}:${tile.material}:${tile.movementMode}`;
+}
 
 function getBaseFamilies(families: TerrainTileFamily[]): TerrainTileFamily[] {
   const base = families.filter((family) => family.material === 'grass' || family.material === 'dirt' || family.material === 'sand');
@@ -303,7 +299,9 @@ function getBaseFamilies(families: TerrainTileFamily[]): TerrainTileFamily[] {
   return fallback.length > 0 ? fallback : families;
 }
 
-function getFamiliesByMaterial(families: TerrainTileFamily[], material: EditorTerrainMaterial): TerrainTileFamily[] { return families.filter((family) => family.material === material); }
+function getFamiliesByMaterial(families: TerrainTileFamily[], material: EditorTerrainMaterial): TerrainTileFamily[] {
+  return families.filter((family) => family.material === material);
+}
 
 function createFamilyRegions(families: TerrainTileFamily[], columns: number, rows: number, seed: number, densityMultiplier: number): FamilyRegion[] {
   if (families.length === 0) return [];
@@ -311,7 +309,12 @@ function createFamilyRegions(families: TerrainTileFamily[], columns: number, row
   const regionCount = Math.max(families.length, Math.min(families.length * 3, Math.round(Math.sqrt(columns * rows) / 18 * densityMultiplier)));
   const regions: FamilyRegion[] = [];
   for (let index = 0; index < regionCount; index += 1) {
-    regions.push({ family: families[index % families.length], column: normalizedNoise(seed + index * 17, index * 31 + 3, seed) * columns, row: normalizedNoise(seed + index * 29, index * 37 + 7, seed + 101) * rows, radiusBias: 0.75 + normalizedNoise(seed + index * 41, index * 43 + 11, seed + 203) * 0.6 });
+    regions.push({
+      family: families[index % families.length],
+      column: normalizedNoise(seed + index * 17, index * 31 + 3, seed) * columns,
+      row: normalizedNoise(seed + index * 29, index * 37 + 7, seed + 101) * rows,
+      radiusBias: 0.75 + normalizedNoise(seed + index * 41, index * 43 + 11, seed + 203) * 0.6,
+    });
   }
   return regions;
 }
@@ -335,8 +338,14 @@ function pickFamilyFromRegions(regions: FamilyRegion[], fallbackFamilies: Terrai
   return bestRegion.family;
 }
 
-function resolveLandRole(cells: GeneratedCell[][], column: number, row: number): EditorTerrainTileRole { return resolveRoleByPredicate(column, row, (x, y) => Boolean(cells[y]?.[x]?.land)); }
-function resolveFeatureRole(cells: GeneratedCell[][], column: number, row: number, feature: FeatureKind): EditorTerrainTileRole { return resolveRoleByPredicate(column, row, (x, y) => cells[y]?.[x]?.featureKind === feature); }
+function resolveLandRole(cells: GeneratedCell[][], column: number, row: number): EditorTerrainTileRole {
+  return resolveRoleByPredicate(column, row, (x, y) => Boolean(cells[y]?.[x]?.land));
+}
+
+function resolveFeatureRole(cells: GeneratedCell[][], column: number, row: number, feature: FeatureKind): EditorTerrainTileRole {
+  return resolveRoleByPredicate(column, row, (x, y) => cells[y]?.[x]?.featureKind === feature);
+}
+
 function resolveRoleByPredicate(column: number, row: number, isSame: (column: number, row: number) => boolean): EditorTerrainTileRole {
   const top = isSame(column, row - 1);
   const bottom = isSame(column, row + 1);
@@ -350,14 +359,10 @@ function resolveRoleByPredicate(column: number, row: number, isSame: (column: nu
   if (!bottom) return 'edgeBottom';
   if (!left) return 'edgeLeft';
   if (!right) return 'edgeRight';
-  const topLeft = isSame(column - 1, row - 1);
-  const topRight = isSame(column + 1, row - 1);
-  const bottomLeft = isSame(column - 1, row + 1);
-  const bottomRight = isSame(column + 1, row + 1);
-  if (!topLeft) return 'innerTopLeft';
-  if (!topRight) return 'innerTopRight';
-  if (!bottomLeft) return 'innerBottomLeft';
-  if (!bottomRight) return 'innerBottomRight';
+  if (!isSame(column - 1, row - 1)) return 'innerTopLeft';
+  if (!isSame(column + 1, row - 1)) return 'innerTopRight';
+  if (!isSame(column - 1, row + 1)) return 'innerBottomLeft';
+  if (!isSame(column + 1, row + 1)) return 'innerBottomRight';
   return 'center';
 }
 
@@ -412,8 +417,29 @@ function forEachCell(cells: GeneratedCell[][], callback: (cell: GeneratedCell, c
   }
 }
 
-function createFilledRectMask(columns: number, rows: number): TerrainMask { return { columns, rows, isFilled: (column, row) => column >= 0 && column < columns && row >= 0 && row < rows }; }
-function createEmptyMask(columns: number, rows: number): TerrainMask { return { columns, rows, isFilled: () => false }; }
+function hasNeighborFeature(cells: GeneratedCell[][], column: number, row: number, feature: FeatureKind, radius: number): boolean {
+  for (let y = row - radius; y <= row + radius; y += 1) {
+    for (let x = column - radius; x <= column + radius; x += 1) {
+      if (x === column && y === row) continue;
+      if (cells[y]?.[x]?.featureKind === feature) return true;
+    }
+  }
+  return false;
+}
+
+function pickTransitionFamily(families: TerrainTileFamily[], column: number, row: number, seed: number): TerrainTileFamily | null {
+  if (families.length === 0) return null;
+  const index = Math.floor(normalizedNoise(column * 11 + 5, row * 13 + 7, seed) * families.length) % families.length;
+  return families[index] ?? families[0];
+}
+
+function createFilledRectMask(columns: number, rows: number): TerrainMask {
+  return { columns, rows, isFilled: (column, row) => column >= 0 && column < columns && row >= 0 && row < rows };
+}
+
+function createEmptyMask(columns: number, rows: number): TerrainMask {
+  return { columns, rows, isFilled: () => false };
+}
 
 function createIslandLandMask(columns: number, rows: number, seed: number): TerrainMask {
   const values = new Set<string>();
@@ -557,7 +583,9 @@ function countFilledNeighbors(values: Set<string>, column: number, row: number):
   return count;
 }
 
-function setMask(columns: number, rows: number, values: Set<string>): TerrainMask { return { columns, rows, isFilled: (column, row) => column >= 0 && column < columns && row >= 0 && row < rows && values.has(`${column}:${row}`) }; }
+function setMask(columns: number, rows: number, values: Set<string>): TerrainMask {
+  return { columns, rows, isFilled: (column, row) => column >= 0 && column < columns && row >= 0 && row < rows && values.has(`${column}:${row}`) };
+}
 
 function readStoredTerrainRuleSet(): EditorTerrainRuleSet | undefined {
   try {
