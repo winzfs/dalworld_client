@@ -40,6 +40,7 @@ export class TerrainRuleStorage {
       material,
       movementMode,
       blocksMovement: rule.blocksMovement ?? settings.blocksMovement ?? movementMode === 'blocked',
+      scale: undefined,
     });
     const nextRules = current.rules.filter((item) => item.id !== normalizedRule.id);
     nextRules.push(normalizedRule);
@@ -69,9 +70,12 @@ export class TerrainRuleStorage {
     asset: EditorTilesetAsset,
     material: EditorTerrainMaterial,
     movementMode: EditorTerrainMovementMode = getDefaultMovementMode(material),
+    scale = 1,
   ): EditorTerrainRuleSet {
     const current = this.load();
+    const previous = this.getTilesetMaterialByKey(asset.id, asset.url, current);
     const normalizedMovement = normalizeMovementMode(movementMode, material);
+    const normalizedScale = normalizeScale(scale);
     const blocksMovement = normalizedMovement === 'blocked';
     const nextTileset: EditorTerrainTilesetMaterial = {
       tilesetId: asset.id,
@@ -79,18 +83,19 @@ export class TerrainRuleStorage {
       material,
       movementMode: normalizedMovement,
       blocksMovement,
+      scale: normalizedScale,
     };
     const nextTilesets = (current.tilesets ?? []).filter((item) => !isSameTileset(item, nextTileset));
     nextTilesets.push(nextTileset);
     const nextRules = current.rules.map((rule) => normalizeRule(
       rule.tilesetId === asset.id && rule.tilesetUrl === asset.url
-        ? { ...rule, material, movementMode: normalizedMovement, blocksMovement }
+        ? { ...rule, material, movementMode: normalizedMovement, blocksMovement, scale: undefined }
         : rule,
     ));
     const next: EditorTerrainRuleSet = {
       version: 1,
       rules: nextRules,
-      tilesets: nextTilesets,
+      tilesets: nextTilesets.length > 0 ? nextTilesets : [{ ...previous, scale: normalizedScale }],
       updatedAt: Date.now(),
     };
     this.save(next);
@@ -110,15 +115,17 @@ export class TerrainRuleStorage {
     if (saved) {
       const material = saved.material ?? 'grass';
       const movementMode = normalizeMovementMode(saved.movementMode, material);
+      const scale = normalizeScale(saved.scale);
       return {
         tilesetId,
         tilesetUrl,
         material,
         movementMode,
         blocksMovement: saved.blocksMovement ?? movementMode === 'blocked',
+        scale,
       };
     }
-    return { tilesetId, tilesetUrl, material: 'grass', movementMode: 'passable', blocksMovement: false };
+    return { tilesetId, tilesetUrl, material: 'grass', movementMode: 'passable', blocksMovement: false, scale: 1 };
   }
 
   private loadBestStoredRuleSet(): EditorTerrainRuleSet | null {
@@ -192,6 +199,7 @@ function normalizeRuleSet(ruleSet: EditorTerrainRuleSet): EditorTerrainRuleSet {
       material,
       movementMode,
       blocksMovement: item.blocksMovement ?? movementMode === 'blocked',
+      scale: normalizeScale(item.scale),
     };
   });
 
@@ -208,6 +216,7 @@ function normalizeRuleSet(ruleSet: EditorTerrainRuleSet): EditorTerrainRuleSet {
       material,
       movementMode,
       blocksMovement: rule.blocksMovement ?? saved?.blocksMovement ?? movementMode === 'blocked',
+      scale: undefined,
     });
     deduped.set(createRuleIdentity(normalized), normalized);
   }
@@ -221,21 +230,21 @@ function normalizeRuleSet(ruleSet: EditorTerrainRuleSet): EditorTerrainRuleSet {
 }
 
 function normalizeRule(rule: EditorTerrainTileRule): EditorTerrainTileRule {
-  const scale = normalizeScale(rule.scale);
-  return {
+  const normalized: EditorTerrainTileRule = {
     ...rule,
-    scale,
-    id: createRuleId(rule, scale),
+    scale: undefined,
   };
+  normalized.id = createRuleId(normalized);
+  return normalized;
 }
 
 function createRuleIdentity(rule: EditorTerrainTileRule): string {
-  return createRuleId(rule, normalizeScale(rule.scale));
+  return createRuleId(rule);
 }
 
-function createRuleId(rule: EditorTerrainTileRule, scale: number): string {
+function createRuleId(rule: EditorTerrainTileRule): string {
   const rect = rule.sourceRect;
-  return `${rule.tilesetId}:${rule.tilesetUrl}:${rule.tileSize}:${rect.x}:${rect.y}:${rect.width}:${rect.height}:${rule.role}:scale-${normalizeScale(scale)}`;
+  return `${rule.tilesetId}:${rule.tilesetUrl}:${rule.tileSize}:${rect.x}:${rect.y}:${rect.width}:${rect.height}:${rule.role}`;
 }
 
 function normalizeScale(value: number | undefined): number {
