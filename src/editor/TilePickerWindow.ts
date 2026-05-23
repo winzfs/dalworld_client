@@ -85,9 +85,7 @@ export class TilePickerWindow {
     this.gridInput.onchange = () => {
       const next = Number(this.gridInput.value);
       if (Number.isFinite(next) && next > 0) {
-        this.gridSize = Math.round(next);
-        this.syncGridBackground();
-        this.selectDefaultCell();
+        this.setGridSize(Math.round(next));
       }
     };
 
@@ -144,10 +142,19 @@ export class TilePickerWindow {
     this.element.append(this.header, controls, this.body);
 
     this.attachPointerHandlers();
+    this.syncGridBackground();
   }
 
   mount(parent: HTMLElement): void {
     parent.appendChild(this.element);
+  }
+
+  setGridSize(size: number): void {
+    const next = Number.isFinite(size) && size > 0 ? Math.round(size) : 32;
+    this.gridSize = Math.max(1, Math.min(256, next));
+    this.gridInput.value = String(this.gridSize);
+    this.syncGridBackground();
+    if (this.hasImageSize()) this.selectDefaultCell();
   }
 
   open(asset: EditorTilesetAsset): void {
