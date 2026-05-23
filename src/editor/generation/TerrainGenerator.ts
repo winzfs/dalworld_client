@@ -32,9 +32,15 @@ type TerrainTile = {
   rule?: EditorTerrainTileRule;
 };
 
-type TerrainTilePool = {
+type TerrainTileFamily = {
+  key: string;
+  material: EditorTerrainMaterial;
+  movementMode: EditorTerrainMovementMode;
+  tilesetId: string;
+  tilesetUrl: string;
   all: TerrainTile[];
   byRole: Map<EditorTerrainTileRole, TerrainTile[]>;
+  totalWeight: number;
 };
 
 type TerrainMask = {
@@ -47,37 +53,83 @@ const DEFAULT_MAX_PLACEMENTS = 12000;
 const DEFAULT_TERRAIN_RULE_KEY = 'dalworld:editor-terrain-rules:dalworld-map';
 const DEFAULT_TERRAIN_SHAPE_KEY = 'dalworld:editor-terrain-shape:dalworld-map';
 const DEFAULT_TERRAIN_SEED_KEY = 'dalworld:editor-terrain-seed:dalworld-map';
-const BASE_DECORATIVE_CHANCE = 0.04;
-const DECORATIVE_CHANCE_PER_WEIGHT = 0.01;
-const MAX_DECORATIVE_CHANCE = 0.35;
+const BASE_DECORATIVE_CHANCE = 0.035;
+const DECORATIVE_CHANCE_PER_WEIGHT = 0.008;
+const MAX_DECORATIVE_CHANCE = 0.25;
 
 export async function generateBasicGroundTerrain(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
   const gridSize = normalizeGridSize(options.gridSize);
   const seed = normalizeSeed(options.seed ?? readStoredTerrainSeed());
   const terrainRuleSet = options.terrainRuleSet ?? readStoredTerrainRuleSet();
-  const pool = await collectTerrainTilePool(options.tilesets, gridSize, terrainRuleSet);
-  if (pool.all.length === 0) return [];
+  const families = await collectTerrainFamilies(options.tilesets, gridSize, terrainRuleSet);
+  if (families.length === 0) return [];
 
   const width = normalizePositiveInteger(options.width, 3000);
   const height = normalizePositiveInteger(options.height, 3000);
   const maxPlacements = normalizePositiveInteger(options.maxPlacements, DEFAULT_MAX_PLACEMENTS);
   const columns = Math.max(1, Math.ceil(width / gridSize));
   const rows = Math.max(1, Math.ceil(height / gridSize));
-  const mask = createTerrainMask(options.shape ?? readStoredTerrainShape(), columns, rows, seed);
-  const roleCounters = new Map<EditorTerrainTileRole | 'all', number>();
+  const shape = options.shape ?? readStoredTerrainShape();
+
+  const baseFamily = pickBaseFamily(families, seed);
+  if (!baseFamily) return [];
+
+  const landMask = shape === 'island'
+    ? createIslandLandMask(columns, rows, seed)
+    : createFilledRectMask(columns, rows);
+  const waterFamily = pickFamilyByMaterial(families, 'water', seed + 101);
+  const roadFamily = pickFamilyByMaterial(families, 'road', seed + 211);
+  const decorativeFamilies = families.filter((family) => family.byRole.has('decorative') && family.material !== 'water' && family.material !== 'road');
+  const waterMask = waterFamily ? createWaterFeatureMask(columns, rows, seed + 307, landMask) : createEmptyMask(columns, rows);
+  const roadMask = roadFamily ? createRoadMask(columns, rows, seed + 419, landMask, waterMask) : createEmptyMask(columns, rows);
+
   const placements: EditorTilePlacement[] = [];
+  const baseCounters = new Map<EditorTerrainTileRole | 'all', number>();
+  const waterCounters = new Map<EditorTerrainTileRole | 'all', number>();
+  const roadCounters = new Map<EditorTerrainTileRole | 'all', number>();
 
   for (let row = 0; row < rows; row += 1) {
     for (let column = 0; column < columns; column += 1) {
       if (placements.length >= maxPlacements) return placements;
-      if (!mask.isFilled(column, row)) continue;
-      const role = resolveRoleFromMask(mask, column, row);
-      const tile = pickTileForRole(pool, role, column, row, seed, roleCounters);
-      placements.push(createGroundPlacement(tile, column * gridSize, row * gridSize));
+      if (!landMask.isFilled(column, row)) continue;
 
-      const decorative = pickDecorativeTile(pool, column, row, seed);
-      if (decorative && placements.length < maxPlacements) {
-        placements.push(createGroundPlacement(decorative, column * gridSize, row * gridSize));
+      const baseRole = resolveRoleFromMask(landMask, column, row);
+      const baseTile = pickTileForRole(baseFamily, baseRole, column, row, seed, baseCounters);
+      placements.push(createGroundPlacement(baseTile, column * gridSize, row * gridSize));
+    }
+  }
+
+  if (waterFamily) {
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        if (placements.length >= maxPlacements) return placements;
+        if (!waterMask.isFilled(column, row)) continue;
+        const role = resolveRoleFromMask(waterMask, column, row);
+        const tile = pickTileForRole(waterFamily, role, column, row, seed + 307, waterCounters);
+        placements.push(createGroundPlacement(tile, column * gridSize, row * gridSize));
+      }
+    }
+  }
+
+  if (roadFamily) {
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        if (placements.length >= maxPlacements) return placements;
+        if (!roadMask.isFilled(column, row)) continue;
+        const role = resolveRoleFromMask(roadMask, column, row);
+        const tile = pickTileForRole(roadFamily, role, column, row, seed + 419, roadCounters);
+        placements.push(createGroundPlacement(tile, column * gridSize, row * gridSize));
+      }
+    }
+  }
+
+  if (decorativeFamilies.length > 0) {
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        if (placements.length >= maxPlacements) return placements;
+        if (!landMask.isFilled(column, row) || waterMask.isFilled(column, row) || roadMask.isFilled(column, row)) continue;
+        const decorative = pickDecorativeTile(decorativeFamilies, column, row, seed + 613);
+        if (decorative) placements.push(createGroundPlacement(decorative, column * gridSize, row * gridSize));
       }
     }
   }
@@ -85,14 +137,14 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
   return placements;
 }
 
-async function collectTerrainTilePool(
+async function collectTerrainFamilies(
   tilesets: EditorTilesetAsset[],
   gridSize: number,
   terrainRuleSet: EditorTerrainRuleSet | undefined,
-): Promise<TerrainTilePool> {
+): Promise<TerrainTileFamily[]> {
   const ruleTiles = collectRuleTerrainTiles(tilesets, terrainRuleSet);
-  if (ruleTiles.length > 0) return createTilePool(ruleTiles);
-  return createTilePool(await collectFullTilesetTerrainTiles(tilesets, gridSize));
+  if (ruleTiles.length > 0) return createFamilies(ruleTiles);
+  return createFamilies(await collectFullTilesetTerrainTiles(tilesets, gridSize));
 }
 
 function collectRuleTerrainTiles(
@@ -121,17 +173,18 @@ function buildRuleTerrainTiles(
     if (!asset || asset.solidColor !== undefined || !isImageAssetUrl(asset.url)) continue;
     const weight = normalizeWeight(rule.weight);
     if (weight <= 0) continue;
-    const key = `${rule.id}:${rule.scale ?? 1}:${weight}:${rule.material ?? 'grass'}:${rule.movementMode ?? 'passable'}`;
+    const material = rule.material ?? 'grass';
+    const movementMode = rule.movementMode ?? getDefaultMovementMode(material);
+    const key = `${rule.id}:${rule.scale ?? 1}:${weight}:${material}:${movementMode}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const material = rule.material ?? 'grass';
     result.push({
       asset,
       sourceRect: { ...rule.sourceRect },
       scale: normalizeScale(rule.scale),
       weight,
       material,
-      movementMode: rule.movementMode ?? getDefaultMovementMode(material),
+      movementMode,
       rule,
     });
   }
@@ -167,21 +220,68 @@ async function collectFullTilesetTerrainTiles(tilesets: EditorTilesetAsset[], gr
   return result;
 }
 
-function createTilePool(tiles: TerrainTile[]): TerrainTilePool {
-  const byRole = new Map<EditorTerrainTileRole, TerrainTile[]>();
+function createFamilies(tiles: TerrainTile[]): TerrainTileFamily[] {
+  const familyMap = new Map<string, TerrainTileFamily>();
+
   for (const tile of tiles) {
+    const key = createFamilyKey(tile);
+    let family = familyMap.get(key);
+    if (!family) {
+      family = {
+        key,
+        material: tile.material,
+        movementMode: tile.movementMode,
+        tilesetId: tile.asset.id,
+        tilesetUrl: tile.asset.url,
+        all: [],
+        byRole: new Map<EditorTerrainTileRole, TerrainTile[]>(),
+        totalWeight: 0,
+      };
+      familyMap.set(key, family);
+    }
+
+    family.all.push(tile);
+    family.totalWeight += tile.weight;
     const role = tile.rule?.role;
-    if (!role) continue;
-    const list = byRole.get(role) ?? [];
-    list.push(tile);
-    byRole.set(role, list);
+    if (role) {
+      const list = family.byRole.get(role) ?? [];
+      list.push(tile);
+      family.byRole.set(role, list);
+    }
   }
-  return { all: tiles, byRole };
+
+  return [...familyMap.values()].filter((family) => family.all.length > 0);
 }
 
-function createTerrainMask(shape: TerrainGenerationShape, columns: number, rows: number, seed: number): TerrainMask {
-  if (shape === 'island') return createIslandMask(columns, rows, seed);
-  return createFilledRectMask(columns, rows);
+function createFamilyKey(tile: TerrainTile): string {
+  return `${tile.asset.id}:${tile.asset.url}:${tile.material}:${tile.movementMode}`;
+}
+
+function pickBaseFamily(families: TerrainTileFamily[], seed: number): TerrainTileFamily | undefined {
+  const baseCandidates = families.filter((family) => family.material === 'grass' || family.material === 'dirt' || family.material === 'sand');
+  if (baseCandidates.length > 0) return pickWeightedFamily(baseCandidates, seed, 0);
+  return pickWeightedFamily(families.filter((family) => family.material !== 'water' && family.material !== 'road'), seed, 0)
+    ?? families[0];
+}
+
+function pickFamilyByMaterial(
+  families: TerrainTileFamily[],
+  material: EditorTerrainMaterial,
+  seed: number,
+): TerrainTileFamily | undefined {
+  return pickWeightedFamily(families.filter((family) => family.material === material), seed, 0);
+}
+
+function pickWeightedFamily(families: TerrainTileFamily[], seed: number, salt: number): TerrainTileFamily | undefined {
+  if (families.length === 0) return undefined;
+  const total = families.reduce((sum, family) => sum + Math.max(1, family.totalWeight), 0);
+  const roll = (seededNoise(seed + salt * 17, seed * 3 + salt * 29, seed + 11) * 0.5 + 0.5) * total;
+  let cursor = 0;
+  for (const family of families) {
+    cursor += Math.max(1, family.totalWeight);
+    if (roll <= cursor) return family;
+  }
+  return families[families.length - 1];
 }
 
 function createFilledRectMask(columns: number, rows: number): TerrainMask {
@@ -194,11 +294,21 @@ function createFilledRectMask(columns: number, rows: number): TerrainMask {
   };
 }
 
-function createIslandMask(columns: number, rows: number, seed: number): TerrainMask {
+function createEmptyMask(columns: number, rows: number): TerrainMask {
+  return {
+    columns,
+    rows,
+    isFilled(): boolean {
+      return false;
+    },
+  };
+}
+
+function createIslandLandMask(columns: number, rows: number, seed: number): TerrainMask {
   const centerX = (columns - 1) / 2;
   const centerY = (rows - 1) / 2;
-  const radiusX = Math.max(1, columns * 0.46);
-  const radiusY = Math.max(1, rows * 0.46);
+  const radiusX = Math.max(1, columns * 0.47);
+  const radiusY = Math.max(1, rows * 0.47);
   const values = new Set<string>();
 
   for (let row = 0; row < rows; row += 1) {
@@ -206,13 +316,103 @@ function createIslandMask(columns: number, rows: number, seed: number): TerrainM
       const nx = (column - centerX) / radiusX;
       const ny = (row - centerY) / radiusY;
       const distance = Math.sqrt(nx * nx + ny * ny);
-      const wobble = seededNoise(column, row, seed) * 0.18 + seededNoise(column * 2 + 7, row * 2 + 11, seed + 97) * 0.08;
-      if (distance <= 0.92 + wobble) values.add(`${column}:${row}`);
+      const wobble = seededNoise(column, row, seed) * 0.08 + seededNoise(column * 2 + 7, row * 2 + 11, seed + 97) * 0.04;
+      if (distance <= 0.96 + wobble) values.add(`${column}:${row}`);
     }
   }
 
-  fillTinyHoles(values, columns, rows);
+  smoothMask(values, columns, rows, 2);
+  return setMask(columns, rows, values);
+}
 
+function createWaterFeatureMask(columns: number, rows: number, seed: number, landMask: TerrainMask): TerrainMask {
+  const values = new Set<string>();
+  const horizontal = seededNoise(seed, seed + 13, seed + 29) > 0;
+  const riverWidth = Math.max(1, Math.round(Math.min(columns, rows) * 0.035));
+  const lakeCount = Math.min(2, Math.max(0, Math.floor(Math.min(columns, rows) / 48)));
+
+  for (let i = 0; i < (horizontal ? columns : rows); i += 1) {
+    const t = i / Math.max(1, (horizontal ? columns : rows) - 1);
+    const bend = Math.sin(t * Math.PI * 2 + seed * 0.01) * 0.16 + Math.sin(t * Math.PI * 5 + seed * 0.017) * 0.06;
+    const center = Math.round((horizontal ? rows : columns) * (0.5 + bend));
+    for (let offset = -riverWidth; offset <= riverWidth; offset += 1) {
+      const column = horizontal ? i : center + offset;
+      const row = horizontal ? center + offset : i;
+      paintDisc(values, landMask, column, row, riverWidth);
+    }
+  }
+
+  for (let lake = 0; lake < lakeCount; lake += 1) {
+    const cx = Math.round(columns * (0.25 + (seededNoise(seed, lake + 31, seed + lake) * 0.5 + 0.5) * 0.5));
+    const cy = Math.round(rows * (0.25 + (seededNoise(seed + 43, lake + 71, seed) * 0.5 + 0.5) * 0.5));
+    const radius = Math.max(2, Math.round(Math.min(columns, rows) * (0.035 + lake * 0.012)));
+    paintDisc(values, landMask, cx, cy, radius);
+  }
+
+  smoothMask(values, columns, rows, 1);
+  return setMask(columns, rows, values);
+}
+
+function createRoadMask(columns: number, rows: number, seed: number, landMask: TerrainMask, waterMask: TerrainMask): TerrainMask {
+  const values = new Set<string>();
+  const horizontal = seededNoise(seed, seed + 5, seed + 11) > 0;
+  const roadWidth = Math.max(1, Math.round(Math.min(columns, rows) * 0.018));
+
+  for (let i = 0; i < (horizontal ? columns : rows); i += 1) {
+    const t = i / Math.max(1, (horizontal ? columns : rows) - 1);
+    const bend = Math.sin(t * Math.PI * 1.5 + seed * 0.021) * 0.10 + Math.sin(t * Math.PI * 3.5 + seed * 0.013) * 0.04;
+    const center = Math.round((horizontal ? rows : columns) * (0.5 + bend));
+    for (let offset = -roadWidth; offset <= roadWidth; offset += 1) {
+      const column = horizontal ? i : center + offset;
+      const row = horizontal ? center + offset : i;
+      if (landMask.isFilled(column, row) && !waterMask.isFilled(column, row)) values.add(`${column}:${row}`);
+    }
+  }
+
+  return setMask(columns, rows, values);
+}
+
+function paintDisc(values: Set<string>, bounds: TerrainMask, centerColumn: number, centerRow: number, radius: number): void {
+  for (let row = centerRow - radius; row <= centerRow + radius; row += 1) {
+    for (let column = centerColumn - radius; column <= centerColumn + radius; column += 1) {
+      const dx = column - centerColumn;
+      const dy = row - centerRow;
+      if (dx * dx + dy * dy <= radius * radius && bounds.isFilled(column, row)) {
+        values.add(`${column}:${row}`);
+      }
+    }
+  }
+}
+
+function smoothMask(values: Set<string>, columns: number, rows: number, iterations: number): void {
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    const toAdd: string[] = [];
+    const toDelete: string[] = [];
+    for (let row = 1; row < rows - 1; row += 1) {
+      for (let column = 1; column < columns - 1; column += 1) {
+        const key = `${column}:${row}`;
+        const count = countFilledNeighbors(values, column, row);
+        if (!values.has(key) && count >= 5) toAdd.push(key);
+        if (values.has(key) && count <= 1) toDelete.push(key);
+      }
+    }
+    for (const key of toAdd) values.add(key);
+    for (const key of toDelete) values.delete(key);
+  }
+}
+
+function countFilledNeighbors(values: Set<string>, column: number, row: number): number {
+  let count = 0;
+  for (let y = row - 1; y <= row + 1; y += 1) {
+    for (let x = column - 1; x <= column + 1; x += 1) {
+      if (x === column && y === row) continue;
+      if (values.has(`${x}:${y}`)) count += 1;
+    }
+  }
+  return count;
+}
+
+function setMask(columns: number, rows: number, values: Set<string>): TerrainMask {
   return {
     columns,
     rows,
@@ -220,22 +420,6 @@ function createIslandMask(columns: number, rows: number, seed: number): TerrainM
       return column >= 0 && column < columns && row >= 0 && row < rows && values.has(`${column}:${row}`);
     },
   };
-}
-
-function fillTinyHoles(values: Set<string>, columns: number, rows: number): void {
-  for (let row = 1; row < rows - 1; row += 1) {
-    for (let column = 1; column < columns - 1; column += 1) {
-      const key = `${column}:${row}`;
-      if (values.has(key)) continue;
-      const neighbors = [
-        values.has(`${column}:${row - 1}`),
-        values.has(`${column}:${row + 1}`),
-        values.has(`${column - 1}:${row}`),
-        values.has(`${column + 1}:${row}`),
-      ].filter(Boolean).length;
-      if (neighbors >= 3) values.add(key);
-    }
-  }
 }
 
 function resolveRoleFromMask(mask: TerrainMask, column: number, row: number): EditorTerrainTileRole {
@@ -267,25 +451,25 @@ function resolveRoleFromMask(mask: TerrainMask, column: number, row: number): Ed
 }
 
 function pickTileForRole(
-  pool: TerrainTilePool,
+  family: TerrainTileFamily,
   role: EditorTerrainTileRole,
   column: number,
   row: number,
   seed: number,
   counters: Map<EditorTerrainTileRole | 'all', number>,
 ): TerrainTile {
-  const candidates = pool.byRole.get(role)
-    ?? pool.byRole.get('center')
-    ?? pool.all;
-  const counterKey = pool.byRole.has(role) ? role : pool.byRole.has('center') ? 'center' : 'all';
+  const candidates = family.byRole.get(role)
+    ?? family.byRole.get('center')
+    ?? family.all;
+  const counterKey = family.byRole.has(role) ? role : family.byRole.has('center') ? 'center' : 'all';
   const index = counters.get(counterKey) ?? 0;
   counters.set(counterKey, index + 1);
   return pickWeightedTile(candidates, column, row, seed, index);
 }
 
-function pickDecorativeTile(pool: TerrainTilePool, column: number, row: number, seed: number): TerrainTile | null {
-  const candidates = pool.byRole.get('decorative');
-  if (!candidates || candidates.length === 0) return null;
+function pickDecorativeTile(families: TerrainTileFamily[], column: number, row: number, seed: number): TerrainTile | null {
+  const candidates = families.flatMap((family) => family.byRole.get('decorative') ?? []);
+  if (candidates.length === 0) return null;
   const totalWeight = candidates.reduce((sum, tile) => sum + tile.weight, 0);
   if (totalWeight <= 0) return null;
   const chance = seededNoise(column * 19 + 3, row * 23 + 5, seed + 193) * 0.5 + 0.5;
