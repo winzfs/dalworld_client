@@ -121,6 +121,21 @@ export type EditorTerrainTileRole =
   | 'innerBottomRight'
   | 'decorative';
 
+export type EditorTerrainMaterial =
+  | 'grass'
+  | 'water'
+  | 'road'
+  | 'sand'
+  | 'dirt'
+  | 'rock';
+
+export type EditorTerrainTilesetMaterial = {
+  tilesetId: string;
+  tilesetUrl: string;
+  material: EditorTerrainMaterial;
+  blocksMovement?: boolean;
+};
+
 export type EditorTerrainTileRule = {
   id: string;
   tilesetId: string;
@@ -131,11 +146,14 @@ export type EditorTerrainTileRule = {
   sourceRect: EditorSourceRect;
   weight?: number;
   scale?: number;
+  material?: EditorTerrainMaterial;
+  blocksMovement?: boolean;
 };
 
 export type EditorTerrainRuleSet = {
   version: 1;
   rules: EditorTerrainTileRule[];
+  tilesets?: EditorTerrainTilesetMaterial[];
   updatedAt: number;
 };
 
