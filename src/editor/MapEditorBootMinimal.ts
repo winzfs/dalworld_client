@@ -351,12 +351,18 @@ export class MapEditorBootMinimal {
 
     this.showToast('지형 생성 중...', 'info', 0);
     try {
-      const generator = await import('./generation/TerrainGenerator');
+      const [generator, ruleStorageModule] = await Promise.all([
+        import('./generation/TerrainGenerator'),
+        import('./generation/TerrainRuleStorage'),
+      ]);
+      const terrainRuleSet = new ruleStorageModule.TerrainRuleStorage(this.mapName).load();
+      const gridSize = this.state.gridSize ?? this.options.tileSize ?? 32;
       const generatedGround = await generator.generateBasicGroundTerrain({
         tilesets,
         width: this.worldWidth,
         height: this.worldHeight,
-        gridSize: this.state.gridSize ?? this.options.tileSize ?? 32,
+        gridSize,
+        terrainRuleSet,
       });
       const currentDraft = this.placement.mapDraft as EditorMapDraft;
       const keptPlacements = currentDraft.placements.filter((placement: EditorTilePlacement) => placement.layer !== 'ground');
@@ -368,8 +374,8 @@ export class MapEditorBootMinimal {
       };
       await this.placement.replaceDraft(nextDraft);
       this.persistCurrentCellDraft();
-      this.showToast(`지형 생성 완료 · 타일셋 ${tilesets.length}개 · ground ${generatedGround.length}개`, 'success', 3_500);
-      this.report(`Generated terrain. tilesets=${tilesets.length}, ground=${generatedGround.length}, kept=${keptPlacements.length}`);
+      this.showToast(`지형 생성 완료 · grid ${gridSize} · 타일셋 ${tilesets.length}개 · 규칙 ${terrainRuleSet.rules.length}개 · ground ${generatedGround.length}개`, 'success', 3_500);
+      this.report(`Generated terrain. grid=${gridSize}, tilesets=${tilesets.length}, rules=${terrainRuleSet.rules.length}, ground=${generatedGround.length}, kept=${keptPlacements.length}`);
     } catch (error) {
       console.warn('[MapEditor] Terrain generation failed.', error);
       this.showToast(`지형 생성 실패 · ${formatError(error)}`, 'error', 5_000);
