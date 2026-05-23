@@ -142,6 +142,8 @@ export type EditorTerrainTilesetMaterial = {
   material: EditorTerrainMaterial;
   movementMode?: EditorTerrainMovementMode;
   blocksMovement?: boolean;
+  /** Tileset-level display scale. Example: 16px rules with scale 2 are used on a 32px grid. */
+  scale?: number;
 };
 
 export type EditorTerrainTileRule = {
@@ -153,6 +155,7 @@ export type EditorTerrainTileRule = {
   role: EditorTerrainTileRole;
   sourceRect: EditorSourceRect;
   weight?: number;
+  /** @deprecated Prefer EditorTerrainTilesetMaterial.scale. Kept for older saved rules. */
   scale?: number;
   material?: EditorTerrainMaterial;
   movementMode?: EditorTerrainMovementMode;
