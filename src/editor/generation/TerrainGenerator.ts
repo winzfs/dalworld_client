@@ -216,8 +216,10 @@ function pickTransitionFamily(families: TerrainTileFamily[], column: number, row
 }
 
 async function collectTerrainFamilies(tilesets: EditorTilesetAsset[], gridSize: number, terrainRuleSet: EditorTerrainRuleSet | undefined): Promise<TerrainTileFamily[]> {
+  const hasManualRules = Boolean(terrainRuleSet && terrainRuleSet.rules.length > 0);
   const ruleTiles = collectRuleTerrainTiles(tilesets, terrainRuleSet, gridSize);
   if (ruleTiles.length > 0) return createFamilies(ruleTiles);
+  if (hasManualRules) return [];
   return createFamilies(await collectFullTilesetTerrainTiles(tilesets, gridSize));
 }
 
@@ -249,9 +251,7 @@ function collectRuleTerrainTiles(tilesets: EditorTilesetAsset[], terrainRuleSet:
 function doesRuleFitGrid(rule: EditorTerrainTileRule, scale: number, gridSize: number): boolean {
   const width = normalizePositiveInteger(rule.sourceRect?.width, normalizeGridSize(rule.tileSize));
   const height = normalizePositiveInteger(rule.sourceRect?.height, normalizeGridSize(rule.tileSize));
-  const effectiveWidth = Math.round(width * scale);
-  const effectiveHeight = Math.round(height * scale);
-  return effectiveWidth === gridSize && effectiveHeight === gridSize;
+  return Math.round(width * scale) === gridSize && Math.round(height * scale) === gridSize;
 }
 
 async function collectFullTilesetTerrainTiles(tilesets: EditorTilesetAsset[], gridSize: number): Promise<TerrainTile[]> {
@@ -391,7 +391,9 @@ function pickWeightedTile(candidates: TerrainTile[], column: number, row: number
 
 function createGroundPlacement(tile: TerrainTile, x: number, y: number): EditorTilePlacement {
   const sourceRect = { ...tile.sourceRect };
-  return { id: crypto.randomUUID(), assetId: tile.asset.id, assetUrl: tile.asset.url, categoryId: tile.asset.categoryId, x, y, layer: 'ground', scale: tile.scale, displayWidth: sourceRect.width, displayHeight: sourceRect.height, sourceRect, solidColor: undefined, transparentBlack: false, gameplay: undefined, terrainMaterial: tile.material, terrainMovementMode: tile.movementMode };
+  const displayWidth = Math.max(1, Math.round(sourceRect.width * tile.scale));
+  const displayHeight = Math.max(1, Math.round(sourceRect.height * tile.scale));
+  return { id: crypto.randomUUID(), assetId: tile.asset.id, assetUrl: tile.asset.url, categoryId: tile.asset.categoryId, x, y, layer: 'ground', scale: 1, displayWidth, displayHeight, sourceRect, solidColor: undefined, transparentBlack: false, gameplay: undefined, terrainMaterial: tile.material, terrainMovementMode: tile.movementMode };
 }
 
 function getFamilyCounters(store: Map<string, Map<EditorTerrainTileRole | 'all', number>>, family: TerrainTileFamily): Map<EditorTerrainTileRole | 'all', number> {
