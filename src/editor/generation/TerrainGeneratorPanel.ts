@@ -1,11 +1,11 @@
-import type { EditorTilesetAsset } from '../types';
+import type { EditorTerrainRuleSet, EditorTerrainTileRule, EditorTilesetAsset } from '../types';
 
 export type TerrainGeneratorPanelOptions = {
   getTilesets: () => EditorTilesetAsset[];
   onAddCurrentTileset: () => void;
   onRemoveTileset: (asset: EditorTilesetAsset) => void;
-  onOpenRuleManager: () => void;
   onGenerate: () => void;
+  mapName?: string;
 };
 
 export class TerrainGeneratorPanel {
@@ -19,6 +19,9 @@ export class TerrainGeneratorPanel {
   private dragging = false;
   private dragOffsetX = 0;
   private dragOffsetY = 0;
+  private ruleManagerPanel: any = null;
+  private ruleStorage: any = null;
+  private ruleSet: EditorTerrainRuleSet | null = null;
 
   constructor(private readonly options: TerrainGeneratorPanelOptions) {
     this.element = document.createElement('div');
@@ -100,7 +103,7 @@ export class TerrainGeneratorPanel {
     ruleButton.type = 'button';
     ruleButton.textContent = '규칙관리';
     ruleButton.style.cssText = secondaryButtonStyle();
-    ruleButton.onclick = this.options.onOpenRuleManager;
+    ruleButton.onclick = () => { void this.openRuleManager(); };
 
     const generateButton = document.createElement('button');
     generateButton.type = 'button';
@@ -202,11 +205,49 @@ export class TerrainGeneratorPanel {
         event.stopPropagation();
         this.options.onRemoveTileset(asset);
         this.render();
+        this.ruleManagerPanel?.render?.();
       });
 
       item.append(preview, label, removeButton);
       this.list.appendChild(item);
     }
+  }
+
+  private async openRuleManager(): Promise<void> {
+    const panel = await this.ensureRuleManagerPanel();
+    panel.open();
+  }
+
+  private async ensureRuleManagerPanel(): Promise<any> {
+    if (this.ruleManagerPanel?.open) return this.ruleManagerPanel;
+
+    const [panelModule, storageModule] = await Promise.all([
+      import('./TerrainRuleManagerPanel'),
+      import('./TerrainRuleStorage'),
+    ]);
+
+    this.ruleStorage = new storageModule.TerrainRuleStorage(this.options.mapName ?? 'dalworld-map');
+    this.ruleSet = this.ruleStorage.load();
+    this.ruleManagerPanel = new panelModule.TerrainRuleManagerPanel({
+      getTilesets: () => this.options.getTilesets(),
+      getRuleSet: () => this.ruleSet ?? this.ruleStorage.load(),
+      onSaveRule: (rule: EditorTerrainTileRule) => this.saveTerrainRule(rule),
+      onRemoveRule: (ruleId: string) => this.removeTerrainRule(ruleId),
+    });
+    this.ruleManagerPanel.mount(this.element.ownerDocument.body);
+    return this.ruleManagerPanel;
+  }
+
+  private saveTerrainRule(rule: EditorTerrainTileRule): void {
+    if (!this.ruleStorage) return;
+    this.ruleSet = this.ruleStorage.upsert(rule);
+    this.ruleManagerPanel?.render?.();
+  }
+
+  private removeTerrainRule(ruleId: string): void {
+    if (!this.ruleStorage) return;
+    this.ruleSet = this.ruleStorage.remove(ruleId);
+    this.ruleManagerPanel?.render?.();
   }
 
   private attachDragHandlers(): void {
