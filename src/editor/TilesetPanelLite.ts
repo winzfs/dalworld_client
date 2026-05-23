@@ -9,6 +9,8 @@ export type TilesetPanelLiteActions = {
   onPickAsset: (asset: EditorTilesetAsset) => void;
   onFillAll: () => void;
   onRandomFill: (chancePercent: number) => void;
+  onAddTerrainBrush?: () => void;
+  onGenerateTerrain?: () => void;
   onToggleWorldMap: () => void;
 };
 
@@ -58,6 +60,7 @@ export class TilesetPanelLite {
   private readonly actionContainer = document.createElement('div');
   private readonly categoryContainer = document.createElement('div');
   private readonly assetContainer = document.createElement('div');
+  private readonly terrainModeButton = document.createElement('button');
 
   private dragging = false;
   private dragOffsetX = 0;
@@ -96,6 +99,8 @@ export class TilesetPanelLite {
     this.categoryContainer.className = 'map-editor-categories';
     this.assetContainer.className = 'map-editor-assets';
 
+    this.configureTerrainModeButton();
+
     this.element.append(
       this.header,
       this.notice,
@@ -118,6 +123,37 @@ export class TilesetPanelLite {
 
   mount(parent: HTMLElement): void {
     parent.appendChild(this.element);
+    if (this.actions.onGenerateTerrain) parent.appendChild(this.terrainModeButton);
+  }
+
+  private configureTerrainModeButton(): void {
+    this.terrainModeButton.type = 'button';
+    this.terrainModeButton.className = 'map-editor-top-mode-button terrain-mode-button';
+    this.terrainModeButton.textContent = '지형생성 모드';
+    this.terrainModeButton.style.cssText = [
+      'position:fixed',
+      'top:14px',
+      'left:50%',
+      'transform:translateX(-50%)',
+      'z-index:10003',
+      'border:1px solid rgba(56,189,248,.48)',
+      'border-radius:999px',
+      'background:rgba(14,165,233,.22)',
+      'color:#f8fafc',
+      'padding:9px 16px',
+      'font-weight:900',
+      'box-shadow:0 10px 32px rgba(0,0,0,.32)',
+      'cursor:pointer',
+    ].join(';');
+    this.terrainModeButton.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    this.terrainModeButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.actions.onGenerateTerrain?.();
+    });
   }
 
   private ensureCategory(): void {
