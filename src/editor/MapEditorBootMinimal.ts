@@ -285,6 +285,7 @@ export class MapEditorBootMinimal {
         this.terrainPanel = new module.TerrainGeneratorPanel({
           getTilesets: () => [...this.terrainTilesets],
           onAddCurrentTileset: () => this.addTerrainTileset(),
+          onRemoveTileset: (asset: EditorTilesetAsset) => this.removeTerrainTileset(asset),
           onGenerate: () => { void this.generateTerrain(); },
         });
         this.terrainPanel.mount(this.uiRoot);
@@ -312,6 +313,16 @@ export class MapEditorBootMinimal {
     this.terrainPanel?.render?.();
     this.showToast(`타일셋 등록 완료 · ${asset.name} · 총 ${this.terrainTilesets.length}개`, 'success', 3_000);
     this.report(`Registered terrain tileset: ${asset.name}. total=${this.terrainTilesets.length}`);
+  }
+
+  private removeTerrainTileset(asset: EditorTilesetAsset): void {
+    const key = createTilesetKey(asset);
+    const index = this.terrainTilesets.findIndex((item) => createTilesetKey(item) === key);
+    if (index < 0) return;
+    this.terrainTilesets.splice(index, 1);
+    this.terrainPanel?.render?.();
+    this.showToast(`타일셋 등록 해제 · ${asset.name} · 총 ${this.terrainTilesets.length}개`, 'info', 2_500);
+    this.report(`Removed terrain tileset: ${asset.name}. total=${this.terrainTilesets.length}`);
   }
 
   private async generateTerrain(): Promise<void> {
