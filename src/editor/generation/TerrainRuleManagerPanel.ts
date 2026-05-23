@@ -414,7 +414,7 @@ export class TerrainRuleManagerPanel {
     this.scaleInput.value = String(scale);
     this.weightInput.value = String(weight);
     const rule: EditorTerrainTileRule = {
-      id: createRuleId(this.selectedAsset, this.selectedRect, this.tileSize, role),
+      id: createRuleId(this.selectedAsset, this.selectedRect, this.tileSize, role, scale),
       tilesetId: this.selectedAsset.id,
       tilesetName: this.selectedAsset.name,
       tilesetUrl: this.selectedAsset.url,
@@ -459,7 +459,10 @@ export class TerrainRuleManagerPanel {
   private findSelectedRule(): EditorTerrainTileRule | undefined {
     const rules = this.findSelectedRectRules();
     const selectedRole = this.roleSelect.value as EditorTerrainTileRole;
-    return rules.find((rule) => rule.role === selectedRole) ?? rules[0];
+    const selectedScale = normalizeScale(Number(this.scaleInput.value));
+    return rules.find((rule) => rule.role === selectedRole && normalizeScale(rule.scale) === selectedScale)
+      ?? rules.find((rule) => rule.role === selectedRole)
+      ?? rules[0];
   }
 
   private findSelectedRectRules(): EditorTerrainTileRule[] {
@@ -515,8 +518,8 @@ export class TerrainRuleManagerPanel {
   }
 }
 
-function createRuleId(asset: EditorTilesetAsset, rect: EditorSourceRect, tileSize: number, role: EditorTerrainTileRole): string {
-  return `${asset.id}:${asset.url}:${tileSize}:${rect.x}:${rect.y}:${rect.width}:${rect.height}:${role}`;
+function createRuleId(asset: EditorTilesetAsset, rect: EditorSourceRect, tileSize: number, role: EditorTerrainTileRole, scale: number): string {
+  return `${asset.id}:${asset.url}:${tileSize}:${rect.x}:${rect.y}:${rect.width}:${rect.height}:${role}:scale-${normalizeScale(scale)}`;
 }
 
 function createLegacyRuleId(asset: EditorTilesetAsset, rect: EditorSourceRect, tileSize: number): string {
@@ -558,128 +561,23 @@ function roleBackground(role: EditorTerrainTileRole): string {
   return 'rgba(192,132,252,.14)';
 }
 
-function getMaterialOptions(): EditorTerrainMaterial[] {
-  return ['grass', 'water', 'road', 'sand', 'dirt', 'rock'];
-}
-
-function getMovementOptions(): EditorTerrainMovementMode[] {
-  return ['passable', 'blocked', 'shallow', 'swim', 'boatOnly'];
-}
-
-function getDefaultMovementMode(material: EditorTerrainMaterial): EditorTerrainMovementMode {
-  if (material === 'water') return 'boatOnly';
-  if (material === 'rock') return 'blocked';
-  return 'passable';
-}
-
-function createMaterialSelect(value: EditorTerrainMaterial): HTMLSelectElement {
-  const select = document.createElement('select');
-  select.style.cssText = compactSelectStyle();
-  for (const material of getMaterialOptions()) {
-    const option = document.createElement('option');
-    option.value = material;
-    option.textContent = material;
-    select.appendChild(option);
-  }
-  select.value = value;
-  return select;
-}
-
-function createMovementSelect(value: EditorTerrainMovementMode): HTMLSelectElement {
-  const select = document.createElement('select');
-  select.style.cssText = compactSelectStyle();
-  for (const movement of getMovementOptions()) {
-    const option = document.createElement('option');
-    option.value = movement;
-    option.textContent = movement;
-    select.appendChild(option);
-  }
-  select.value = value;
-  return select;
-}
-
-function stopEvent(event: Event): void {
-  event.preventDefault();
-  event.stopPropagation();
-}
-
-function label(text: string): HTMLSpanElement {
-  const element = document.createElement('span');
-  element.textContent = text;
-  element.style.cssText = 'color:rgba(248,250,252,.68);font-weight:800;';
-  return element;
-}
-
-function smallLabel(text: string): HTMLSpanElement {
-  const element = document.createElement('span');
-  element.textContent = text;
-  element.style.cssText = 'color:rgba(248,250,252,.62);font-weight:800;';
-  return element;
-}
-
-function buttonStyle(): string {
-  return 'border:1px solid rgba(255,255,255,.18);border-radius:9px;background:rgba(255,255,255,.08);color:#f8fafc;padding:7px 10px;cursor:pointer;font-weight:800;';
-}
-
-function primaryButtonStyle(): string {
-  return 'border:1px solid rgba(34,197,94,.42);border-radius:10px;background:rgba(22,163,74,.24);color:#f8fafc;padding:8px 10px;cursor:pointer;font-weight:900;';
-}
-
-function dangerButtonStyle(): string {
-  return 'border:1px solid rgba(248,113,113,.45);border-radius:10px;background:rgba(127,29,29,.45);color:#fecaca;padding:8px 10px;cursor:pointer;font-weight:900;';
-}
-
-function selectStyle(): string {
-  return 'border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 8px;font-weight:800;';
-}
-
-function compactSelectStyle(): string {
-  return 'width:100%;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 7px;font-weight:800;';
-}
-
-function inputStyle(): string {
-  return 'width:64px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 8px;font-weight:800;';
-}
-
-function emptyBoxStyle(): string {
-  return 'padding:8px;border:1px dashed rgba(255,255,255,.16);border-radius:10px;color:rgba(248,250,252,.58);line-height:1.45;';
-}
-
-function tilesetCardStyle(active: boolean): string {
-  return [
-    'display:flex',
-    'flex-direction:column',
-    'gap:6px',
-    'border-radius:10px',
-    'padding:8px',
-    active ? 'border:1px solid rgba(167,139,250,.75)' : 'border:1px solid rgba(255,255,255,.12)',
-    active ? 'background:rgba(167,139,250,.18)' : 'background:rgba(255,255,255,.05)',
-  ].join(';');
-}
-
-function tilesetButtonStyle(active: boolean): string {
-  return [
-    'text-align:left',
-    'border-radius:8px',
-    'padding:7px',
-    'cursor:pointer',
-    'font-weight:800',
-    active ? 'border:1px solid rgba(167,139,250,.75)' : 'border:1px solid rgba(255,255,255,.12)',
-    active ? 'background:rgba(167,139,250,.22)' : 'background:rgba(255,255,255,.05)',
-    'color:#f8fafc',
-  ].join(';');
-}
-
-function normalizeScale(value: number | undefined): number {
-  if (!Number.isFinite(value) || (value as number) <= 0) return DEFAULT_SCALE;
-  return Math.max(0.1, Math.min(10, Math.round((value as number) * 10) / 10));
-}
-
-function normalizeWeight(value: number | undefined): number {
-  if (!Number.isFinite(value) || (value as number) < 0) return DEFAULT_WEIGHT;
-  return Math.max(0, Math.min(100, Math.round(value as number)));
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
+function getMaterialOptions(): EditorTerrainMaterial[] { return ['grass', 'water', 'road', 'sand', 'dirt', 'rock']; }
+function getMovementOptions(): EditorTerrainMovementMode[] { return ['passable', 'blocked', 'shallow', 'swim', 'boatOnly']; }
+function getDefaultMovementMode(material: EditorTerrainMaterial): EditorTerrainMovementMode { if (material === 'water') return 'boatOnly'; if (material === 'rock') return 'blocked'; return 'passable'; }
+function createMaterialSelect(value: EditorTerrainMaterial): HTMLSelectElement { const select = document.createElement('select'); select.style.cssText = compactSelectStyle(); for (const material of getMaterialOptions()) { const option = document.createElement('option'); option.value = material; option.textContent = material; select.appendChild(option); } select.value = value; return select; }
+function createMovementSelect(value: EditorTerrainMovementMode): HTMLSelectElement { const select = document.createElement('select'); select.style.cssText = compactSelectStyle(); for (const movement of getMovementOptions()) { const option = document.createElement('option'); option.value = movement; option.textContent = movement; select.appendChild(option); } select.value = value; return select; }
+function stopEvent(event: Event): void { event.preventDefault(); event.stopPropagation(); }
+function label(text: string): HTMLSpanElement { const element = document.createElement('span'); element.textContent = text; element.style.cssText = 'color:rgba(248,250,252,.68);font-weight:800;'; return element; }
+function smallLabel(text: string): HTMLSpanElement { const element = document.createElement('span'); element.textContent = text; element.style.cssText = 'color:rgba(248,250,252,.62);font-weight:800;'; return element; }
+function buttonStyle(): string { return 'border:1px solid rgba(255,255,255,.18);border-radius:9px;background:rgba(255,255,255,.08);color:#f8fafc;padding:7px 10px;cursor:pointer;font-weight:800;'; }
+function primaryButtonStyle(): string { return 'border:1px solid rgba(34,197,94,.42);border-radius:10px;background:rgba(22,163,74,.24);color:#f8fafc;padding:8px 10px;cursor:pointer;font-weight:900;'; }
+function dangerButtonStyle(): string { return 'border:1px solid rgba(248,113,113,.45);border-radius:10px;background:rgba(127,29,29,.45);color:#fecaca;padding:8px 10px;cursor:pointer;font-weight:900;'; }
+function selectStyle(): string { return 'border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 8px;font-weight:800;'; }
+function compactSelectStyle(): string { return 'width:100%;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 7px;font-weight:800;'; }
+function inputStyle(): string { return 'width:64px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 8px;font-weight:800;'; }
+function emptyBoxStyle(): string { return 'padding:8px;border:1px dashed rgba(255,255,255,.16);border-radius:10px;color:rgba(248,250,252,.58);line-height:1.45;'; }
+function tilesetCardStyle(active: boolean): string { return ['display:flex','flex-direction:column','gap:6px','border-radius:10px','padding:8px',active ? 'border:1px solid rgba(167,139,250,.75)' : 'border:1px solid rgba(255,255,255,.12)',active ? 'background:rgba(167,139,250,.18)' : 'background:rgba(255,255,255,.05)'].join(';'); }
+function tilesetButtonStyle(active: boolean): string { return ['text-align:left','border-radius:8px','padding:7px','cursor:pointer','font-weight:800',active ? 'border:1px solid rgba(167,139,250,.75)' : 'border:1px solid rgba(255,255,255,.12)',active ? 'background:rgba(167,139,250,.22)' : 'background:rgba(255,255,255,.05)','color:#f8fafc'].join(';'); }
+function normalizeScale(value: number | undefined): number { if (!Number.isFinite(value) || (value as number) <= 0) return DEFAULT_SCALE; return Math.max(0.1, Math.min(10, Math.round((value as number) * 10) / 10)); }
+function normalizeWeight(value: number | undefined): number { if (!Number.isFinite(value) || (value as number) < 0) return DEFAULT_WEIGHT; return Math.max(0, Math.min(100, Math.round(value as number))); }
+function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
