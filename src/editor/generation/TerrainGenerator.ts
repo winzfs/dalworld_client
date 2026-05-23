@@ -1,21 +1,25 @@
-import type { EditorBrush, EditorTilePlacement } from '../types';
+import type { EditorSourceRect, EditorTilePlacement, EditorTilesetAsset } from '../types';
 
 export type BasicTerrainGenerationOptions = {
-  brush?: EditorBrush;
-  brushes?: EditorBrush[];
+  tilesets: EditorTilesetAsset[];
   width: number;
   height: number;
   gridSize: number;
   maxPlacements?: number;
 };
 
+type TerrainTile = {
+  asset: EditorTilesetAsset;
+  sourceRect: EditorSourceRect;
+};
+
 const DEFAULT_MAX_PLACEMENTS = 12000;
 
-export function generateBasicGroundTerrain(options: BasicTerrainGenerationOptions): EditorTilePlacement[] {
-  const terrainBrushes = normalizeBrushes(options.brushes, options.brush);
-  if (terrainBrushes.length === 0) return [];
-
+export async function generateBasicGroundTerrain(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
   const gridSize = normalizeGridSize(options.gridSize);
+  const terrainTiles = await collectTerrainTiles(options.tilesets, gridSize);
+  if (terrainTiles.length === 0) return [];
+
   const width = normalizePositiveInteger(options.width, 3000);
   const height = normalizePositiveInteger(options.height, 3000);
   const maxPlacements = normalizePositiveInteger(options.maxPlacements, DEFAULT_MAX_PLACEMENTS);
@@ -25,8 +29,8 @@ export function generateBasicGroundTerrain(options: BasicTerrainGenerationOption
   for (let y = 0; y < height; y += gridSize) {
     for (let x = 0; x < width; x += gridSize) {
       if (placements.length >= maxPlacements) return placements;
-      const brush = terrainBrushes[index % terrainBrushes.length];
-      placements.push(createGroundPlacement(brush, x, y));
+      const tile = terrainTiles[index % terrainTiles.length];
+      placements.push(createGroundPlacement(tile, x, y));
       index += 1;
     }
   }
@@ -34,34 +38,37 @@ export function generateBasicGroundTerrain(options: BasicTerrainGenerationOption
   return placements;
 }
 
-function normalizeBrushes(brushes: EditorBrush[] | undefined, fallback: EditorBrush | undefined): EditorBrush[] {
-  const source = brushes && brushes.length > 0 ? brushes : fallback ? [fallback] : [];
+async function collectTerrainTiles(tilesets: EditorTilesetAsset[], gridSize: number): Promise<TerrainTile[]> {
+  const result: TerrainTile[] = [];
   const seen = new Set<string>();
-  const result: EditorBrush[] = [];
 
-  for (const brush of source) {
-    if (!brush?.asset) continue;
-    const key = createBrushKey(brush);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push({ asset: brush.asset, sourceRect: brush.sourceRect ? { ...brush.sourceRect } : undefined });
+  for (const asset of tilesets) {
+    if (!asset || asset.solidColor !== undefined || asset.url.startsWith('solid://') || asset.url.startsWith('editor://')) continue;
+    const size = await loadImageSize(asset.url);
+    if (!size) continue;
+
+    const tileWidth = asset.tileWidth ?? gridSize;
+    const tileHeight = asset.tileHeight ?? gridSize;
+    const stepX = Math.max(1, Math.round(tileWidth));
+    const stepY = Math.max(1, Math.round(tileHeight));
+
+    for (let y = 0; y + stepY <= size.height; y += stepY) {
+      for (let x = 0; x + stepX <= size.width; x += stepX) {
+        const sourceRect = { x, y, width: stepX, height: stepY };
+        const key = JSON.stringify({ assetId: asset.id, assetUrl: asset.url, sourceRect });
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push({ asset, sourceRect });
+      }
+    }
   }
 
   return result;
 }
 
-function createBrushKey(brush: EditorBrush): string {
-  return JSON.stringify({
-    assetId: brush.asset.id,
-    assetUrl: brush.asset.url,
-    sourceRect: brush.sourceRect,
-    solidColor: brush.asset.solidColor,
-  });
-}
-
-function createGroundPlacement(brush: EditorBrush, x: number, y: number): EditorTilePlacement {
-  const asset = brush.asset;
-  const sourceRect = brush.sourceRect ? { ...brush.sourceRect } : undefined;
+function createGroundPlacement(tile: TerrainTile, x: number, y: number): EditorTilePlacement {
+  const asset = tile.asset;
+  const sourceRect = { ...tile.sourceRect };
 
   return {
     id: crypto.randomUUID(),
@@ -72,13 +79,22 @@ function createGroundPlacement(brush: EditorBrush, x: number, y: number): Editor
     y,
     layer: 'ground',
     scale: 1,
-    displayWidth: sourceRect?.width ?? asset.tileWidth,
-    displayHeight: sourceRect?.height ?? asset.tileHeight,
+    displayWidth: sourceRect.width,
+    displayHeight: sourceRect.height,
     sourceRect,
-    solidColor: asset.solidColor,
+    solidColor: undefined,
     transparentBlack: false,
     gameplay: undefined,
   };
+}
+
+function loadImageSize(url: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
 }
 
 function normalizeGridSize(value: number): number {
