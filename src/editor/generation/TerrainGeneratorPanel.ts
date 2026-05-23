@@ -3,6 +3,7 @@ import type { EditorTilesetAsset } from '../types';
 export type TerrainGeneratorPanelOptions = {
   getTilesets: () => EditorTilesetAsset[];
   onAddCurrentTileset: () => void;
+  onRemoveTileset: (asset: EditorTilesetAsset) => void;
   onGenerate: () => void;
 };
 
@@ -177,10 +178,26 @@ export class TerrainGeneratorPanel {
       ].join(';');
 
       const label = document.createElement('span');
-      label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto;min-width:0;';
       label.textContent = asset.name;
 
-      item.append(preview, label);
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.textContent = '×';
+      removeButton.title = '등록 해제';
+      removeButton.style.cssText = smallDangerButtonStyle();
+      removeButton.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      removeButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.options.onRemoveTileset(asset);
+        this.render();
+      });
+
+      item.append(preview, label, removeButton);
       this.list.appendChild(item);
     }
   }
@@ -216,4 +233,8 @@ function buttonStyle(): string {
 
 function primaryButtonStyle(): string {
   return 'border:1px solid rgba(56,189,248,.42);border-radius:10px;background:rgba(14,165,233,.22);color:#f8fafc;padding:9px 10px;cursor:pointer;font-weight:900;';
+}
+
+function smallDangerButtonStyle(): string {
+  return 'width:26px;height:26px;flex:0 0 26px;border:1px solid rgba(248,113,113,.45);border-radius:8px;background:rgba(127,29,29,.45);color:#fecaca;cursor:pointer;font-weight:900;line-height:1;';
 }
