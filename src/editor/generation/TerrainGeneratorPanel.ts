@@ -362,8 +362,9 @@ export class TerrainGeneratorPanel {
 
     try {
       const storage = await this.ensureRuleStorage();
-      this.ruleSet = storage.load();
-      const diagnostics = diagnoseTerrainRules(tilesets, this.ruleSet);
+      const ruleSet = storage.load() as EditorTerrainRuleSet;
+      this.ruleSet = ruleSet;
+      const diagnostics = diagnoseTerrainRules(tilesets, ruleSet);
       this.lastDiagnostics = diagnostics;
       this.renderDiagnostics(diagnostics);
       return diagnostics;
