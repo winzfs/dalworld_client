@@ -50,6 +50,13 @@ type TerrainMask = {
 
 type GridPoint = { column: number; row: number };
 
+type FamilyRegion = {
+  family: TerrainTileFamily;
+  column: number;
+  row: number;
+  radiusBias: number;
+};
+
 const DEFAULT_MAX_PLACEMENTS = 12000;
 const DEFAULT_TERRAIN_RULE_KEY = 'dalworld:editor-terrain-rules:dalworld-map';
 const DEFAULT_TERRAIN_SHAPE_KEY = 'dalworld:editor-terrain-shape:dalworld-map';
@@ -81,20 +88,21 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
   const decorativeFamilies = families.filter((family) => family.byRole.has('decorative') && family.material !== 'water' && family.material !== 'road');
   const waterMask = waterFamilies.length > 0 ? createWaterFeatureMask(columns, rows, seed + 307, landMask) : createEmptyMask(columns, rows);
   const roadMask = roadFamilies.length > 0 ? createRoadMask(columns, rows, seed + 419, landMask, waterMask) : createEmptyMask(columns, rows);
+  const baseRegions = createFamilyRegions(baseFamilies, columns, rows, seed + 17, 1.45);
+  const waterRegions = createFamilyRegions(waterFamilies, columns, rows, seed + 307, 1.0);
+  const roadRegions = createFamilyRegions(roadFamilies, columns, rows, seed + 419, 1.0);
 
   const placements: EditorTilePlacement[] = [];
   const baseCounters = new Map<string, Map<EditorTerrainTileRole | 'all', number>>();
   const waterCounters = new Map<string, Map<EditorTerrainTileRole | 'all', number>>();
   const roadCounters = new Map<string, Map<EditorTerrainTileRole | 'all', number>>();
-  const baseZoneSize = Math.max(12, Math.round(Math.min(columns, rows) * 0.18));
-  const featureZoneSize = Math.max(8, Math.round(Math.min(columns, rows) * 0.12));
 
   for (let row = 0; row < rows; row += 1) {
     for (let column = 0; column < columns; column += 1) {
       if (placements.length >= maxPlacements) return placements;
       if (!landMask.isFilled(column, row)) continue;
 
-      const family = pickFamilyForZone(baseFamilies, column, row, seed + 17, baseZoneSize);
+      const family = pickFamilyFromRegions(baseRegions, baseFamilies, column, row, seed + 17);
       const baseRole = resolveRoleFromMask(landMask, column, row);
       const baseTile = pickTileForRole(family, baseRole, column, row, seed, getFamilyCounters(baseCounters, family));
       placements.push(createGroundPlacement(baseTile, column * gridSize, row * gridSize));
@@ -106,7 +114,7 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
       for (let column = 0; column < columns; column += 1) {
         if (placements.length >= maxPlacements) return placements;
         if (!waterMask.isFilled(column, row)) continue;
-        const family = pickFamilyForZone(waterFamilies, column, row, seed + 307, featureZoneSize);
+        const family = pickFamilyFromRegions(waterRegions, waterFamilies, column, row, seed + 307);
         const role = resolveRoleFromMask(waterMask, column, row);
         const tile = pickTileForRole(family, role, column, row, seed + 307, getFamilyCounters(waterCounters, family));
         placements.push(createGroundPlacement(tile, column * gridSize, row * gridSize));
@@ -119,7 +127,7 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
       for (let column = 0; column < columns; column += 1) {
         if (placements.length >= maxPlacements) return placements;
         if (!roadMask.isFilled(column, row)) continue;
-        const family = pickFamilyForZone(roadFamilies, column, row, seed + 419, featureZoneSize);
+        const family = pickFamilyFromRegions(roadRegions, roadFamilies, column, row, seed + 419);
         const role = resolveRoleFromMask(roadMask, column, row);
         const tile = pickTileForRole(family, role, column, row, seed + 419, getFamilyCounters(roadCounters, family));
         placements.push(createGroundPlacement(tile, column * gridSize, row * gridSize));
@@ -270,18 +278,55 @@ function getFamiliesByMaterial(families: TerrainTileFamily[], material: EditorTe
   return families.filter((family) => family.material === material);
 }
 
-function pickFamilyForZone(
+function createFamilyRegions(
   families: TerrainTileFamily[],
+  columns: number,
+  rows: number,
+  seed: number,
+  densityMultiplier: number,
+): FamilyRegion[] {
+  if (families.length === 0) return [];
+  if (families.length === 1) return [{ family: families[0], column: columns / 2, row: rows / 2, radiusBias: 1 }];
+
+  const regionCount = Math.max(families.length, Math.min(families.length * 3, Math.round(Math.sqrt(columns * rows) / 18 * densityMultiplier)));
+  const regions: FamilyRegion[] = [];
+  for (let index = 0; index < regionCount; index += 1) {
+    const family = families[index % families.length];
+    const column = normalizedNoise(seed + index * 17, index * 31 + 3, seed) * columns;
+    const row = normalizedNoise(seed + index * 29, index * 37 + 7, seed + 101) * rows;
+    const radiusBias = 0.75 + normalizedNoise(seed + index * 41, index * 43 + 11, seed + 203) * 0.6;
+    regions.push({ family, column, row, radiusBias });
+  }
+  return regions;
+}
+
+function pickFamilyFromRegions(
+  regions: FamilyRegion[],
+  fallbackFamilies: TerrainTileFamily[],
   column: number,
   row: number,
   seed: number,
-  zoneSize: number,
 ): TerrainTileFamily {
-  if (families.length === 1) return families[0];
-  const zoneColumn = Math.floor(column / Math.max(1, zoneSize));
-  const zoneRow = Math.floor(row / Math.max(1, zoneSize));
-  const index = positiveModulo(hashInt(seed + zoneColumn * 92821 + zoneRow * 68917), families.length);
-  return families[index] ?? families[0];
+  if (regions.length === 0) return fallbackFamilies[0];
+  if (regions.length === 1) return regions[0].family;
+
+  const warpX = seededNoise(Math.floor(column / 7), Math.floor(row / 7), seed + 911) * 4;
+  const warpY = seededNoise(Math.floor(column / 9), Math.floor(row / 9), seed + 1291) * 4;
+  const sampleColumn = column + warpX;
+  const sampleRow = row + warpY;
+  let bestRegion = regions[0];
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (const region of regions) {
+    const dx = sampleColumn - region.column;
+    const dy = sampleRow - region.row;
+    const score = (dx * dx + dy * dy) / Math.max(0.1, region.radiusBias);
+    if (score < bestScore) {
+      bestScore = score;
+      bestRegion = region;
+    }
+  }
+  return bestRegion.family;
 }
 
 function getFamilyCounters(
@@ -684,18 +729,6 @@ function normalizedNoise(x: number, y: number, seed: number): number {
 function seededNoise(x: number, y: number, seed: number): number {
   const value = Math.sin(x * 12.9898 + y * 78.233 + seed * 37.719) * 43758.5453;
   return (value - Math.floor(value)) * 2 - 1;
-}
-
-function hashInt(value: number): number {
-  let hash = Math.trunc(value) | 0;
-  hash ^= hash << 13;
-  hash ^= hash >>> 17;
-  hash ^= hash << 5;
-  return hash;
-}
-
-function positiveModulo(value: number, divisor: number): number {
-  return ((value % divisor) + divisor) % divisor;
 }
 
 function lerp(a: number, b: number, t: number): number {
