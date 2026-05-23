@@ -12,6 +12,7 @@ type Point = { x: number; y: number };
 const TILE_SIZE_OPTIONS = [16, 32, 64];
 const DEFAULT_ROLE: EditorTerrainTileRole = 'decorative';
 const DEFAULT_SCALE = 1;
+const DEFAULT_WEIGHT = 1;
 
 export class TerrainRuleManagerPanel {
   readonly element: HTMLDivElement;
@@ -28,6 +29,7 @@ export class TerrainRuleManagerPanel {
   private readonly roleSelect = document.createElement('select');
   private readonly tileSizeSelect = document.createElement('select');
   private readonly scaleInput = document.createElement('input');
+  private readonly weightInput = document.createElement('input');
   private readonly status = document.createElement('div');
 
   private selectedAsset: EditorTilesetAsset | null = null;
@@ -49,7 +51,7 @@ export class TerrainRuleManagerPanel {
       'left:760px',
       'top:72px',
       'z-index:10004',
-      'width:min(820px,calc(100vw - 48px))',
+      'width:min(880px,calc(100vw - 48px))',
       'height:min(680px,calc(100vh - 96px))',
       'display:none',
       'flex-direction:column',
@@ -141,6 +143,17 @@ export class TerrainRuleManagerPanel {
       this.scaleInput.value = String(normalizeScale(Number(this.scaleInput.value)));
     };
 
+    this.weightInput.type = 'number';
+    this.weightInput.min = '0';
+    this.weightInput.max = '100';
+    this.weightInput.step = '1';
+    this.weightInput.value = String(DEFAULT_WEIGHT);
+    this.weightInput.style.cssText = inputStyle();
+    this.weightInput.title = '가중치. decorative는 높을수록 더 자주 나오고, 같은 role 안에서는 선택 비중이 커집니다.';
+    this.weightInput.onchange = () => {
+      this.weightInput.value = String(normalizeWeight(Number(this.weightInput.value)));
+    };
+
     const saveButton = document.createElement('button');
     saveButton.type = 'button';
     saveButton.textContent = '선택 타일 규칙 등록';
@@ -160,6 +173,8 @@ export class TerrainRuleManagerPanel {
       this.roleSelect,
       label('스케일'),
       this.scaleInput,
+      label('가중치'),
+      this.weightInput,
       saveButton,
       removeButton,
     );
@@ -283,7 +298,7 @@ export class TerrainRuleManagerPanel {
     const rules = this.getRulesForSelectedAsset();
     for (const rule of rules) {
       const box = document.createElement('div');
-      box.title = `${rule.role} · scale ${rule.scale ?? 1}`;
+      box.title = `${rule.role} · scale ${rule.scale ?? 1} · weight ${rule.weight ?? 1}`;
       box.style.cssText = [
         'position:absolute',
         `left:${rule.sourceRect.x}px`,
@@ -313,6 +328,9 @@ export class TerrainRuleManagerPanel {
     if (existingRule) {
       this.roleSelect.value = existingRule.role;
       this.scaleInput.value = String(normalizeScale(existingRule.scale));
+      this.weightInput.value = String(normalizeWeight(existingRule.weight));
+    } else {
+      this.weightInput.value = String(DEFAULT_WEIGHT);
     }
     this.renderSelection();
     this.status.textContent = `선택 ${x},${y},${this.tileSize}x${this.tileSize}`;
@@ -347,7 +365,9 @@ export class TerrainRuleManagerPanel {
     }
     const role = this.roleSelect.value as EditorTerrainTileRole;
     const scale = normalizeScale(Number(this.scaleInput.value));
+    const weight = normalizeWeight(Number(this.weightInput.value));
     this.scaleInput.value = String(scale);
+    this.weightInput.value = String(weight);
     const rule: EditorTerrainTileRule = {
       id: createRuleId(this.selectedAsset, this.selectedRect, this.tileSize),
       tilesetId: this.selectedAsset.id,
@@ -356,11 +376,12 @@ export class TerrainRuleManagerPanel {
       tileSize: this.tileSize,
       role,
       scale,
+      weight,
       sourceRect: { ...this.selectedRect },
     };
     this.options.onSaveRule(rule);
     this.renderPreview();
-    this.status.textContent = `규칙 등록: ${role} ${this.selectedRect.x},${this.selectedRect.y} · scale ${scale}`;
+    this.status.textContent = `규칙 등록: ${role} ${this.selectedRect.x},${this.selectedRect.y} · scale ${scale} · weight ${weight}`;
   }
 
   private removeSelectedRule(): void {
@@ -486,6 +507,11 @@ function tilesetButtonStyle(active: boolean): string {
 function normalizeScale(value: number | undefined): number {
   if (!Number.isFinite(value) || (value as number) <= 0) return DEFAULT_SCALE;
   return Math.max(0.1, Math.min(10, Math.round((value as number) * 10) / 10));
+}
+
+function normalizeWeight(value: number | undefined): number {
+  if (!Number.isFinite(value) || (value as number) < 0) return DEFAULT_WEIGHT;
+  return Math.max(0, Math.min(100, Math.round(value as number)));
 }
 
 function clamp(value: number, min: number, max: number): number {
