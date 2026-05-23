@@ -72,7 +72,8 @@ const DEFAULT_MAX_PLACEMENTS = 12000;
 const DEFAULT_TERRAIN_RULE_KEY = 'dalworld:editor-terrain-rules:dalworld-map';
 const DEFAULT_TERRAIN_SHAPE_KEY = 'dalworld:editor-terrain-shape:dalworld-map';
 const DEFAULT_TERRAIN_SEED_KEY = 'dalworld:editor-terrain-seed:dalworld-map';
-const DECORATIVE_CHANCE = 0.035;
+const DECORATIVE_PATCH_THRESHOLD = 0.62;
+const DECORATIVE_PATCH_CHANCE = 0.16;
 
 export async function generateBasicGroundTerrain(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
   const gridSize = normalizeGridSize(options.gridSize);
@@ -200,7 +201,52 @@ function createCellMap(options: {
     });
   }
 
+  applyBaseTransitionPasses(cells, options.baseFamilies, options.seed + 809);
   return cells;
+}
+
+function applyBaseTransitionPasses(cells: GeneratedCell[][], baseFamilies: TerrainTileFamily[], seed: number): void {
+  const sandFamilies = baseFamilies.filter((family) => family.material === 'sand');
+  const dirtFamilies = baseFamilies.filter((family) => family.material === 'dirt');
+  if (sandFamilies.length === 0 && dirtFamilies.length === 0) return;
+
+  const updates: Array<{ column: number; row: number; family: TerrainTileFamily }> = [];
+  forEachCell(cells, (cell, column, row) => {
+    if (!cell.land || cell.featureKind) return;
+
+    const nearWater = hasNeighborFeature(cells, column, row, 'water', 1);
+    const nearRoad = hasNeighborFeature(cells, column, row, 'road', 1);
+    if (!nearWater && !nearRoad) return;
+
+    if (nearWater) {
+      const family = pickTransitionFamily(sandFamilies.length > 0 ? sandFamilies : dirtFamilies, column, row, seed + 31);
+      if (family) updates.push({ column, row, family });
+      return;
+    }
+
+    if (nearRoad && normalizedNoise(Math.floor(column / 2), Math.floor(row / 2), seed + 73) > 0.22) {
+      const family = pickTransitionFamily(dirtFamilies.length > 0 ? dirtFamilies : sandFamilies, column, row, seed + 47);
+      if (family) updates.push({ column, row, family });
+    }
+  });
+
+  for (const update of updates) cells[update.row][update.column].baseFamily = update.family;
+}
+
+function hasNeighborFeature(cells: GeneratedCell[][], column: number, row: number, feature: FeatureKind, radius: number): boolean {
+  for (let y = row - radius; y <= row + radius; y += 1) {
+    for (let x = column - radius; x <= column + radius; x += 1) {
+      if (x === column && y === row) continue;
+      if (cells[y]?.[x]?.featureKind === feature) return true;
+    }
+  }
+  return false;
+}
+
+function pickTransitionFamily(families: TerrainTileFamily[], column: number, row: number, seed: number): TerrainTileFamily | null {
+  if (families.length === 0) return null;
+  const index = Math.floor(normalizedNoise(column * 11 + 5, row * 13 + 7, seed) * families.length) % families.length;
+  return families[index] ?? families[0];
 }
 
 async function collectTerrainFamilies(
@@ -430,7 +476,9 @@ function pickTileForRole(
 function pickDecorativeTile(families: TerrainTileFamily[], column: number, row: number, seed: number): TerrainTile | null {
   const candidates = families.flatMap((family) => family.byRole.get('decorative') ?? []);
   if (candidates.length === 0) return null;
-  if (normalizedNoise(column * 19 + 3, row * 23 + 5, seed + 193) > DECORATIVE_CHANCE) return null;
+  const patch = normalizedNoise(Math.floor(column / 5), Math.floor(row / 5), seed + 71);
+  if (patch < DECORATIVE_PATCH_THRESHOLD) return null;
+  if (normalizedNoise(column * 19 + 3, row * 23 + 5, seed + 193) > DECORATIVE_PATCH_CHANCE) return null;
   return pickWeightedTile(candidates, column + 101, row + 203, seed + 389, 0);
 }
 
