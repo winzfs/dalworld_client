@@ -13,6 +13,11 @@ export type TerrainRuleManagerPanelOptions = {
   getRuleSet: () => EditorTerrainRuleSet;
   onSaveRule: (rule: EditorTerrainTileRule) => void;
   onRemoveRule: (ruleId: string) => void;
+  onSaveTilesetMaterial: (
+    asset: EditorTilesetAsset,
+    material: EditorTerrainMaterial,
+    movementMode: EditorTerrainMovementMode,
+  ) => void;
 };
 
 type Point = { x: number; y: number };
@@ -464,30 +469,9 @@ export class TerrainRuleManagerPanel {
     material: EditorTerrainMaterial,
     movementMode: EditorTerrainMovementMode,
   ): void {
-    const current = this.options.getRuleSet();
-    const blocksMovement = movementMode === 'blocked';
-    const nextTilesets = (current.tilesets ?? []).filter((item) => item.tilesetId !== asset.id || item.tilesetUrl !== asset.url);
-    nextTilesets.push({ tilesetId: asset.id, tilesetUrl: asset.url, material, movementMode, blocksMovement });
-    const nextRules = current.rules.map((rule) => (
-      rule.tilesetId === asset.id && rule.tilesetUrl === asset.url
-        ? { ...rule, material, movementMode, blocksMovement }
-        : rule
-    ));
-    const next: EditorTerrainRuleSet = { version: 1, rules: nextRules, tilesets: nextTilesets, updatedAt: Date.now() };
-    this.writeRuleSet(next);
+    this.options.onSaveTilesetMaterial(asset, material, movementMode);
+    this.status.textContent = `타일셋 속성 저장: ${asset.name} · ${material}/${movementMode}`;
     this.render();
-  }
-
-  private writeRuleSet(ruleSet: EditorTerrainRuleSet): void {
-    const mapName = this.readMapName();
-    const raw = JSON.stringify(ruleSet);
-    window.localStorage.setItem(`dalworld:editor-terrain-rules:${mapName}`, raw);
-    window.localStorage.setItem('dalworld:editor-terrain-rules:dalworld-map', raw);
-  }
-
-  private readMapName(): string {
-    const first = this.options.getRuleSet().rules[0];
-    return first?.tilesetName ? 'dalworld-map' : 'dalworld-map';
   }
 
   private attachDragHandlers(): void {
