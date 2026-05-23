@@ -42,6 +42,7 @@ export class MapEditorBootMinimal {
   private readonly cellSize: number;
   private worldMap = createWorldMapDraft(3000);
   private readonly cellDrafts = new Map<string, EditorMapDraft>();
+  private readonly terrainTilesets: EditorTilesetAsset[] = [];
   private enabled = false;
   private paintingPointerId: number | null = null;
   private lastPaintKey: string | null = null;
@@ -120,6 +121,7 @@ export class MapEditorBootMinimal {
       onPickAsset: (asset: EditorTilesetAsset) => this.pickAsset(asset),
       onFillAll: () => { void this.fillAll(); },
       onRandomFill: (chancePercent: number) => { void this.fillRandom(chancePercent); },
+      onAddTerrainBrush: () => this.addTerrainTileset(),
       onGenerateTerrain: () => { void this.generateTerrain(); },
       onToggleWorldMap: () => this.worldMapPanel.toggle(),
     });
@@ -262,20 +264,44 @@ export class MapEditorBootMinimal {
     this.report(`Random fill completed. chance=${chancePercent}, before=${before}, after=${after}`);
   }
 
-  private async generateTerrain(): Promise<void> {
-    const brush = this.state?.selectedBrush;
-    if (!brush) {
-      this.showToast('지형생성 실패 · 먼저 ground 타일을 선택하세요.', 'error', 3_000);
+  private addTerrainTileset(): void {
+    const asset = this.getSelectedTilesetAsset();
+    if (!asset || !isTerrainTilesetAsset(asset)) {
+      this.showToast('타일셋 등록 실패 · 이미지 타일셋을 선택하세요.', 'error', 3_000);
       return;
     }
 
-    if (!window.confirm('현재 셀의 ground 레이어를 새 지형으로 교체할까요? Object/Block 레이어는 유지됩니다.')) return;
+    const key = createTilesetKey(asset);
+    if (this.terrainTilesets.some((item) => createTilesetKey(item) === key)) {
+      this.showToast(`이미 등록된 타일셋입니다 · ${asset.name}`, 'info', 2_500);
+      return;
+    }
+
+    this.terrainTilesets.push(asset);
+    this.showToast(`타일셋 등록 완료 · ${asset.name} · 총 ${this.terrainTilesets.length}개`, 'success', 3_000);
+    this.report(`Registered terrain tileset: ${asset.name}. total=${this.terrainTilesets.length}`);
+  }
+
+  private async generateTerrain(): Promise<void> {
+    const fallbackAsset = this.getSelectedTilesetAsset();
+    const tilesets = this.terrainTilesets.length > 0
+      ? this.terrainTilesets
+      : fallbackAsset && isTerrainTilesetAsset(fallbackAsset)
+        ? [fallbackAsset]
+        : [];
+
+    if (tilesets.length === 0) {
+      this.showToast('지형생성 실패 · 먼저 이미지 타일셋을 등록하거나 선택하세요.', 'error', 3_000);
+      return;
+    }
+
+    if (!window.confirm(`현재 셀의 ground 레이어를 새 지형으로 교체할까요? 등록 타일셋 ${tilesets.length}개를 사용합니다. Object/Block 레이어는 유지됩니다.`)) return;
 
     this.showToast('지형 생성 중...', 'info', 0);
     try {
       const generator = await import('./generation/TerrainGenerator');
-      const generatedGround = generator.generateBasicGroundTerrain({
-        brush,
+      const generatedGround = await generator.generateBasicGroundTerrain({
+        tilesets,
         width: this.worldWidth,
         height: this.worldHeight,
         gridSize: this.state.gridSize ?? this.options.tileSize ?? 32,
@@ -290,8 +316,8 @@ export class MapEditorBootMinimal {
       };
       await this.placement.replaceDraft(nextDraft);
       this.persistCurrentCellDraft();
-      this.showToast(`지형 생성 완료 · ground ${generatedGround.length}개`, 'success', 3_500);
-      this.report(`Generated terrain. ground=${generatedGround.length}, kept=${keptPlacements.length}`);
+      this.showToast(`지형 생성 완료 · 타일셋 ${tilesets.length}개 · ground ${generatedGround.length}개`, 'success', 3_500);
+      this.report(`Generated terrain. tilesets=${tilesets.length}, ground=${generatedGround.length}, kept=${keptPlacements.length}`);
     } catch (error) {
       console.warn('[MapEditor] Terrain generation failed.', error);
       this.showToast(`지형 생성 실패 · ${formatError(error)}`, 'error', 5_000);
@@ -382,6 +408,10 @@ export class MapEditorBootMinimal {
       });
     }
     return this.loadingPicker;
+  }
+
+  private getSelectedTilesetAsset(): EditorTilesetAsset | null {
+    return this.state?.selectedAsset ?? this.state?.selectedBrush?.asset ?? null;
   }
 
   private async save(): Promise<void> {
@@ -552,6 +582,14 @@ function loadImageSize(url: string): Promise<{ width: number; height: number } |
     image.onerror = () => resolve(null);
     image.src = url;
   });
+}
+
+function isTerrainTilesetAsset(asset: EditorTilesetAsset): boolean {
+  return asset.solidColor === undefined && isImageAssetUrl(asset.url);
+}
+
+function createTilesetKey(asset: EditorTilesetAsset): string {
+  return `${asset.id}:${asset.url}`;
 }
 
 function isImageAssetUrl(url: string): boolean {
