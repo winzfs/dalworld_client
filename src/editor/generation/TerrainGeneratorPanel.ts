@@ -17,6 +17,7 @@ export class TerrainGeneratorPanel {
   private readonly list = document.createElement('div');
   private readonly closeButton = document.createElement('button');
   private readonly shapeSelect = document.createElement('select');
+  private readonly seedInput = document.createElement('input');
   private isOpen = false;
   private dragging = false;
   private dragOffsetX = 0;
@@ -105,9 +106,26 @@ export class TerrainGeneratorPanel {
     shapeRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
     const shapeLabel = document.createElement('span');
     shapeLabel.textContent = '생성 형태';
-    shapeLabel.style.cssText = 'color:rgba(248,250,252,.72);font-weight:800;';
+    shapeLabel.style.cssText = labelStyle();
     this.configureShapeSelect();
     shapeRow.append(shapeLabel, this.shapeSelect);
+
+    const seedRow = document.createElement('div');
+    seedRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const seedLabel = document.createElement('span');
+    seedLabel.textContent = '시드';
+    seedLabel.style.cssText = labelStyle();
+    this.configureSeedInput();
+    const randomSeedButton = document.createElement('button');
+    randomSeedButton.type = 'button';
+    randomSeedButton.textContent = '랜덤';
+    randomSeedButton.style.cssText = compactButtonStyle();
+    randomSeedButton.onclick = () => {
+      const nextSeed = Math.floor(Math.random() * 1_000_000_000);
+      this.seedInput.value = String(nextSeed);
+      writeStoredSeed(this.mapName, nextSeed);
+    };
+    seedRow.append(seedLabel, this.seedInput, randomSeedButton);
 
     const ruleButton = document.createElement('button');
     ruleButton.type = 'button';
@@ -124,7 +142,7 @@ export class TerrainGeneratorPanel {
     this.list.className = 'terrain-generator-list';
     this.list.style.cssText = 'display:flex;flex-direction:column;gap:6px;min-height:32px;';
 
-    this.body.append(help, addButton, shapeRow, ruleButton, this.list, generateButton);
+    this.body.append(help, addButton, shapeRow, seedRow, ruleButton, this.list, generateButton);
     this.element.append(this.header, this.body);
     this.attachDragHandlers();
     this.render();
@@ -236,6 +254,20 @@ export class TerrainGeneratorPanel {
     };
   }
 
+  private configureSeedInput(): void {
+    this.seedInput.type = 'number';
+    this.seedInput.min = '0';
+    this.seedInput.max = '999999999';
+    this.seedInput.step = '1';
+    this.seedInput.value = String(readStoredSeed(this.mapName));
+    this.seedInput.style.cssText = seedInputStyle();
+    this.seedInput.onchange = () => {
+      const seed = normalizeSeed(Number(this.seedInput.value));
+      this.seedInput.value = String(seed);
+      writeStoredSeed(this.mapName, seed);
+    };
+  }
+
   private get mapName(): string {
     return this.options.mapName ?? 'dalworld-map';
   }
@@ -313,6 +345,10 @@ function shapeStorageKey(mapName: string): string {
   return `dalworld:editor-terrain-shape:${mapName}`;
 }
 
+function seedStorageKey(mapName: string): string {
+  return `dalworld:editor-terrain-seed:${mapName}`;
+}
+
 function readStoredShape(mapName: string): TerrainGenerationShape {
   const raw = window.localStorage.getItem(shapeStorageKey(mapName));
   return raw === 'island' ? 'island' : 'rect';
@@ -323,8 +359,32 @@ function writeStoredShape(mapName: string, shape: TerrainGenerationShape): void 
   window.localStorage.setItem('dalworld:editor-terrain-shape:dalworld-map', shape);
 }
 
+function readStoredSeed(mapName: string): number {
+  const raw = window.localStorage.getItem(seedStorageKey(mapName));
+  return normalizeSeed(raw ? Number(raw) : 1);
+}
+
+function writeStoredSeed(mapName: string, seed: number): void {
+  const normalized = normalizeSeed(seed);
+  window.localStorage.setItem(seedStorageKey(mapName), String(normalized));
+  window.localStorage.setItem('dalworld:editor-terrain-seed:dalworld-map', String(normalized));
+}
+
+function normalizeSeed(seed: number): number {
+  if (!Number.isFinite(seed)) return 1;
+  return Math.max(0, Math.min(999_999_999, Math.round(seed)));
+}
+
+function labelStyle(): string {
+  return 'width:58px;flex:0 0 58px;color:rgba(248,250,252,.72);font-weight:800;';
+}
+
 function buttonStyle(): string {
   return 'border:1px solid rgba(255,255,255,.18);border-radius:9px;background:rgba(255,255,255,.08);color:#f8fafc;padding:7px 10px;cursor:pointer;font-weight:800;';
+}
+
+function compactButtonStyle(): string {
+  return 'border:1px solid rgba(255,255,255,.18);border-radius:8px;background:rgba(255,255,255,.08);color:#f8fafc;padding:7px 8px;cursor:pointer;font-weight:800;';
 }
 
 function primaryButtonStyle(): string {
@@ -336,6 +396,10 @@ function secondaryButtonStyle(): string {
 }
 
 function selectStyle(): string {
+  return 'flex:1 1 auto;min-width:0;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:7px 8px;font-weight:800;';
+}
+
+function seedInputStyle(): string {
   return 'flex:1 1 auto;min-width:0;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:7px 8px;font-weight:800;';
 }
 
