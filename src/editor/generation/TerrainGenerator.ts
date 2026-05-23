@@ -39,6 +39,7 @@ type TerrainTileFamily = {
   tilesetId: string;
   tilesetUrl: string;
   all: TerrainTile[];
+  nonDecorative: TerrainTile[];
   byRole: Map<EditorTerrainTileRole, TerrainTile[]>;
 };
 
@@ -77,14 +78,14 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
   const rows = Math.max(1, Math.ceil(height / gridSize));
   const shape = options.shape ?? readStoredTerrainShape();
 
-  const baseFamilies = getBaseFamilies(families);
+  const baseFamilies = getBaseFamilies(families).filter((family) => family.nonDecorative.length > 0);
   if (baseFamilies.length === 0) return [];
 
   const landMask = shape === 'island'
     ? createIslandLandMask(columns, rows, seed)
     : createFilledRectMask(columns, rows);
-  const waterFamilies = getFamiliesByMaterial(families, 'water');
-  const roadFamilies = getFamiliesByMaterial(families, 'road');
+  const waterFamilies = getFamiliesByMaterial(families, 'water').filter((family) => family.nonDecorative.length > 0);
+  const roadFamilies = getFamiliesByMaterial(families, 'road').filter((family) => family.nonDecorative.length > 0);
   const decorativeFamilies = families.filter((family) => family.byRole.has('decorative') && family.material !== 'water' && family.material !== 'road');
   const waterMask = waterFamilies.length > 0 ? createWaterFeatureMask(columns, rows, seed + 307, landMask) : createEmptyMask(columns, rows);
   const roadMask = roadFamilies.length > 0 ? createRoadMask(columns, rows, seed + 419, landMask, waterMask) : createEmptyMask(columns, rows);
@@ -187,7 +188,8 @@ function buildRuleTerrainTiles(
     if (weight <= 0) continue;
     const material = rule.material ?? 'grass';
     const movementMode = rule.movementMode ?? getDefaultMovementMode(material);
-    const key = `${rule.id}:${rule.scale ?? 1}:${weight}:${material}:${movementMode}`;
+    const role = rule.role ?? 'center';
+    const key = `${rule.id}:${role}:${rule.scale ?? 1}:${weight}:${material}:${movementMode}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push({
@@ -197,7 +199,7 @@ function buildRuleTerrainTiles(
       weight,
       material,
       movementMode,
-      rule,
+      rule: { ...rule, role },
     });
   }
 
@@ -246,6 +248,7 @@ function createFamilies(tiles: TerrainTile[]): TerrainTileFamily[] {
         tilesetId: tile.asset.id,
         tilesetUrl: tile.asset.url,
         all: [],
+        nonDecorative: [],
         byRole: new Map<EditorTerrainTileRole, TerrainTile[]>(),
       };
       familyMap.set(key, family);
@@ -257,6 +260,9 @@ function createFamilies(tiles: TerrainTile[]): TerrainTileFamily[] {
       const list = family.byRole.get(role) ?? [];
       list.push(tile);
       family.byRole.set(role, list);
+      if (role !== 'decorative') family.nonDecorative.push(tile);
+    } else {
+      family.nonDecorative.push(tile);
     }
   }
 
@@ -620,11 +626,11 @@ function pickTileForRole(
 ): TerrainTile {
   const candidates = family.byRole.get(role)
     ?? family.byRole.get('center')
-    ?? family.all;
+    ?? family.nonDecorative;
   const counterKey = family.byRole.has(role) ? role : family.byRole.has('center') ? 'center' : 'all';
   const index = counters.get(counterKey) ?? 0;
   counters.set(counterKey, index + 1);
-  return pickWeightedTile(candidates, column, row, seed, index);
+  return pickWeightedTile(candidates.length > 0 ? candidates : family.all, column, row, seed, index);
 }
 
 function pickDecorativeTile(families: TerrainTileFamily[], column: number, row: number, seed: number): TerrainTile | null {
@@ -724,8 +730,7 @@ function getDefaultMovementMode(material: EditorTerrainMaterial): EditorTerrainM
 
 function normalizedNoise(x: number, y: number, seed: number): number {
   return seededNoise(x, y, seed) * 0.5 + 0.5;
-}
-
+}\n
 function seededNoise(x: number, y: number, seed: number): number {
   const value = Math.sin(x * 12.9898 + y * 78.233 + seed * 37.719) * 43758.5453;
   return (value - Math.floor(value)) * 2 - 1;
