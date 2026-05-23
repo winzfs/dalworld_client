@@ -1,4 +1,5 @@
 import type { Application, Container } from 'pixi.js';
+import { installResourceGeneratorFeature } from './generation/ResourceGeneratorFeature';
 import type { EditorMapDraft, EditorTilePlacement, EditorTilesetAsset, EditorWorldMapDraft, EditorWorldSave } from './types';
 
 export type MapEditorBootMinimalOptions = {
@@ -16,7 +17,6 @@ export type WorldCellTransition = {
   dx: -1 | 0 | 1;
   dy: -1 | 0 | 1;
   targetX: number;
-  targetY: number;
 };
 
 type ToastKind = 'info' | 'success' | 'error';
@@ -114,7 +114,7 @@ export class MapEditorBootMinimal {
     this.minimap = new minimapModule.EditorMinimap({
       worldWidth: this.worldWidth,
       worldHeight: this.worldHeight,
-      onMoveTo: (x: number, y: number) => this.options.onMoveCameraTo?.(x, y),
+      onMoveTo: (x, y) => this.options.onMoveCameraTo?.(x, y),
     });
 
     this.panel = new tilesetPanel.TilesetPanelLite(this.state, {
@@ -145,10 +145,11 @@ export class MapEditorBootMinimal {
     this.worldMapPanel.mount(this.uiRoot);
     this.minimap.mount(this.uiRoot);
     this.uiRoot.appendChild(this.toast);
+    installResourceGeneratorFeature(this, this.uiRoot);
     this.attachCanvasHandlers();
     this.options.app.ticker.add(this.minimapTicker);
     void this.loadLocalBackup();
-    this.report('MapEditorBootMinimal DOM mounted with grid overlay, world map panel and minimap.');
+    this.report('MapEditorBootMinimal DOM mounted with grid overlay, world map panel, minimap and resource generator.');
   }
 
   stop(): void {
@@ -729,7 +730,7 @@ function createEditorToast(): HTMLDivElement {
 }
 
 function isEditorUiTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest('.map-editor-panel, .tile-picker-window, .world-map-panel, .editor-minimap, .terrain-generator-panel'));
+  return target instanceof Element && Boolean(target.closest('.map-editor-panel, .tile-picker-window, .world-map-panel, .editor-minimap, .terrain-generator-panel, .resource-generator-panel'));
 }
 
 function cellKey(gridX: number, gridY: number): string {
