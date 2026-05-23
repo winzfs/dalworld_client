@@ -17,6 +17,7 @@ export type TerrainRuleManagerPanelOptions = {
     asset: EditorTilesetAsset,
     material: EditorTerrainMaterial,
     movementMode: EditorTerrainMovementMode,
+    scale: number,
   ) => void;
 };
 
@@ -26,11 +27,11 @@ type TilesetTerrainSettings = {
   material: EditorTerrainMaterial;
   movementMode: EditorTerrainMovementMode;
   blocksMovement: boolean;
+  scale: number;
 };
 
 const TILE_SIZE_OPTIONS = [16, 32, 64];
 const DEFAULT_ROLE: EditorTerrainTileRole = 'center';
-const DEFAULT_SCALE = 1;
 const DEFAULT_WEIGHT = 1;
 
 export class TerrainRuleManagerPanel {
@@ -47,7 +48,6 @@ export class TerrainRuleManagerPanel {
   private readonly ruleBoxes = document.createElement('div');
   private readonly roleSelect = document.createElement('select');
   private readonly tileSizeSelect = document.createElement('select');
-  private readonly scaleInput = document.createElement('input');
   private readonly weightInput = document.createElement('input');
   private readonly status = document.createElement('div');
 
@@ -110,7 +110,7 @@ export class TerrainRuleManagerPanel {
     });
 
     this.header.append(title, this.closeButton);
-    this.body.style.cssText = 'display:grid;grid-template-columns:260px 1fr;gap:10px;min-height:0;flex:1 1 auto;padding:10px;';
+    this.body.style.cssText = 'display:grid;grid-template-columns:280px 1fr;gap:10px;min-height:0;flex:1 1 auto;padding:10px;';
 
     const left = document.createElement('div');
     left.style.cssText = 'display:flex;flex-direction:column;gap:8px;min-height:0;';
@@ -151,16 +151,6 @@ export class TerrainRuleManagerPanel {
     }
     this.roleSelect.value = DEFAULT_ROLE;
 
-    this.scaleInput.type = 'number';
-    this.scaleInput.min = '0.1';
-    this.scaleInput.max = '10';
-    this.scaleInput.step = '0.1';
-    this.scaleInput.value = String(DEFAULT_SCALE);
-    this.scaleInput.style.cssText = inputStyle();
-    this.scaleInput.onchange = () => {
-      this.scaleInput.value = String(normalizeScale(Number(this.scaleInput.value)));
-    };
-
     this.weightInput.type = 'number';
     this.weightInput.min = '0';
     this.weightInput.max = '100';
@@ -174,7 +164,7 @@ export class TerrainRuleManagerPanel {
 
     const saveButton = document.createElement('button');
     saveButton.type = 'button';
-    saveButton.textContent = '선택 타일 규칙 등록';
+    saveButton.textContent = '규칙 저장';
     saveButton.style.cssText = primaryButtonStyle();
     saveButton.onclick = () => this.saveSelectedRule();
 
@@ -189,8 +179,6 @@ export class TerrainRuleManagerPanel {
       this.tileSizeSelect,
       label('역할'),
       this.roleSelect,
-      label('스케일'),
-      this.scaleInput,
       label('가중치'),
       this.weightInput,
       saveButton,
@@ -231,33 +219,11 @@ export class TerrainRuleManagerPanel {
     this.attachDragHandlers();
   }
 
-  mount(parent: HTMLElement): void {
-    parent.appendChild(this.element);
-  }
-
-  open(): void {
-    this.isOpen = true;
-    this.element.hidden = false;
-    this.element.style.display = 'flex';
-    this.render();
-  }
-
-  close(): void {
-    this.isOpen = false;
-    this.dragging = false;
-    this.element.hidden = true;
-    this.element.style.display = 'none';
-  }
-
-  toggle(): void {
-    if (this.isOpen) this.close();
-    else this.open();
-  }
-
-  render(): void {
-    this.renderTilesets();
-    this.renderPreview();
-  }
+  mount(parent: HTMLElement): void { parent.appendChild(this.element); }
+  open(): void { this.isOpen = true; this.element.hidden = false; this.element.style.display = 'flex'; this.render(); }
+  close(): void { this.isOpen = false; this.dragging = false; this.element.hidden = true; this.element.style.display = 'none'; }
+  toggle(): void { if (this.isOpen) this.close(); else this.open(); }
+  render(): void { this.renderTilesets(); this.renderPreview(); }
 
   private renderTilesets(): void {
     this.tilesetList.innerHTML = '';
@@ -282,24 +248,42 @@ export class TerrainRuleManagerPanel {
       selectButton.onclick = () => this.selectTileset(asset);
 
       const materialSelect = createMaterialSelect(settings.material);
-      materialSelect.onchange = () => {
+      const movementSelect = createMovementSelect(settings.movementMode);
+      const scaleInput = document.createElement('input');
+      scaleInput.type = 'number';
+      scaleInput.min = '0.1';
+      scaleInput.max = '10';
+      scaleInput.step = '0.1';
+      scaleInput.value = String(settings.scale);
+      scaleInput.style.cssText = compactInputStyle();
+      const effectiveHint = document.createElement('div');
+      effectiveHint.style.cssText = 'grid-column:2;color:#bae6fd;font-weight:900;';
+      const renderEffectiveHint = () => {
+        const scale = normalizeScale(Number(scaleInput.value));
+        effectiveHint.textContent = `현재 ${this.tileSize}px 규칙 → ${Math.round(this.tileSize * scale)}px 그리드용`;
+      };
+      renderEffectiveHint();
+
+      const saveSettings = () => {
         const nextMaterial = materialSelect.value as EditorTerrainMaterial;
-        const nextMovement = getDefaultMovementMode(nextMaterial);
-        this.saveTilesetSettings(asset, nextMaterial, nextMovement);
+        const nextMovement = movementSelect.value as EditorTerrainMovementMode;
+        const nextScale = normalizeScale(Number(scaleInput.value));
+        scaleInput.value = String(nextScale);
+        this.saveTilesetSettings(asset, nextMaterial, nextMovement, nextScale);
       };
 
-      const movementSelect = createMovementSelect(settings.movementMode);
-      movementSelect.onchange = () => {
-        this.saveTilesetSettings(
-          asset,
-          materialSelect.value as EditorTerrainMaterial,
-          movementSelect.value as EditorTerrainMovementMode,
-        );
+      materialSelect.onchange = () => {
+        const nextMaterial = materialSelect.value as EditorTerrainMaterial;
+        movementSelect.value = getDefaultMovementMode(nextMaterial);
+        saveSettings();
       };
+      movementSelect.onchange = saveSettings;
+      scaleInput.oninput = renderEffectiveHint;
+      scaleInput.onchange = saveSettings;
 
       const grid = document.createElement('div');
       grid.style.cssText = 'display:grid;grid-template-columns:54px 1fr;gap:5px 6px;align-items:center;';
-      grid.append(smallLabel('속성'), materialSelect, smallLabel('이동'), movementSelect);
+      grid.append(smallLabel('속성'), materialSelect, smallLabel('이동'), movementSelect, smallLabel('스케일'), scaleInput, effectiveHint);
       item.append(selectButton, grid);
       this.tilesetList.appendChild(item);
     }
@@ -310,14 +294,8 @@ export class TerrainRuleManagerPanel {
     this.selectedRect = null;
     this.naturalWidth = 0;
     this.naturalHeight = 0;
-    this.previewImage.onload = () => {
-      this.naturalWidth = this.previewImage.naturalWidth;
-      this.naturalHeight = this.previewImage.naturalHeight;
-      this.renderPreview();
-    };
-    this.previewImage.onerror = () => {
-      this.status.textContent = '이미지 로드 실패';
-    };
+    this.previewImage.onload = () => { this.naturalWidth = this.previewImage.naturalWidth; this.naturalHeight = this.previewImage.naturalHeight; this.renderPreview(); };
+    this.previewImage.onerror = () => { this.status.textContent = '이미지 로드 실패'; };
     this.previewImage.src = asset.url;
     this.renderTilesets();
     this.status.textContent = `${asset.name} 로드 중...`;
@@ -337,10 +315,11 @@ export class TerrainRuleManagerPanel {
     this.ruleBoxes.style.width = `${this.naturalWidth}px`;
     this.ruleBoxes.style.height = `${this.naturalHeight}px`;
 
+    const settings = this.getTilesetSettings(this.selectedAsset);
     const rules = this.getRulesForSelectedAsset();
     for (const rule of rules) {
       const box = document.createElement('div');
-      box.title = `${rule.role} · ${rule.material ?? 'grass'} · ${rule.movementMode ?? 'passable'} · scale ${rule.scale ?? 1} · weight ${rule.weight ?? 1}`;
+      box.title = `${rule.role} · ${settings.material}/${settings.movementMode} · tileset scale ${settings.scale} · effective ${Math.round(rule.sourceRect.width * settings.scale)}px · weight ${rule.weight ?? 1}`;
       box.style.cssText = [
         'position:absolute',
         `left:${rule.sourceRect.x}px`,
@@ -354,8 +333,7 @@ export class TerrainRuleManagerPanel {
       this.ruleBoxes.appendChild(box);
     }
 
-    const settings = this.getTilesetSettings(this.selectedAsset);
-    this.status.textContent = `${this.selectedAsset.name} · ${settings.material}/${settings.movementMode} · ${this.tileSize}px · 규칙 ${rules.length}개`;
+    this.status.textContent = `${this.selectedAsset.name} · ${settings.material}/${settings.movementMode} · tileset scale ${settings.scale} · ${this.tileSize}px 규칙은 ${Math.round(this.tileSize * settings.scale)}px 그리드용 · 규칙 ${rules.length}개`;
   }
 
   private pickTile(event: PointerEvent): void {
@@ -370,7 +348,6 @@ export class TerrainRuleManagerPanel {
     const existingRule = this.findSelectedRule();
     if (existingRule) {
       this.roleSelect.value = existingRule.role;
-      this.scaleInput.value = String(normalizeScale(existingRule.scale));
       this.weightInput.value = String(normalizeWeight(existingRule.weight));
     } else {
       this.roleSelect.value = DEFAULT_ROLE;
@@ -384,17 +361,11 @@ export class TerrainRuleManagerPanel {
     const rect = this.previewImage.getBoundingClientRect();
     const scaleX = this.naturalWidth / Math.max(1, rect.width);
     const scaleY = this.naturalHeight / Math.max(1, rect.height);
-    return {
-      x: clamp((event.clientX - rect.left) * scaleX, 0, Math.max(0, this.naturalWidth - 1)),
-      y: clamp((event.clientY - rect.top) * scaleY, 0, Math.max(0, this.naturalHeight - 1)),
-    };
+    return { x: clamp((event.clientX - rect.left) * scaleX, 0, Math.max(0, this.naturalWidth - 1)), y: clamp((event.clientY - rect.top) * scaleY, 0, Math.max(0, this.naturalHeight - 1)) };
   }
 
   private renderSelection(): void {
-    if (!this.selectedRect) {
-      this.selection.style.display = 'none';
-      return;
-    }
+    if (!this.selectedRect) { this.selection.style.display = 'none'; return; }
     this.selection.style.display = 'block';
     this.selection.style.left = `${this.selectedRect.x}px`;
     this.selection.style.top = `${this.selectedRect.y}px`;
@@ -403,24 +374,18 @@ export class TerrainRuleManagerPanel {
   }
 
   private saveSelectedRule(): void {
-    if (!this.selectedAsset || !this.selectedRect) {
-      this.status.textContent = '먼저 타일을 선택하세요.';
-      return;
-    }
+    if (!this.selectedAsset || !this.selectedRect) { this.status.textContent = '먼저 타일을 선택하세요.'; return; }
     const role = this.roleSelect.value as EditorTerrainTileRole;
-    const scale = normalizeScale(Number(this.scaleInput.value));
     const weight = normalizeWeight(Number(this.weightInput.value));
     const settings = this.getTilesetSettings(this.selectedAsset);
-    this.scaleInput.value = String(scale);
     this.weightInput.value = String(weight);
     const rule: EditorTerrainTileRule = {
-      id: createRuleId(this.selectedAsset, this.selectedRect, this.tileSize, role, scale),
+      id: createRuleId(this.selectedAsset, this.selectedRect, this.tileSize, role),
       tilesetId: this.selectedAsset.id,
       tilesetName: this.selectedAsset.name,
       tilesetUrl: this.selectedAsset.url,
       tileSize: this.tileSize,
       role,
-      scale,
       weight,
       material: settings.material,
       movementMode: settings.movementMode,
@@ -429,19 +394,13 @@ export class TerrainRuleManagerPanel {
     };
     this.options.onSaveRule(rule);
     this.renderPreview();
-    this.status.textContent = `규칙 등록: ${role} · ${settings.material}/${settings.movementMode} · scale ${scale} · weight ${weight}`;
+    this.status.textContent = `규칙 저장: ${role} · ${settings.material}/${settings.movementMode} · tileset scale ${settings.scale} · effective ${Math.round(this.tileSize * settings.scale)}px · weight ${weight}`;
   }
 
   private removeSelectedRule(): void {
-    if (!this.selectedAsset || !this.selectedRect) {
-      this.status.textContent = '먼저 제거할 타일을 선택하세요.';
-      return;
-    }
+    if (!this.selectedAsset || !this.selectedRect) { this.status.textContent = '먼저 제거할 타일을 선택하세요.'; return; }
     const rules = this.findSelectedRectRules();
-    if (rules.length === 0) {
-      this.status.textContent = '선택한 타일에 등록된 규칙이 없습니다.';
-      return;
-    }
+    if (rules.length === 0) { this.status.textContent = '선택한 타일에 등록된 규칙이 없습니다.'; return; }
     for (const rule of rules) this.options.onRemoveRule(rule.id);
     this.renderPreview();
     this.status.textContent = `규칙 제거: ${this.selectedRect.x},${this.selectedRect.y} · ${rules.length}개`;
@@ -449,20 +408,13 @@ export class TerrainRuleManagerPanel {
 
   private getRulesForSelectedAsset(): EditorTerrainTileRule[] {
     if (!this.selectedAsset) return [];
-    return this.options.getRuleSet().rules.filter((rule) => (
-      rule.tilesetId === this.selectedAsset?.id
-      && rule.tilesetUrl === this.selectedAsset?.url
-      && rule.tileSize === this.tileSize
-    ));
+    return this.options.getRuleSet().rules.filter((rule) => rule.tilesetId === this.selectedAsset?.id && rule.tilesetUrl === this.selectedAsset?.url && rule.tileSize === this.tileSize);
   }
 
   private findSelectedRule(): EditorTerrainTileRule | undefined {
     const rules = this.findSelectedRectRules();
     const selectedRole = this.roleSelect.value as EditorTerrainTileRole;
-    const selectedScale = normalizeScale(Number(this.scaleInput.value));
-    return rules.find((rule) => rule.role === selectedRole && normalizeScale(rule.scale) === selectedScale)
-      ?? rules.find((rule) => rule.role === selectedRole)
-      ?? rules[0];
+    return rules.find((rule) => rule.role === selectedRole) ?? rules[0];
   }
 
   private findSelectedRectRules(): EditorTerrainTileRule[] {
@@ -483,16 +435,13 @@ export class TerrainRuleManagerPanel {
     const saved = (this.options.getRuleSet().tilesets ?? []).find((item) => item.tilesetId === asset.id && item.tilesetUrl === asset.url);
     const material = saved?.material ?? 'grass';
     const movementMode = saved?.movementMode ?? getDefaultMovementMode(material);
-    return { material, movementMode, blocksMovement: saved?.blocksMovement ?? movementMode === 'blocked' };
+    const scale = normalizeScale(saved?.scale);
+    return { material, movementMode, blocksMovement: saved?.blocksMovement ?? movementMode === 'blocked', scale };
   }
 
-  private saveTilesetSettings(
-    asset: EditorTilesetAsset,
-    material: EditorTerrainMaterial,
-    movementMode: EditorTerrainMovementMode,
-  ): void {
-    this.options.onSaveTilesetMaterial(asset, material, movementMode);
-    this.status.textContent = `타일셋 속성 저장: ${asset.name} · ${material}/${movementMode}`;
+  private saveTilesetSettings(asset: EditorTilesetAsset, material: EditorTerrainMaterial, movementMode: EditorTerrainMovementMode, scale: number): void {
+    this.options.onSaveTilesetMaterial(asset, material, movementMode, scale);
+    this.status.textContent = `타일셋 속성 저장: ${asset.name} · ${material}/${movementMode} · scale ${scale}`;
     this.render();
   }
 
@@ -509,58 +458,17 @@ export class TerrainRuleManagerPanel {
       this.element.style.left = `${Math.max(8, event.clientX - this.dragOffsetX)}px`;
       this.element.style.top = `${Math.max(8, event.clientY - this.dragOffsetY)}px`;
     });
-    const stopDrag = (event: PointerEvent) => {
-      this.dragging = false;
-      if (this.header.hasPointerCapture(event.pointerId)) this.header.releasePointerCapture(event.pointerId);
-    };
+    const stopDrag = (event: PointerEvent) => { this.dragging = false; if (this.header.hasPointerCapture(event.pointerId)) this.header.releasePointerCapture(event.pointerId); };
     this.header.addEventListener('pointerup', stopDrag);
     this.header.addEventListener('pointercancel', stopDrag);
   }
 }
 
-function createRuleId(asset: EditorTilesetAsset, rect: EditorSourceRect, tileSize: number, role: EditorTerrainTileRole, scale: number): string {
-  return `${asset.id}:${asset.url}:${tileSize}:${rect.x}:${rect.y}:${rect.width}:${rect.height}:${role}:scale-${normalizeScale(scale)}`;
-}
-
-function createLegacyRuleId(asset: EditorTilesetAsset, rect: EditorSourceRect, tileSize: number): string {
-  return `${asset.id}:${asset.url}:${tileSize}:${rect.x}:${rect.y}:${rect.width}:${rect.height}`;
-}
-
-function getRoleOptions(): EditorTerrainTileRole[] {
-  return [
-    'center',
-    'edgeTop',
-    'edgeBottom',
-    'edgeLeft',
-    'edgeRight',
-    'outerTopLeft',
-    'outerTopRight',
-    'outerBottomLeft',
-    'outerBottomRight',
-    'innerTopLeft',
-    'innerTopRight',
-    'innerBottomLeft',
-    'innerBottomRight',
-    'decorative',
-  ];
-}
-
-function roleColor(role: EditorTerrainTileRole): string {
-  if (role === 'center') return '#38bdf8';
-  if (role === 'decorative') return '#22c55e';
-  if (role.startsWith('edge')) return '#facc15';
-  if (role.startsWith('outer')) return '#fb923c';
-  return '#c084fc';
-}
-
-function roleBackground(role: EditorTerrainTileRole): string {
-  if (role === 'center') return 'rgba(56,189,248,.14)';
-  if (role === 'decorative') return 'rgba(34,197,94,.14)';
-  if (role.startsWith('edge')) return 'rgba(250,204,21,.14)';
-  if (role.startsWith('outer')) return 'rgba(251,146,60,.14)';
-  return 'rgba(192,132,252,.14)';
-}
-
+function createRuleId(asset: EditorTilesetAsset, rect: EditorSourceRect, tileSize: number, role: EditorTerrainTileRole): string { return `${asset.id}:${asset.url}:${tileSize}:${rect.x}:${rect.y}:${rect.width}:${rect.height}:${role}`; }
+function createLegacyRuleId(asset: EditorTilesetAsset, rect: EditorSourceRect, tileSize: number): string { return `${asset.id}:${asset.url}:${tileSize}:${rect.x}:${rect.y}:${rect.width}:${rect.height}`; }
+function getRoleOptions(): EditorTerrainTileRole[] { return ['center', 'edgeTop', 'edgeBottom', 'edgeLeft', 'edgeRight', 'outerTopLeft', 'outerTopRight', 'outerBottomLeft', 'outerBottomRight', 'innerTopLeft', 'innerTopRight', 'innerBottomLeft', 'innerBottomRight', 'decorative']; }
+function roleColor(role: EditorTerrainTileRole): string { if (role === 'center') return '#38bdf8'; if (role === 'decorative') return '#22c55e'; if (role.startsWith('edge')) return '#facc15'; if (role.startsWith('outer')) return '#fb923c'; return '#c084fc'; }
+function roleBackground(role: EditorTerrainTileRole): string { if (role === 'center') return 'rgba(56,189,248,.14)'; if (role === 'decorative') return 'rgba(34,197,94,.14)'; if (role.startsWith('edge')) return 'rgba(250,204,21,.14)'; if (role.startsWith('outer')) return 'rgba(251,146,60,.14)'; return 'rgba(192,132,252,.14)'; }
 function getMaterialOptions(): EditorTerrainMaterial[] { return ['grass', 'water', 'road', 'sand', 'dirt', 'rock']; }
 function getMovementOptions(): EditorTerrainMovementMode[] { return ['passable', 'blocked', 'shallow', 'swim', 'boatOnly']; }
 function getDefaultMovementMode(material: EditorTerrainMaterial): EditorTerrainMovementMode { if (material === 'water') return 'boatOnly'; if (material === 'rock') return 'blocked'; return 'passable'; }
@@ -575,9 +483,10 @@ function dangerButtonStyle(): string { return 'border:1px solid rgba(248,113,113
 function selectStyle(): string { return 'border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 8px;font-weight:800;'; }
 function compactSelectStyle(): string { return 'width:100%;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 7px;font-weight:800;'; }
 function inputStyle(): string { return 'width:64px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 8px;font-weight:800;'; }
+function compactInputStyle(): string { return 'width:100%;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 7px;font-weight:800;'; }
 function emptyBoxStyle(): string { return 'padding:8px;border:1px dashed rgba(255,255,255,.16);border-radius:10px;color:rgba(248,250,252,.58);line-height:1.45;'; }
 function tilesetCardStyle(active: boolean): string { return ['display:flex','flex-direction:column','gap:6px','border-radius:10px','padding:8px',active ? 'border:1px solid rgba(167,139,250,.75)' : 'border:1px solid rgba(255,255,255,.12)',active ? 'background:rgba(167,139,250,.18)' : 'background:rgba(255,255,255,.05)'].join(';'); }
 function tilesetButtonStyle(active: boolean): string { return ['text-align:left','border-radius:8px','padding:7px','cursor:pointer','font-weight:800',active ? 'border:1px solid rgba(167,139,250,.75)' : 'border:1px solid rgba(255,255,255,.12)',active ? 'background:rgba(167,139,250,.22)' : 'background:rgba(255,255,255,.05)','color:#f8fafc'].join(';'); }
-function normalizeScale(value: number | undefined): number { if (!Number.isFinite(value) || (value as number) <= 0) return DEFAULT_SCALE; return Math.max(0.1, Math.min(10, Math.round((value as number) * 10) / 10)); }
+function normalizeScale(value: number | undefined): number { if (!Number.isFinite(value) || (value as number) <= 0) return 1; return Math.max(0.1, Math.min(10, Math.round((value as number) * 10) / 10)); }
 function normalizeWeight(value: number | undefined): number { if (!Number.isFinite(value) || (value as number) < 0) return DEFAULT_WEIGHT; return Math.max(0, Math.min(100, Math.round(value as number))); }
 function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
