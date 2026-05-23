@@ -171,11 +171,34 @@ function createCellMap(options: {
     });
   }
 
+  applyBiomeBasePass(cells, options.baseFamilies, options.seed + 733);
   applyBaseTransitionPasses(cells, options.baseFamilies, options.seed + 809);
+  smoothBaseFamilies(cells, 2);
   return cells;
 }
 
+function applyBiomeBasePass(cells: GeneratedCell[][], baseFamilies: TerrainTileFamily[], seed: number): void {
+  const grassFamilies = baseFamilies.filter((family) => family.material === 'grass');
+  const dirtFamilies = baseFamilies.filter((family) => family.material === 'dirt');
+  const sandFamilies = baseFamilies.filter((family) => family.material === 'sand');
+  if (baseFamilies.length <= 1 || grassFamilies.length + dirtFamilies.length + sandFamilies.length <= 1) return;
+
+  forEachCell(cells, (cell, column, row) => {
+    if (!cell.land || cell.featureKind) return;
+    const moisture = layeredNoise(column, row, seed, 34, 13, 5);
+    const dryness = layeredNoise(column + 91, row - 37, seed + 191, 42, 17, 7);
+    let pool: TerrainTileFamily[] = grassFamilies;
+    if (dryness > 0.68 && sandFamilies.length > 0) pool = sandFamilies;
+    else if (moisture < 0.34 && dirtFamilies.length > 0) pool = dirtFamilies;
+    else if (moisture < 0.48 && dirtFamilies.length > 0 && normalizedNoise(column, row, seed + 29) > 0.35) pool = dirtFamilies;
+    else if (grassFamilies.length === 0) pool = dirtFamilies.length > 0 ? dirtFamilies : sandFamilies;
+    const family = pickTransitionFamily(pool, column, row, seed + 17);
+    if (family) cell.baseFamily = family;
+  });
+}
+
 function applyBaseTransitionPasses(cells: GeneratedCell[][], baseFamilies: TerrainTileFamily[], seed: number): void {
+  const grassFamilies = baseFamilies.filter((family) => family.material === 'grass');
   const sandFamilies = baseFamilies.filter((family) => family.material === 'sand');
   const dirtFamilies = baseFamilies.filter((family) => family.material === 'dirt');
   if (sandFamilies.length === 0 && dirtFamilies.length === 0) return;
@@ -183,18 +206,65 @@ function applyBaseTransitionPasses(cells: GeneratedCell[][], baseFamilies: Terra
   const updates: Array<{ column: number; row: number; family: TerrainTileFamily }> = [];
   forEachCell(cells, (cell, column, row) => {
     if (!cell.land || cell.featureKind) return;
-    const nearWater = hasNeighborFeature(cells, column, row, 'water', 1);
-    const nearRoad = hasNeighborFeature(cells, column, row, 'road', 1);
-    if (!nearWater && !nearRoad) return;
-    const familyPool = nearWater ? (sandFamilies.length > 0 ? sandFamilies : dirtFamilies) : (dirtFamilies.length > 0 ? dirtFamilies : sandFamilies);
-    const chance = nearWater ? 1 : normalizedNoise(Math.floor(column / 2), Math.floor(row / 2), seed + 73);
-    if (chance > 0.22) {
-      const family = pickTransitionFamily(familyPool, column, row, seed + (nearWater ? 31 : 47));
+    const waterDistance = distanceToFeature(cells, column, row, 'water', 3);
+    const roadDistance = distanceToFeature(cells, column, row, 'road', 2);
+
+    if (waterDistance === 1) {
+      const family = pickTransitionFamily(sandFamilies.length > 0 ? sandFamilies : dirtFamilies, column, row, seed + 31);
+      if (family) updates.push({ column, row, family });
+      return;
+    }
+
+    if (waterDistance === 2) {
+      const pool = sandFamilies.length > 0 && dirtFamilies.length > 0
+        ? (normalizedNoise(column, row, seed + 53) > 0.45 ? sandFamilies : dirtFamilies)
+        : sandFamilies.length > 0 ? sandFamilies : dirtFamilies;
+      const family = pickTransitionFamily(pool, column, row, seed + 53);
+      if (family) updates.push({ column, row, family });
+      return;
+    }
+
+    if (roadDistance === 1 && dirtFamilies.length > 0) {
+      const family = pickTransitionFamily(dirtFamilies, column, row, seed + 47);
+      if (family) updates.push({ column, row, family });
+      return;
+    }
+
+    if (roadDistance === 2 && dirtFamilies.length > 0 && normalizedNoise(Math.floor(column / 2), Math.floor(row / 2), seed + 73) > 0.28) {
+      const pool = grassFamilies.length > 0 && normalizedNoise(column, row, seed + 79) > 0.72 ? grassFamilies : dirtFamilies;
+      const family = pickTransitionFamily(pool, column, row, seed + 79);
       if (family) updates.push({ column, row, family });
     }
   });
 
   for (const update of updates) cells[update.row][update.column].baseFamily = update.family;
+}
+
+function smoothBaseFamilies(cells: GeneratedCell[][], passes: number): void {
+  for (let pass = 0; pass < passes; pass += 1) {
+    const updates: Array<{ column: number; row: number; family: TerrainTileFamily }> = [];
+    forEachCell(cells, (cell, column, row) => {
+      if (!cell.land || cell.featureKind || !cell.baseFamily) return;
+      const counts = new Map<string, { family: TerrainTileFamily; count: number }>();
+      for (let y = row - 1; y <= row + 1; y += 1) {
+        for (let x = column - 1; x <= column + 1; x += 1) {
+          if (x === column && y === row) continue;
+          const neighbor = cells[y]?.[x];
+          if (!neighbor?.land || neighbor.featureKind || !neighbor.baseFamily) continue;
+          const current = counts.get(neighbor.baseFamily.key) ?? { family: neighbor.baseFamily, count: 0 };
+          current.count += 1;
+          counts.set(neighbor.baseFamily.key, current);
+        }
+      }
+      const currentCount = counts.get(cell.baseFamily.key)?.count ?? 0;
+      let best: { family: TerrainTileFamily; count: number } | null = null;
+      for (const candidate of counts.values()) {
+        if (!best || candidate.count > best.count) best = candidate;
+      }
+      if (best && best.count >= 5 && currentCount <= 2) updates.push({ column, row, family: best.family });
+    });
+    for (const update of updates) cells[update.row][update.column].baseFamily = update.family;
+  }
 }
 
 async function collectTerrainFamilies(tilesets: EditorTilesetAsset[], gridSize: number, terrainRuleSet: EditorTerrainRuleSet | undefined): Promise<TerrainTileFamily[]> {
@@ -418,13 +488,19 @@ function forEachCell(cells: GeneratedCell[][], callback: (cell: GeneratedCell, c
 }
 
 function hasNeighborFeature(cells: GeneratedCell[][], column: number, row: number, feature: FeatureKind, radius: number): boolean {
-  for (let y = row - radius; y <= row + radius; y += 1) {
-    for (let x = column - radius; x <= column + radius; x += 1) {
-      if (x === column && y === row) continue;
-      if (cells[y]?.[x]?.featureKind === feature) return true;
+  return distanceToFeature(cells, column, row, feature, radius) > 0;
+}
+
+function distanceToFeature(cells: GeneratedCell[][], column: number, row: number, feature: FeatureKind, radius: number): number {
+  for (let distance = 1; distance <= radius; distance += 1) {
+    for (let y = row - distance; y <= row + distance; y += 1) {
+      for (let x = column - distance; x <= column + distance; x += 1) {
+        if (Math.max(Math.abs(x - column), Math.abs(y - row)) !== distance) continue;
+        if (cells[y]?.[x]?.featureKind === feature) return distance;
+      }
     }
   }
-  return false;
+  return 0;
 }
 
 function pickTransitionFamily(families: TerrainTileFamily[], column: number, row: number, seed: number): TerrainTileFamily | null {
@@ -606,6 +682,12 @@ function loadImageSize(url: string): Promise<{ width: number; height: number } |
 function createTilesetKey(id: string, url: string): string { return `${id}:${url}`; }
 function isImageAssetUrl(url: string): boolean { return !url.startsWith('solid://') && !url.startsWith('editor://'); }
 function getDefaultMovementMode(material: EditorTerrainMaterial): EditorTerrainMovementMode { if (material === 'water') return 'boatOnly'; if (material === 'rock') return 'blocked'; return 'passable'; }
+function layeredNoise(column: number, row: number, seed: number, coarseScale: number, mediumScale: number, fineScale: number): number {
+  const coarse = normalizedNoise(Math.floor(column / coarseScale), Math.floor(row / coarseScale), seed);
+  const medium = normalizedNoise(Math.floor(column / mediumScale), Math.floor(row / mediumScale), seed + 101);
+  const fine = normalizedNoise(Math.floor(column / fineScale), Math.floor(row / fineScale), seed + 211);
+  return coarse * 0.58 + medium * 0.30 + fine * 0.12;
+}
 function normalizedNoise(x: number, y: number, seed: number): number { return seededNoise(x, y, seed) * 0.5 + 0.5; }
 function seededNoise(x: number, y: number, seed: number): number { const value = Math.sin(x * 12.9898 + y * 78.233 + seed * 37.719) * 43758.5453; return (value - Math.floor(value)) * 2 - 1; }
 function lerp(a: number, b: number, t: number): number { return a + (b - a) * t; }
