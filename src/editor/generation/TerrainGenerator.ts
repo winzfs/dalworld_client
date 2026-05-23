@@ -49,13 +49,15 @@ type TerrainMask = {
   isFilled(column: number, row: number): boolean;
 };
 
+type GridPoint = { column: number; row: number };
+
 const DEFAULT_MAX_PLACEMENTS = 12000;
 const DEFAULT_TERRAIN_RULE_KEY = 'dalworld:editor-terrain-rules:dalworld-map';
 const DEFAULT_TERRAIN_SHAPE_KEY = 'dalworld:editor-terrain-shape:dalworld-map';
 const DEFAULT_TERRAIN_SEED_KEY = 'dalworld:editor-terrain-seed:dalworld-map';
-const BASE_DECORATIVE_CHANCE = 0.035;
-const DECORATIVE_CHANCE_PER_WEIGHT = 0.008;
-const MAX_DECORATIVE_CHANCE = 0.25;
+const BASE_DECORATIVE_CHANCE = 0.025;
+const DECORATIVE_CHANCE_PER_WEIGHT = 0.006;
+const MAX_DECORATIVE_CHANCE = 0.18;
 
 export async function generateBasicGroundTerrain(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
   const gridSize = normalizeGridSize(options.gridSize);
@@ -305,100 +307,203 @@ function createEmptyMask(columns: number, rows: number): TerrainMask {
 }
 
 function createIslandLandMask(columns: number, rows: number, seed: number): TerrainMask {
+  const values = new Set<string>();
   const centerX = (columns - 1) / 2;
   const centerY = (rows - 1) / 2;
-  const radiusX = Math.max(1, columns * 0.47);
-  const radiusY = Math.max(1, rows * 0.47);
-  const values = new Set<string>();
+  const radiusX = Math.max(2, columns * 0.46);
+  const radiusY = Math.max(2, rows * 0.46);
+  const vertexCount = 10;
+  const radii: number[] = [];
+
+  for (let i = 0; i < vertexCount; i += 1) {
+    const lowFrequency = seededNoise(i, seed * 0.01, seed + 17) * 0.08;
+    radii.push(0.92 + lowFrequency);
+  }
 
   for (let row = 0; row < rows; row += 1) {
     for (let column = 0; column < columns; column += 1) {
       const nx = (column - centerX) / radiusX;
       const ny = (row - centerY) / radiusY;
       const distance = Math.sqrt(nx * nx + ny * ny);
-      const wobble = seededNoise(column, row, seed) * 0.08 + seededNoise(column * 2 + 7, row * 2 + 11, seed + 97) * 0.04;
-      if (distance <= 0.96 + wobble) values.add(`${column}:${row}`);
+      let angle = Math.atan2(ny, nx);
+      if (angle < 0) angle += Math.PI * 2;
+      const segment = (angle / (Math.PI * 2)) * vertexCount;
+      const index = Math.floor(segment) % vertexCount;
+      const nextIndex = (index + 1) % vertexCount;
+      const t = segment - Math.floor(segment);
+      const allowedRadius = lerp(radii[index], radii[nextIndex], smoothStep(t));
+      if (distance <= allowedRadius) values.add(`${column}:${row}`);
     }
   }
 
-  smoothMask(values, columns, rows, 2);
+  removeTinyIslands(values, columns, rows);
   return setMask(columns, rows, values);
 }
 
 function createWaterFeatureMask(columns: number, rows: number, seed: number, landMask: TerrainMask): TerrainMask {
   const values = new Set<string>();
-  const horizontal = seededNoise(seed, seed + 13, seed + 29) > 0;
-  const riverWidth = Math.max(1, Math.round(Math.min(columns, rows) * 0.035));
-  const lakeCount = Math.min(2, Math.max(0, Math.floor(Math.min(columns, rows) / 48)));
+  const shouldLake = seededNoise(seed, seed + 13, seed + 29) > 0.25;
 
-  for (let i = 0; i < (horizontal ? columns : rows); i += 1) {
-    const t = i / Math.max(1, (horizontal ? columns : rows) - 1);
-    const bend = Math.sin(t * Math.PI * 2 + seed * 0.01) * 0.16 + Math.sin(t * Math.PI * 5 + seed * 0.017) * 0.06;
-    const center = Math.round((horizontal ? rows : columns) * (0.5 + bend));
-    for (let offset = -riverWidth; offset <= riverWidth; offset += 1) {
-      const column = horizontal ? i : center + offset;
-      const row = horizontal ? center + offset : i;
-      paintDisc(values, landMask, column, row, riverWidth);
-    }
+  if (shouldLake) {
+    createLakeFeature(values, columns, rows, seed, landMask);
+  } else {
+    createRiverFeature(values, columns, rows, seed, landMask);
   }
 
-  for (let lake = 0; lake < lakeCount; lake += 1) {
-    const cx = Math.round(columns * (0.25 + (seededNoise(seed, lake + 31, seed + lake) * 0.5 + 0.5) * 0.5));
-    const cy = Math.round(rows * (0.25 + (seededNoise(seed + 43, lake + 71, seed) * 0.5 + 0.5) * 0.5));
-    const radius = Math.max(2, Math.round(Math.min(columns, rows) * (0.035 + lake * 0.012)));
-    paintDisc(values, landMask, cx, cy, radius);
-  }
-
-  smoothMask(values, columns, rows, 1);
+  removeTinyIslands(values, columns, rows);
   return setMask(columns, rows, values);
+}
+
+function createLakeFeature(values: Set<string>, columns: number, rows: number, seed: number, landMask: TerrainMask): void {
+  const lakeCount = Math.min(2, Math.max(1, Math.floor(Math.min(columns, rows) / 70) + 1));
+  for (let index = 0; index < lakeCount; index += 1) {
+    const cx = Math.round(columns * (0.30 + normalizedNoise(seed + index * 11, 7, seed) * 0.40));
+    const cy = Math.round(rows * (0.30 + normalizedNoise(seed + index * 17, 13, seed) * 0.40));
+    const rx = Math.max(3, Math.round(columns * (0.045 + normalizedNoise(seed, index + 23, seed) * 0.035)));
+    const ry = Math.max(3, Math.round(rows * (0.045 + normalizedNoise(seed + 31, index, seed) * 0.035)));
+    paintEllipse(values, landMask, cx, cy, rx, ry);
+  }
+}
+
+function createRiverFeature(values: Set<string>, columns: number, rows: number, seed: number, landMask: TerrainMask): void {
+  const horizontal = seededNoise(seed, seed + 13, seed + 29) > 0;
+  const width = Math.max(1, Math.round(Math.min(columns, rows) * 0.025));
+  const start: GridPoint = horizontal
+    ? { column: 0, row: Math.round(rows * (0.25 + normalizedNoise(seed, 1, seed) * 0.5)) }
+    : { column: Math.round(columns * (0.25 + normalizedNoise(seed, 2, seed) * 0.5)), row: 0 };
+  const end: GridPoint = horizontal
+    ? { column: columns - 1, row: Math.round(rows * (0.25 + normalizedNoise(seed, 3, seed) * 0.5)) }
+    : { column: Math.round(columns * (0.25 + normalizedNoise(seed, 4, seed) * 0.5)), row: rows - 1 };
+  const controlA: GridPoint = horizontal
+    ? { column: Math.round(columns * 0.33), row: Math.round(rows * (0.20 + normalizedNoise(seed, 5, seed) * 0.6)) }
+    : { column: Math.round(columns * (0.20 + normalizedNoise(seed, 6, seed) * 0.6)), row: Math.round(rows * 0.33) };
+  const controlB: GridPoint = horizontal
+    ? { column: Math.round(columns * 0.66), row: Math.round(rows * (0.20 + normalizedNoise(seed, 7, seed) * 0.6)) }
+    : { column: Math.round(columns * (0.20 + normalizedNoise(seed, 8, seed) * 0.6)), row: Math.round(rows * 0.66) };
+
+  paintCubicPath(values, landMask, start, controlA, controlB, end, width);
 }
 
 function createRoadMask(columns: number, rows: number, seed: number, landMask: TerrainMask, waterMask: TerrainMask): TerrainMask {
   const values = new Set<string>();
   const horizontal = seededNoise(seed, seed + 5, seed + 11) > 0;
-  const roadWidth = Math.max(1, Math.round(Math.min(columns, rows) * 0.018));
+  const width = Math.max(1, Math.round(Math.min(columns, rows) * 0.012));
+  const center: GridPoint = {
+    column: Math.round(columns * (0.45 + normalizedNoise(seed, 19, seed) * 0.10)),
+    row: Math.round(rows * (0.45 + normalizedNoise(seed, 29, seed) * 0.10)),
+  };
+  const start: GridPoint = horizontal
+    ? { column: 0, row: Math.round(rows * (0.30 + normalizedNoise(seed, 31, seed) * 0.40)) }
+    : { column: Math.round(columns * (0.30 + normalizedNoise(seed, 37, seed) * 0.40)), row: 0 };
+  const end: GridPoint = horizontal
+    ? { column: columns - 1, row: Math.round(rows * (0.30 + normalizedNoise(seed, 41, seed) * 0.40)) }
+    : { column: Math.round(columns * (0.30 + normalizedNoise(seed, 43, seed) * 0.40)), row: rows - 1 };
 
-  for (let i = 0; i < (horizontal ? columns : rows); i += 1) {
-    const t = i / Math.max(1, (horizontal ? columns : rows) - 1);
-    const bend = Math.sin(t * Math.PI * 1.5 + seed * 0.021) * 0.10 + Math.sin(t * Math.PI * 3.5 + seed * 0.013) * 0.04;
-    const center = Math.round((horizontal ? rows : columns) * (0.5 + bend));
-    for (let offset = -roadWidth; offset <= roadWidth; offset += 1) {
-      const column = horizontal ? i : center + offset;
-      const row = horizontal ? center + offset : i;
-      if (landMask.isFilled(column, row) && !waterMask.isFilled(column, row)) values.add(`${column}:${row}`);
-    }
-  }
+  paintSteppedPath(values, landMask, waterMask, start, center, width);
+  paintSteppedPath(values, landMask, waterMask, center, end, width);
+  paintDisc(values, landMask, center.column, center.row, Math.max(width + 1, 2), waterMask);
 
   return setMask(columns, rows, values);
 }
 
-function paintDisc(values: Set<string>, bounds: TerrainMask, centerColumn: number, centerRow: number, radius: number): void {
+function paintSteppedPath(
+  values: Set<string>,
+  landMask: TerrainMask,
+  waterMask: TerrainMask,
+  start: GridPoint,
+  end: GridPoint,
+  width: number,
+): void {
+  let column = start.column;
+  let row = start.row;
+  const guard = Math.max(1, landMask.columns + landMask.rows) * 3;
+
+  for (let step = 0; step < guard && (column !== end.column || row !== end.row); step += 1) {
+    paintDisc(values, landMask, column, row, width, waterMask);
+    const dx = end.column - column;
+    const dy = end.row - row;
+    if (Math.abs(dx) >= Math.abs(dy)) column += Math.sign(dx);
+    else row += Math.sign(dy);
+  }
+  paintDisc(values, landMask, end.column, end.row, width, waterMask);
+}
+
+function paintCubicPath(
+  values: Set<string>,
+  bounds: TerrainMask,
+  start: GridPoint,
+  controlA: GridPoint,
+  controlB: GridPoint,
+  end: GridPoint,
+  width: number,
+): void {
+  const steps = Math.max(bounds.columns, bounds.rows) * 2;
+  let previous = start;
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / Math.max(1, steps);
+    const point = cubicPoint(start, controlA, controlB, end, t);
+    paintLine(values, bounds, previous, point, width);
+    previous = point;
+  }
+}
+
+function cubicPoint(start: GridPoint, controlA: GridPoint, controlB: GridPoint, end: GridPoint, t: number): GridPoint {
+  const inv = 1 - t;
+  return {
+    column: Math.round(inv * inv * inv * start.column + 3 * inv * inv * t * controlA.column + 3 * inv * t * t * controlB.column + t * t * t * end.column),
+    row: Math.round(inv * inv * inv * start.row + 3 * inv * inv * t * controlA.row + 3 * inv * t * t * controlB.row + t * t * t * end.row),
+  };
+}
+
+function paintLine(values: Set<string>, bounds: TerrainMask, start: GridPoint, end: GridPoint, width: number): void {
+  const steps = Math.max(Math.abs(end.column - start.column), Math.abs(end.row - start.row), 1);
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps;
+    const column = Math.round(lerp(start.column, end.column, t));
+    const row = Math.round(lerp(start.row, end.row, t));
+    paintDisc(values, bounds, column, row, width);
+  }
+}
+
+function paintEllipse(values: Set<string>, bounds: TerrainMask, centerColumn: number, centerRow: number, radiusX: number, radiusY: number): void {
+  for (let row = centerRow - radiusY; row <= centerRow + radiusY; row += 1) {
+    for (let column = centerColumn - radiusX; column <= centerColumn + radiusX; column += 1) {
+      const nx = (column - centerColumn) / Math.max(1, radiusX);
+      const ny = (row - centerRow) / Math.max(1, radiusY);
+      if (nx * nx + ny * ny <= 1 && bounds.isFilled(column, row)) values.add(`${column}:${row}`);
+    }
+  }
+}
+
+function paintDisc(
+  values: Set<string>,
+  bounds: TerrainMask,
+  centerColumn: number,
+  centerRow: number,
+  radius: number,
+  avoidMask?: TerrainMask,
+): void {
   for (let row = centerRow - radius; row <= centerRow + radius; row += 1) {
     for (let column = centerColumn - radius; column <= centerColumn + radius; column += 1) {
       const dx = column - centerColumn;
       const dy = row - centerRow;
-      if (dx * dx + dy * dy <= radius * radius && bounds.isFilled(column, row)) {
+      if (dx * dx + dy * dy <= radius * radius && bounds.isFilled(column, row) && !avoidMask?.isFilled(column, row)) {
         values.add(`${column}:${row}`);
       }
     }
   }
 }
 
-function smoothMask(values: Set<string>, columns: number, rows: number, iterations: number): void {
-  for (let iteration = 0; iteration < iterations; iteration += 1) {
-    const toAdd: string[] = [];
-    const toDelete: string[] = [];
-    for (let row = 1; row < rows - 1; row += 1) {
-      for (let column = 1; column < columns - 1; column += 1) {
-        const key = `${column}:${row}`;
-        const count = countFilledNeighbors(values, column, row);
-        if (!values.has(key) && count >= 5) toAdd.push(key);
-        if (values.has(key) && count <= 1) toDelete.push(key);
-      }
+function removeTinyIslands(values: Set<string>, columns: number, rows: number): void {
+  const toDelete: string[] = [];
+  for (let row = 1; row < rows - 1; row += 1) {
+    for (let column = 1; column < columns - 1; column += 1) {
+      const key = `${column}:${row}`;
+      if (!values.has(key)) continue;
+      if (countFilledNeighbors(values, column, row) <= 1) toDelete.push(key);
     }
-    for (const key of toAdd) values.add(key);
-    for (const key of toDelete) values.delete(key);
   }
+  for (const key of toDelete) values.delete(key);
 }
 
 function countFilledNeighbors(values: Set<string>, column: number, row: number): number {
@@ -566,9 +671,21 @@ function getDefaultMovementMode(material: EditorTerrainMaterial): EditorTerrainM
   return 'passable';
 }
 
+function normalizedNoise(x: number, y: number, seed: number): number {
+  return seededNoise(x, y, seed) * 0.5 + 0.5;
+}
+
 function seededNoise(x: number, y: number, seed: number): number {
   const value = Math.sin(x * 12.9898 + y * 78.233 + seed * 37.719) * 43758.5453;
   return (value - Math.floor(value)) * 2 - 1;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function smoothStep(t: number): number {
+  return t * t * (3 - 2 * t);
 }
 
 function normalizeGridSize(value: number): number {
