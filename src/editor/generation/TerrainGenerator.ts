@@ -1,23 +1,26 @@
-import type { EditorSourceRect, EditorTilePlacement, EditorTilesetAsset } from '../types';
+import type { EditorSourceRect, EditorTerrainRuleSet, EditorTerrainTileRule, EditorTilePlacement, EditorTilesetAsset } from '../types';
 
 export type BasicTerrainGenerationOptions = {
   tilesets: EditorTilesetAsset[];
   width: number;
   height: number;
   gridSize: number;
+  terrainRuleSet?: EditorTerrainRuleSet;
   maxPlacements?: number;
 };
 
 type TerrainTile = {
   asset: EditorTilesetAsset;
   sourceRect: EditorSourceRect;
+  scale: number;
+  rule?: EditorTerrainTileRule;
 };
 
 const DEFAULT_MAX_PLACEMENTS = 12000;
 
 export async function generateBasicGroundTerrain(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
   const gridSize = normalizeGridSize(options.gridSize);
-  const terrainTiles = await collectTerrainTiles(options.tilesets, gridSize);
+  const terrainTiles = await collectTerrainTiles(options.tilesets, gridSize, options.terrainRuleSet);
   if (terrainTiles.length === 0) return [];
 
   const width = normalizePositiveInteger(options.width, 3000);
@@ -38,12 +41,53 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
   return placements;
 }
 
-async function collectTerrainTiles(tilesets: EditorTilesetAsset[], gridSize: number): Promise<TerrainTile[]> {
+async function collectTerrainTiles(
+  tilesets: EditorTilesetAsset[],
+  gridSize: number,
+  terrainRuleSet: EditorTerrainRuleSet | undefined,
+): Promise<TerrainTile[]> {
+  const ruleTiles = collectRuleTerrainTiles(tilesets, terrainRuleSet);
+  if (ruleTiles.length > 0) return ruleTiles;
+  return collectFullTilesetTerrainTiles(tilesets, gridSize);
+}
+
+function collectRuleTerrainTiles(
+  tilesets: EditorTilesetAsset[],
+  terrainRuleSet: EditorTerrainRuleSet | undefined,
+): TerrainTile[] {
+  if (!terrainRuleSet || terrainRuleSet.rules.length === 0) return [];
+
+  const tilesetByKey = new Map<string, EditorTilesetAsset>();
+  for (const asset of tilesets) {
+    tilesetByKey.set(createTilesetKey(asset.id, asset.url), asset);
+  }
+
+  const result: TerrainTile[] = [];
+  const seen = new Set<string>();
+
+  for (const rule of terrainRuleSet.rules) {
+    const asset = tilesetByKey.get(createTilesetKey(rule.tilesetId, rule.tilesetUrl));
+    if (!asset || asset.solidColor !== undefined || !isImageAssetUrl(asset.url)) continue;
+    const key = `${rule.id}:${rule.scale ?? 1}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      asset,
+      sourceRect: { ...rule.sourceRect },
+      scale: normalizeScale(rule.scale),
+      rule,
+    });
+  }
+
+  return result;
+}
+
+async function collectFullTilesetTerrainTiles(tilesets: EditorTilesetAsset[], gridSize: number): Promise<TerrainTile[]> {
   const result: TerrainTile[] = [];
   const seen = new Set<string>();
 
   for (const asset of tilesets) {
-    if (!asset || asset.solidColor !== undefined || asset.url.startsWith('solid://') || asset.url.startsWith('editor://')) continue;
+    if (!asset || asset.solidColor !== undefined || !isImageAssetUrl(asset.url)) continue;
     const size = await loadImageSize(asset.url);
     if (!size) continue;
 
@@ -58,7 +102,7 @@ async function collectTerrainTiles(tilesets: EditorTilesetAsset[], gridSize: num
         const key = JSON.stringify({ assetId: asset.id, assetUrl: asset.url, sourceRect });
         if (seen.has(key)) continue;
         seen.add(key);
-        result.push({ asset, sourceRect });
+        result.push({ asset, sourceRect, scale: 1 });
       }
     }
   }
@@ -78,7 +122,7 @@ function createGroundPlacement(tile: TerrainTile, x: number, y: number): EditorT
     x,
     y,
     layer: 'ground',
-    scale: 1,
+    scale: tile.scale,
     displayWidth: sourceRect.width,
     displayHeight: sourceRect.height,
     sourceRect,
@@ -97,9 +141,22 @@ function loadImageSize(url: string): Promise<{ width: number; height: number } |
   });
 }
 
+function createTilesetKey(id: string, url: string): string {
+  return `${id}:${url}`;
+}
+
+function isImageAssetUrl(url: string): boolean {
+  return !url.startsWith('solid://') && !url.startsWith('editor://');
+}
+
 function normalizeGridSize(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 32;
   return Math.max(1, Math.min(256, Math.round(value)));
+}
+
+function normalizeScale(value: number | undefined): number {
+  if (!Number.isFinite(value) || (value as number) <= 0) return 1;
+  return Math.max(0.1, Math.min(10, Math.round((value as number) * 10) / 10));
 }
 
 function normalizePositiveInteger(value: number | undefined, fallback: number): number {
