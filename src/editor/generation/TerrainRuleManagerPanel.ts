@@ -29,7 +29,7 @@ type TilesetTerrainSettings = {
 };
 
 const TILE_SIZE_OPTIONS = [16, 32, 64];
-const DEFAULT_ROLE: EditorTerrainTileRole = 'decorative';
+const DEFAULT_ROLE: EditorTerrainTileRole = 'center';
 const DEFAULT_SCALE = 1;
 const DEFAULT_WEIGHT = 1;
 
@@ -167,7 +167,7 @@ export class TerrainRuleManagerPanel {
     this.weightInput.step = '1';
     this.weightInput.value = String(DEFAULT_WEIGHT);
     this.weightInput.style.cssText = inputStyle();
-    this.weightInput.title = '가중치. decorative는 높을수록 더 자주 나오고, 같은 role 안에서는 선택 비중이 커집니다.';
+    this.weightInput.title = '가중치. 같은 role 안에서 선택 비중이 커집니다.';
     this.weightInput.onchange = () => {
       this.weightInput.value = String(normalizeWeight(Number(this.weightInput.value)));
     };
@@ -180,7 +180,7 @@ export class TerrainRuleManagerPanel {
 
     const removeButton = document.createElement('button');
     removeButton.type = 'button';
-    removeButton.textContent = '선택 규칙 제거';
+    removeButton.textContent = '선택 타일 규칙 제거';
     removeButton.style.cssText = dangerButtonStyle();
     removeButton.onclick = () => this.removeSelectedRule();
 
@@ -347,8 +347,8 @@ export class TerrainRuleManagerPanel {
         `top:${rule.sourceRect.y}px`,
         `width:${rule.sourceRect.width}px`,
         `height:${rule.sourceRect.height}px`,
-        'border:2px solid #22c55e',
-        'background:rgba(34,197,94,.14)',
+        `border:2px solid ${roleColor(rule.role)}`,
+        `background:${roleBackground(rule.role)}`,
         'box-sizing:border-box',
       ].join(';');
       this.ruleBoxes.appendChild(box);
@@ -373,6 +373,7 @@ export class TerrainRuleManagerPanel {
       this.scaleInput.value = String(normalizeScale(existingRule.scale));
       this.weightInput.value = String(normalizeWeight(existingRule.weight));
     } else {
+      this.roleSelect.value = DEFAULT_ROLE;
       this.weightInput.value = String(DEFAULT_WEIGHT);
     }
     this.renderSelection();
@@ -413,7 +414,7 @@ export class TerrainRuleManagerPanel {
     this.scaleInput.value = String(scale);
     this.weightInput.value = String(weight);
     const rule: EditorTerrainTileRule = {
-      id: createRuleId(this.selectedAsset, this.selectedRect, this.tileSize),
+      id: createRuleId(this.selectedAsset, this.selectedRect, this.tileSize, role),
       tilesetId: this.selectedAsset.id,
       tilesetName: this.selectedAsset.name,
       tilesetUrl: this.selectedAsset.url,
@@ -436,10 +437,14 @@ export class TerrainRuleManagerPanel {
       this.status.textContent = '먼저 제거할 타일을 선택하세요.';
       return;
     }
-    const ruleId = createRuleId(this.selectedAsset, this.selectedRect, this.tileSize);
-    this.options.onRemoveRule(ruleId);
+    const rules = this.findSelectedRectRules();
+    if (rules.length === 0) {
+      this.status.textContent = '선택한 타일에 등록된 규칙이 없습니다.';
+      return;
+    }
+    for (const rule of rules) this.options.onRemoveRule(rule.id);
     this.renderPreview();
-    this.status.textContent = `규칙 제거: ${this.selectedRect.x},${this.selectedRect.y}`;
+    this.status.textContent = `규칙 제거: ${this.selectedRect.x},${this.selectedRect.y} · ${rules.length}개`;
   }
 
   private getRulesForSelectedAsset(): EditorTerrainTileRule[] {
@@ -452,9 +457,23 @@ export class TerrainRuleManagerPanel {
   }
 
   private findSelectedRule(): EditorTerrainTileRule | undefined {
-    if (!this.selectedAsset || !this.selectedRect) return undefined;
-    const ruleId = createRuleId(this.selectedAsset, this.selectedRect, this.tileSize);
-    return this.options.getRuleSet().rules.find((rule) => rule.id === ruleId);
+    const rules = this.findSelectedRectRules();
+    const selectedRole = this.roleSelect.value as EditorTerrainTileRole;
+    return rules.find((rule) => rule.role === selectedRole) ?? rules[0];
+  }
+
+  private findSelectedRectRules(): EditorTerrainTileRule[] {
+    if (!this.selectedAsset || !this.selectedRect) return [];
+    const legacyRuleId = createLegacyRuleId(this.selectedAsset, this.selectedRect, this.tileSize);
+    return this.options.getRuleSet().rules.filter((rule) => (
+      rule.tilesetId === this.selectedAsset?.id
+      && rule.tilesetUrl === this.selectedAsset?.url
+      && rule.tileSize === this.tileSize
+      && rule.sourceRect.x === this.selectedRect?.x
+      && rule.sourceRect.y === this.selectedRect?.y
+      && rule.sourceRect.width === this.selectedRect?.width
+      && rule.sourceRect.height === this.selectedRect?.height
+    ) || rule.id === legacyRuleId);
   }
 
   private getTilesetSettings(asset: EditorTilesetAsset): TilesetTerrainSettings {
@@ -496,13 +515,16 @@ export class TerrainRuleManagerPanel {
   }
 }
 
-function createRuleId(asset: EditorTilesetAsset, rect: EditorSourceRect, tileSize: number): string {
+function createRuleId(asset: EditorTilesetAsset, rect: EditorSourceRect, tileSize: number, role: EditorTerrainTileRole): string {
+  return `${asset.id}:${asset.url}:${tileSize}:${rect.x}:${rect.y}:${rect.width}:${rect.height}:${role}`;
+}
+
+function createLegacyRuleId(asset: EditorTilesetAsset, rect: EditorSourceRect, tileSize: number): string {
   return `${asset.id}:${asset.url}:${tileSize}:${rect.x}:${rect.y}:${rect.width}:${rect.height}`;
 }
 
 function getRoleOptions(): EditorTerrainTileRole[] {
   return [
-    'decorative',
     'center',
     'edgeTop',
     'edgeBottom',
@@ -516,7 +538,24 @@ function getRoleOptions(): EditorTerrainTileRole[] {
     'innerTopRight',
     'innerBottomLeft',
     'innerBottomRight',
+    'decorative',
   ];
+}
+
+function roleColor(role: EditorTerrainTileRole): string {
+  if (role === 'center') return '#38bdf8';
+  if (role === 'decorative') return '#22c55e';
+  if (role.startsWith('edge')) return '#facc15';
+  if (role.startsWith('outer')) return '#fb923c';
+  return '#c084fc';
+}
+
+function roleBackground(role: EditorTerrainTileRole): string {
+  if (role === 'center') return 'rgba(56,189,248,.14)';
+  if (role === 'decorative') return 'rgba(34,197,94,.14)';
+  if (role.startsWith('edge')) return 'rgba(250,204,21,.14)';
+  if (role.startsWith('outer')) return 'rgba(251,146,60,.14)';
+  return 'rgba(192,132,252,.14)';
 }
 
 function getMaterialOptions(): EditorTerrainMaterial[] {
