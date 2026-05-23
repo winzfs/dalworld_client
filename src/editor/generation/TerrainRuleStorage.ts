@@ -14,19 +14,10 @@ export class TerrainRuleStorage {
   constructor(private readonly mapName: string) {}
 
   load(): EditorTerrainRuleSet {
-    const raw = window.localStorage.getItem(this.key) ?? window.localStorage.getItem(this.legacyKey);
-    if (!raw) return createEmptyRuleSet();
-
-    try {
-      const parsed = JSON.parse(raw) as EditorTerrainRuleSet;
-      if (!isValidRuleSet(parsed)) return createEmptyRuleSet();
-      const normalized = normalizeRuleSet(parsed);
-      this.mirrorSave(normalized);
-      return normalized;
-    } catch (error) {
-      console.warn('[TerrainRuleStorage] Failed to parse terrain rules.', error);
-      return createEmptyRuleSet();
-    }
+    const loaded = this.loadBestStoredRuleSet();
+    if (!loaded) return createEmptyRuleSet();
+    this.mirrorSave(loaded);
+    return loaded;
   }
 
   save(ruleSet: EditorTerrainRuleSet): boolean {
@@ -130,6 +121,35 @@ export class TerrainRuleStorage {
     return { tilesetId, tilesetUrl, material: 'grass', movementMode: 'passable', blocksMovement: false };
   }
 
+  private loadBestStoredRuleSet(): EditorTerrainRuleSet | null {
+    const candidates: EditorTerrainRuleSet[] = [];
+    for (const key of this.getCandidateKeys()) {
+      const ruleSet = readRuleSetFromKey(key);
+      if (ruleSet) candidates.push(ruleSet);
+    }
+
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => {
+      const timeDiff = (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
+      if (timeDiff !== 0) return timeDiff;
+      return (b.rules?.length ?? 0) - (a.rules?.length ?? 0);
+    });
+    return normalizeRuleSet(candidates[0]);
+  }
+
+  private getCandidateKeys(): string[] {
+    const keys = new Set<string>([this.key, this.legacyKey]);
+    try {
+      for (let index = 0; index < window.localStorage.length; index += 1) {
+        const key = window.localStorage.key(index);
+        if (key?.startsWith(STORAGE_PREFIX)) keys.add(key);
+      }
+    } catch (error) {
+      console.warn('[TerrainRuleStorage] Failed to scan terrain rule keys.', error);
+    }
+    return [...keys];
+  }
+
   private mirrorSave(ruleSet: EditorTerrainRuleSet): void {
     const payload = JSON.stringify(ruleSet);
     window.localStorage.setItem(this.key, payload);
@@ -147,6 +167,19 @@ export class TerrainRuleStorage {
 
 export function createEmptyRuleSet(): EditorTerrainRuleSet {
   return { version: 1, rules: [], tilesets: [], updatedAt: Date.now() };
+}
+
+function readRuleSetFromKey(key: string): EditorTerrainRuleSet | null {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as EditorTerrainRuleSet;
+    if (!isValidRuleSet(parsed)) return null;
+    return normalizeRuleSet(parsed);
+  } catch (error) {
+    console.warn(`[TerrainRuleStorage] Failed to parse terrain rules from ${key}.`, error);
+    return null;
+  }
 }
 
 function normalizeRuleSet(ruleSet: EditorTerrainRuleSet): EditorTerrainRuleSet {
