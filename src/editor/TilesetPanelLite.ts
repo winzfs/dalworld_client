@@ -9,8 +9,6 @@ export type TilesetPanelLiteActions = {
   onPickAsset: (asset: EditorTilesetAsset) => void;
   onFillAll: () => void;
   onRandomFill: (chancePercent: number) => void;
-  onAddTerrainBrush: () => void;
-  onGenerateTerrain: () => void;
   onToggleWorldMap: () => void;
 };
 
@@ -87,7 +85,7 @@ export class TilesetPanelLite {
       'background:rgba(255,209,102,.08)',
       'border-bottom:1px solid rgba(255,209,102,.14)',
     ].join(';');
-    this.notice.textContent = 'TilesetPanel Lite: 기존 타일 UI 우선 복구 중. 몬스터 세부 패널은 다음 단계에서 연결합니다.';
+    this.notice.textContent = 'TilesetPanel Lite: 기존 타일 UI 우선 복구 중. 지형 생성은 상단 지형생성 모드에서 관리합니다.';
 
     this.scaleContainer.className = 'map-editor-scale';
     this.gridContainer.className = 'map-editor-grid-controls';
@@ -236,9 +234,7 @@ export class TilesetPanelLite {
     };
     const percent = span('%', 'map-editor-percent-suffix');
     const randomButton = button('랜덤 Fill', 'map-editor-action', () => this.actions.onRandomFill(this.randomChancePercent));
-    const addTerrainButton = button('지형등록', 'map-editor-action', this.actions.onAddTerrainBrush);
-    const terrainButton = button('지형생성', 'map-editor-action', this.actions.onGenerateTerrain);
-    this.fillContainer.append(fillButton, chanceInput, percent, randomButton, addTerrainButton, terrainButton);
+    this.fillContainer.append(fillButton, chanceInput, percent, randomButton);
   }
 
   private renderActions(): void {
