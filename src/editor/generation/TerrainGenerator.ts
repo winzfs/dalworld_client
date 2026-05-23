@@ -1,11 +1,14 @@
 import type { EditorSourceRect, EditorTerrainRuleSet, EditorTerrainTileRole, EditorTerrainTileRule, EditorTilePlacement, EditorTilesetAsset } from '../types';
 
+export type TerrainGenerationShape = 'rect' | 'island';
+
 export type BasicTerrainGenerationOptions = {
   tilesets: EditorTilesetAsset[];
   width: number;
   height: number;
   gridSize: number;
   terrainRuleSet?: EditorTerrainRuleSet;
+  shape?: TerrainGenerationShape;
   maxPlacements?: number;
 };
 
@@ -41,7 +44,7 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
   const maxPlacements = normalizePositiveInteger(options.maxPlacements, DEFAULT_MAX_PLACEMENTS);
   const columns = Math.max(1, Math.ceil(width / gridSize));
   const rows = Math.max(1, Math.ceil(height / gridSize));
-  const mask = createFilledRectMask(columns, rows);
+  const mask = createTerrainMask(options.shape ?? 'rect', columns, rows);
   const roleCounters = new Map<EditorTerrainTileRole | 'all', number>();
   const placements: EditorTilePlacement[] = [];
 
@@ -146,6 +149,11 @@ function createTilePool(tiles: TerrainTile[]): TerrainTilePool {
   return { all: tiles, byRole };
 }
 
+function createTerrainMask(shape: TerrainGenerationShape, columns: number, rows: number): TerrainMask {
+  if (shape === 'island') return createIslandMask(columns, rows);
+  return createFilledRectMask(columns, rows);
+}
+
 function createFilledRectMask(columns: number, rows: number): TerrainMask {
   return {
     columns,
@@ -154,6 +162,50 @@ function createFilledRectMask(columns: number, rows: number): TerrainMask {
       return column >= 0 && column < columns && row >= 0 && row < rows;
     },
   };
+}
+
+function createIslandMask(columns: number, rows: number): TerrainMask {
+  const centerX = (columns - 1) / 2;
+  const centerY = (rows - 1) / 2;
+  const radiusX = Math.max(1, columns * 0.46);
+  const radiusY = Math.max(1, rows * 0.46);
+  const values = new Set<string>();
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const nx = (column - centerX) / radiusX;
+      const ny = (row - centerY) / radiusY;
+      const distance = Math.sqrt(nx * nx + ny * ny);
+      const wobble = pseudoNoise(column, row) * 0.18 + pseudoNoise(column * 2 + 7, row * 2 + 11) * 0.08;
+      if (distance <= 0.92 + wobble) values.add(`${column}:${row}`);
+    }
+  }
+
+  fillTinyHoles(values, columns, rows);
+
+  return {
+    columns,
+    rows,
+    isFilled(column: number, row: number): boolean {
+      return column >= 0 && column < columns && row >= 0 && row < rows && values.has(`${column}:${row}`);
+    },
+  };
+}
+
+function fillTinyHoles(values: Set<string>, columns: number, rows: number): void {
+  for (let row = 1; row < rows - 1; row += 1) {
+    for (let column = 1; column < columns - 1; column += 1) {
+      const key = `${column}:${row}`;
+      if (values.has(key)) continue;
+      const neighbors = [
+        values.has(`${column}:${row - 1}`),
+        values.has(`${column}:${row + 1}`),
+        values.has(`${column - 1}:${row}`),
+        values.has(`${column + 1}:${row}`),
+      ].filter(Boolean).length;
+      if (neighbors >= 3) values.add(key);
+    }
+  }
 }
 
 function resolveRoleFromMask(mask: TerrainMask, column: number, row: number): EditorTerrainTileRole {
@@ -248,6 +300,11 @@ function createTilesetKey(id: string, url: string): string {
 
 function isImageAssetUrl(url: string): boolean {
   return !url.startsWith('solid://') && !url.startsWith('editor://');
+}
+
+function pseudoNoise(x: number, y: number): number {
+  const value = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+  return (value - Math.floor(value)) * 2 - 1;
 }
 
 function normalizeGridSize(value: number): number {
