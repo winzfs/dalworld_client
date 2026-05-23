@@ -17,10 +17,12 @@ type TerrainTile = {
 };
 
 const DEFAULT_MAX_PLACEMENTS = 12000;
+const DEFAULT_TERRAIN_RULE_KEY = 'dalworld:editor-terrain-rules:dalworld-map';
 
 export async function generateBasicGroundTerrain(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
   const gridSize = normalizeGridSize(options.gridSize);
-  const terrainTiles = await collectTerrainTiles(options.tilesets, gridSize, options.terrainRuleSet);
+  const terrainRuleSet = options.terrainRuleSet ?? readStoredTerrainRuleSet();
+  const terrainTiles = await collectTerrainTiles(options.tilesets, gridSize, terrainRuleSet);
   if (terrainTiles.length === 0) return [];
 
   const width = normalizePositiveInteger(options.width, 3000);
@@ -130,6 +132,19 @@ function createGroundPlacement(tile: TerrainTile, x: number, y: number): EditorT
     transparentBlack: false,
     gameplay: undefined,
   };
+}
+
+function readStoredTerrainRuleSet(): EditorTerrainRuleSet | undefined {
+  try {
+    const raw = window.localStorage.getItem(DEFAULT_TERRAIN_RULE_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as EditorTerrainRuleSet;
+    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.rules) || typeof parsed.updatedAt !== 'number') return undefined;
+    return parsed;
+  } catch (error) {
+    console.warn('[TerrainGenerator] Failed to load stored terrain rules.', error);
+    return undefined;
+  }
 }
 
 function loadImageSize(url: string): Promise<{ width: number; height: number } | null> {
