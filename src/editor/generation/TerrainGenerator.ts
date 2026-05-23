@@ -64,10 +64,21 @@ function collectRuleTerrainTiles(
     tilesetByKey.set(createTilesetKey(asset.id, asset.url), asset);
   }
 
+  const ruleTiles = buildRuleTerrainTiles(tilesetByKey, terrainRuleSet.rules);
+  const centerTiles = ruleTiles.filter((tile) => tile.rule?.role === 'center');
+
+  if (centerTiles.length > 0) return centerTiles;
+  return ruleTiles;
+}
+
+function buildRuleTerrainTiles(
+  tilesetByKey: Map<string, EditorTilesetAsset>,
+  rules: EditorTerrainTileRule[],
+): TerrainTile[] {
   const result: TerrainTile[] = [];
   const seen = new Set<string>();
 
-  for (const rule of terrainRuleSet.rules) {
+  for (const rule of rules) {
     const asset = tilesetByKey.get(createTilesetKey(rule.tilesetId, rule.tilesetUrl));
     if (!asset || asset.solidColor !== undefined || !isImageAssetUrl(asset.url)) continue;
     const key = `${rule.id}:${rule.scale ?? 1}`;
