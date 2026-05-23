@@ -318,6 +318,7 @@ export class MapEditorBootMinimal {
     if (!(await shouldOpenPicker(asset))) return;
     try {
       const picker = await this.ensurePicker();
+      picker.setGridSize?.(this.state?.gridSize ?? this.options.tileSize ?? 32);
       picker.open(asset);
       this.report(`TilePicker opened: ${asset.name}`);
     } catch (error) {
