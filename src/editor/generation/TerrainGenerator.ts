@@ -32,6 +32,8 @@ type TerrainMask = {
 
 const DEFAULT_MAX_PLACEMENTS = 12000;
 const DEFAULT_TERRAIN_RULE_KEY = 'dalworld:editor-terrain-rules:dalworld-map';
+const DEFAULT_TERRAIN_SHAPE_KEY = 'dalworld:editor-terrain-shape:dalworld-map';
+const DECORATIVE_CHANCE = 0.08;
 
 export async function generateBasicGroundTerrain(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
   const gridSize = normalizeGridSize(options.gridSize);
@@ -44,8 +46,9 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
   const maxPlacements = normalizePositiveInteger(options.maxPlacements, DEFAULT_MAX_PLACEMENTS);
   const columns = Math.max(1, Math.ceil(width / gridSize));
   const rows = Math.max(1, Math.ceil(height / gridSize));
-  const mask = createTerrainMask(options.shape ?? 'rect', columns, rows);
+  const mask = createTerrainMask(options.shape ?? readStoredTerrainShape(), columns, rows);
   const roleCounters = new Map<EditorTerrainTileRole | 'all', number>();
+  const decorativeCounters = new Map<EditorTerrainTileRole | 'all', number>();
   const placements: EditorTilePlacement[] = [];
 
   for (let row = 0; row < rows; row += 1) {
@@ -55,6 +58,11 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
       const role = resolveRoleFromMask(mask, column, row);
       const tile = pickTileForRole(pool, role, roleCounters);
       placements.push(createGroundPlacement(tile, column * gridSize, row * gridSize));
+
+      const decorative = pickDecorativeTile(pool, column, row, decorativeCounters);
+      if (decorative && placements.length < maxPlacements) {
+        placements.push(createGroundPlacement(decorative, column * gridSize, row * gridSize));
+      }
     }
   }
 
@@ -250,6 +258,21 @@ function pickTileForRole(
   return candidates[index % candidates.length];
 }
 
+function pickDecorativeTile(
+  pool: TerrainTilePool,
+  column: number,
+  row: number,
+  counters: Map<EditorTerrainTileRole | 'all', number>,
+): TerrainTile | null {
+  const candidates = pool.byRole.get('decorative');
+  if (!candidates || candidates.length === 0) return null;
+  const chance = pseudoNoise(column * 19 + 3, row * 23 + 5) * 0.5 + 0.5;
+  if (chance > DECORATIVE_CHANCE) return null;
+  const index = counters.get('decorative') ?? 0;
+  counters.set('decorative', index + 1);
+  return candidates[index % candidates.length];
+}
+
 function createGroundPlacement(tile: TerrainTile, x: number, y: number): EditorTilePlacement {
   const asset = tile.asset;
   const sourceRect = { ...tile.sourceRect };
@@ -282,6 +305,14 @@ function readStoredTerrainRuleSet(): EditorTerrainRuleSet | undefined {
   } catch (error) {
     console.warn('[TerrainGenerator] Failed to load stored terrain rules.', error);
     return undefined;
+  }
+}
+
+function readStoredTerrainShape(): TerrainGenerationShape {
+  try {
+    return window.localStorage.getItem(DEFAULT_TERRAIN_SHAPE_KEY) === 'island' ? 'island' : 'rect';
+  } catch {
+    return 'rect';
   }
 }
 
