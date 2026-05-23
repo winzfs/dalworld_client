@@ -16,6 +16,7 @@ type TerrainTile = {
   asset: EditorTilesetAsset;
   sourceRect: EditorSourceRect;
   scale: number;
+  weight: number;
   rule?: EditorTerrainTileRule;
 };
 
@@ -33,7 +34,9 @@ type TerrainMask = {
 const DEFAULT_MAX_PLACEMENTS = 12000;
 const DEFAULT_TERRAIN_RULE_KEY = 'dalworld:editor-terrain-rules:dalworld-map';
 const DEFAULT_TERRAIN_SHAPE_KEY = 'dalworld:editor-terrain-shape:dalworld-map';
-const DECORATIVE_CHANCE = 0.08;
+const BASE_DECORATIVE_CHANCE = 0.04;
+const DECORATIVE_CHANCE_PER_WEIGHT = 0.01;
+const MAX_DECORATIVE_CHANCE = 0.35;
 
 export async function generateBasicGroundTerrain(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
   const gridSize = normalizeGridSize(options.gridSize);
@@ -48,7 +51,6 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
   const rows = Math.max(1, Math.ceil(height / gridSize));
   const mask = createTerrainMask(options.shape ?? readStoredTerrainShape(), columns, rows);
   const roleCounters = new Map<EditorTerrainTileRole | 'all', number>();
-  const decorativeCounters = new Map<EditorTerrainTileRole | 'all', number>();
   const placements: EditorTilePlacement[] = [];
 
   for (let row = 0; row < rows; row += 1) {
@@ -56,10 +58,10 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
       if (placements.length >= maxPlacements) return placements;
       if (!mask.isFilled(column, row)) continue;
       const role = resolveRoleFromMask(mask, column, row);
-      const tile = pickTileForRole(pool, role, roleCounters);
+      const tile = pickTileForRole(pool, role, column, row, roleCounters);
       placements.push(createGroundPlacement(tile, column * gridSize, row * gridSize));
 
-      const decorative = pickDecorativeTile(pool, column, row, decorativeCounters);
+      const decorative = pickDecorativeTile(pool, column, row);
       if (decorative && placements.length < maxPlacements) {
         placements.push(createGroundPlacement(decorative, column * gridSize, row * gridSize));
       }
@@ -103,13 +105,16 @@ function buildRuleTerrainTiles(
   for (const rule of rules) {
     const asset = tilesetByKey.get(createTilesetKey(rule.tilesetId, rule.tilesetUrl));
     if (!asset || asset.solidColor !== undefined || !isImageAssetUrl(asset.url)) continue;
-    const key = `${rule.id}:${rule.scale ?? 1}`;
+    const weight = normalizeWeight(rule.weight);
+    if (weight <= 0) continue;
+    const key = `${rule.id}:${rule.scale ?? 1}:${weight}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push({
       asset,
       sourceRect: { ...rule.sourceRect },
       scale: normalizeScale(rule.scale),
+      weight,
       rule,
     });
   }
@@ -137,7 +142,7 @@ async function collectFullTilesetTerrainTiles(tilesets: EditorTilesetAsset[], gr
         const key = JSON.stringify({ assetId: asset.id, assetUrl: asset.url, sourceRect });
         if (seen.has(key)) continue;
         seen.add(key);
-        result.push({ asset, sourceRect, scale: 1 });
+        result.push({ asset, sourceRect, scale: 1, weight: 1 });
       }
     }
   }
@@ -247,6 +252,8 @@ function resolveRoleFromMask(mask: TerrainMask, column: number, row: number): Ed
 function pickTileForRole(
   pool: TerrainTilePool,
   role: EditorTerrainTileRole,
+  column: number,
+  row: number,
   counters: Map<EditorTerrainTileRole | 'all', number>,
 ): TerrainTile {
   const candidates = pool.byRole.get(role)
@@ -255,22 +262,30 @@ function pickTileForRole(
   const counterKey = pool.byRole.has(role) ? role : pool.byRole.has('center') ? 'center' : 'all';
   const index = counters.get(counterKey) ?? 0;
   counters.set(counterKey, index + 1);
-  return candidates[index % candidates.length];
+  return pickWeightedTile(candidates, column, row, index);
 }
 
-function pickDecorativeTile(
-  pool: TerrainTilePool,
-  column: number,
-  row: number,
-  counters: Map<EditorTerrainTileRole | 'all', number>,
-): TerrainTile | null {
+function pickDecorativeTile(pool: TerrainTilePool, column: number, row: number): TerrainTile | null {
   const candidates = pool.byRole.get('decorative');
   if (!candidates || candidates.length === 0) return null;
+  const totalWeight = candidates.reduce((sum, tile) => sum + tile.weight, 0);
+  if (totalWeight <= 0) return null;
   const chance = pseudoNoise(column * 19 + 3, row * 23 + 5) * 0.5 + 0.5;
-  if (chance > DECORATIVE_CHANCE) return null;
-  const index = counters.get('decorative') ?? 0;
-  counters.set('decorative', index + 1);
-  return candidates[index % candidates.length];
+  const threshold = Math.min(MAX_DECORATIVE_CHANCE, BASE_DECORATIVE_CHANCE + totalWeight * DECORATIVE_CHANCE_PER_WEIGHT);
+  if (chance > threshold) return null;
+  return pickWeightedTile(candidates, column + 101, row + 203, 0);
+}
+
+function pickWeightedTile(candidates: TerrainTile[], column: number, row: number, salt: number): TerrainTile {
+  const totalWeight = candidates.reduce((sum, tile) => sum + tile.weight, 0);
+  if (totalWeight <= 0) return candidates[0];
+  const roll = (pseudoNoise(column * 31 + salt * 17, row * 37 + salt * 13) * 0.5 + 0.5) * totalWeight;
+  let cursor = 0;
+  for (const tile of candidates) {
+    cursor += tile.weight;
+    if (roll <= cursor) return tile;
+  }
+  return candidates[candidates.length - 1];
 }
 
 function createGroundPlacement(tile: TerrainTile, x: number, y: number): EditorTilePlacement {
@@ -346,6 +361,11 @@ function normalizeGridSize(value: number): number {
 function normalizeScale(value: number | undefined): number {
   if (!Number.isFinite(value) || (value as number) <= 0) return 1;
   return Math.max(0.1, Math.min(10, Math.round((value as number) * 10) / 10));
+}
+
+function normalizeWeight(value: number | undefined): number {
+  if (!Number.isFinite(value) || (value as number) < 0) return 1;
+  return Math.max(0, Math.min(100, Math.round(value as number)));
 }
 
 function normalizePositiveInteger(value: number | undefined, fallback: number): number {
