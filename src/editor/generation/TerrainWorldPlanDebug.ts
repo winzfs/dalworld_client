@@ -1,6 +1,6 @@
 import type { EditorTerrainTileRole, EditorTilePlacement } from '../types';
 import type { BasicTerrainGenerationOptions } from './TerrainGenerator';
-import { generateWorldPlanTerrainV2 } from './TerrainWorldPlanV2';
+import { generateWorldPlanTerrainOrganicBase } from './TerrainWorldPlanOrganicBase';
 
 type DebugPlacement = EditorTilePlacement & {
   terrainDebugRole?: EditorTerrainTileRole;
@@ -10,7 +10,7 @@ type DebugPlacement = EditorTilePlacement & {
 };
 
 export async function generateWorldPlanTerrainDebug(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
-  const placements = await generateWorldPlanTerrainV2(options);
+  const placements = await generateWorldPlanTerrainOrganicBase(options);
   const gridSize = normalizeGridSize(options.gridSize);
   const byCell = new Map<string, EditorTilePlacement>();
 
