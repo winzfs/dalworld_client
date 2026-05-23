@@ -1,4 +1,4 @@
-import type { EditorTerrainRuleSet, EditorTerrainTileRule, EditorTilesetAsset } from '../types';
+import type { EditorTerrainMaterial, EditorTerrainMovementMode, EditorTerrainRuleSet, EditorTerrainTileRule, EditorTilesetAsset } from '../types';
 import type { TerrainGenerationShape } from './TerrainGenerator';
 
 export type TerrainGeneratorPanelOptions = {
@@ -292,6 +292,11 @@ export class TerrainGeneratorPanel {
       getRuleSet: () => this.ruleSet ?? this.ruleStorage.load(),
       onSaveRule: (rule: EditorTerrainTileRule) => this.saveTerrainRule(rule),
       onRemoveRule: (ruleId: string) => this.removeTerrainRule(ruleId),
+      onSaveTilesetMaterial: (
+        asset: EditorTilesetAsset,
+        material: EditorTerrainMaterial,
+        movementMode: EditorTerrainMovementMode,
+      ) => this.saveTilesetMaterial(asset, material, movementMode),
     });
     this.ruleManagerPanel.mount(this.element.ownerDocument.body);
     return this.ruleManagerPanel;
@@ -306,6 +311,16 @@ export class TerrainGeneratorPanel {
   private removeTerrainRule(ruleId: string): void {
     if (!this.ruleStorage) return;
     this.ruleSet = this.ruleStorage.remove(ruleId);
+    this.ruleManagerPanel?.render?.();
+  }
+
+  private saveTilesetMaterial(
+    asset: EditorTilesetAsset,
+    material: EditorTerrainMaterial,
+    movementMode: EditorTerrainMovementMode,
+  ): void {
+    if (!this.ruleStorage) return;
+    this.ruleSet = this.ruleStorage.upsertTilesetMaterial(asset, material, movementMode);
     this.ruleManagerPanel?.render?.();
   }
 
