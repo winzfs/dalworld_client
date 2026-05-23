@@ -9,6 +9,7 @@ export type TilesetPanelLiteActions = {
   onPickAsset: (asset: EditorTilesetAsset) => void;
   onFillAll: () => void;
   onRandomFill: (chancePercent: number) => void;
+  onGenerateTerrain: () => void;
   onToggleWorldMap: () => void;
 };
 
@@ -234,7 +235,8 @@ export class TilesetPanelLite {
     };
     const percent = span('%', 'map-editor-percent-suffix');
     const randomButton = button('랜덤 Fill', 'map-editor-action', () => this.actions.onRandomFill(this.randomChancePercent));
-    this.fillContainer.append(fillButton, chanceInput, percent, randomButton);
+    const terrainButton = button('지형생성', 'map-editor-action', this.actions.onGenerateTerrain);
+    this.fillContainer.append(fillButton, chanceInput, percent, randomButton, terrainButton);
   }
 
   private renderActions(): void {
