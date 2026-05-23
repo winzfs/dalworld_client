@@ -38,7 +38,7 @@ export async function generateWorldPlanTerrainLayered(options: BasicTerrainGener
   if (visualBaseCandidates.length === 0) return forceTransparentTerrain(placements);
 
   const roadCandidates = createRoleCandidateMap(placements, byCell, gridSize, 'road');
-  const rockRoadBorders = createRockRoadBorders(byCell, roadCandidates, gridSize);
+  const rockRoadBorders = createRockRoadBorders(byCell, roadCandidates);
   const layered: EditorTilePlacement[] = [];
 
   for (const placement of placements) {
@@ -93,7 +93,6 @@ function createRoleCandidateMap(
 function createRockRoadBorders(
   byCell: Map<string, EditorTilePlacement>,
   roadCandidates: Map<EditorTerrainTileRole | 'all', EditorTilePlacement[]>,
-  gridSize: number,
 ): Map<string, EditorTilePlacement> {
   const borders = new Map<string, EditorTilePlacement>();
   if ((roadCandidates.get('all') ?? []).length === 0) return borders;
@@ -120,13 +119,42 @@ function createRockRoadBorders(
     const cell = parseCellKey(key);
     const target = byCell.get(key);
     if (!target) continue;
-    const role = resolveRole(cell.column, cell.row, (x, y) => borderCells.has(`${x}:${y}`));
+    const role = resolveBorderRoleFromRock(cell.column, cell.row, byCell);
     const source = pickCandidateForRole(roadCandidates, role, cell.column, cell.row);
     if (!source) continue;
     borders.set(key, createVisualRoadBorder(source, target));
   }
 
   return borders;
+}
+
+function resolveBorderRoleFromRock(column: number, row: number, byCell: Map<string, EditorTilePlacement>): EditorTerrainTileRole {
+  const rockTop = isRock(byCell, column, row - 1);
+  const rockBottom = isRock(byCell, column, row + 1);
+  const rockLeft = isRock(byCell, column - 1, row);
+  const rockRight = isRock(byCell, column + 1, row);
+  const rockTopLeft = isRock(byCell, column - 1, row - 1);
+  const rockTopRight = isRock(byCell, column + 1, row - 1);
+  const rockBottomLeft = isRock(byCell, column - 1, row + 1);
+  const rockBottomRight = isRock(byCell, column + 1, row + 1);
+
+  if (rockTop && rockLeft) return 'outerTopLeft';
+  if (rockTop && rockRight) return 'outerTopRight';
+  if (rockBottom && rockLeft) return 'outerBottomLeft';
+  if (rockBottom && rockRight) return 'outerBottomRight';
+  if (rockTop) return 'edgeTop';
+  if (rockBottom) return 'edgeBottom';
+  if (rockLeft) return 'edgeLeft';
+  if (rockRight) return 'edgeRight';
+  if (rockTopLeft) return 'outerTopLeft';
+  if (rockTopRight) return 'outerTopRight';
+  if (rockBottomLeft) return 'outerBottomLeft';
+  if (rockBottomRight) return 'outerBottomRight';
+  return 'center';
+}
+
+function isRock(byCell: Map<string, EditorTilePlacement>, column: number, row: number): boolean {
+  return byCell.get(`${column}:${row}`)?.terrainMaterial === 'rock';
 }
 
 function resolvePlacementRole(placement: DebugPlacement, byCell: Map<string, EditorTilePlacement>, gridSize: number): EditorTerrainTileRole | undefined {
