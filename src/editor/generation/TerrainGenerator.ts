@@ -40,7 +40,6 @@ type TerrainTileFamily = {
   tilesetUrl: string;
   all: TerrainTile[];
   byRole: Map<EditorTerrainTileRole, TerrainTile[]>;
-  totalWeight: number;
 };
 
 type TerrainMask = {
@@ -55,9 +54,7 @@ const DEFAULT_MAX_PLACEMENTS = 12000;
 const DEFAULT_TERRAIN_RULE_KEY = 'dalworld:editor-terrain-rules:dalworld-map';
 const DEFAULT_TERRAIN_SHAPE_KEY = 'dalworld:editor-terrain-shape:dalworld-map';
 const DEFAULT_TERRAIN_SEED_KEY = 'dalworld:editor-terrain-seed:dalworld-map';
-const BASE_DECORATIVE_CHANCE = 0.025;
-const DECORATIVE_CHANCE_PER_WEIGHT = 0.006;
-const MAX_DECORATIVE_CHANCE = 0.18;
+const DECORATIVE_CHANCE = 0.035;
 
 export async function generateBasicGroundTerrain(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
   const gridSize = normalizeGridSize(options.gridSize);
@@ -242,13 +239,11 @@ function createFamilies(tiles: TerrainTile[]): TerrainTileFamily[] {
         tilesetUrl: tile.asset.url,
         all: [],
         byRole: new Map<EditorTerrainTileRole, TerrainTile[]>(),
-        totalWeight: 0,
       };
       familyMap.set(key, family);
     }
 
     family.all.push(tile);
-    family.totalWeight += tile.weight;
     const role = tile.rule?.role;
     if (role) {
       const list = family.byRole.get(role) ?? [];
@@ -285,7 +280,8 @@ function pickFamilyForZone(
   if (families.length === 1) return families[0];
   const zoneColumn = Math.floor(column / Math.max(1, zoneSize));
   const zoneRow = Math.floor(row / Math.max(1, zoneSize));
-  return pickWeightedFamily(families, seed + zoneColumn * 92821 + zoneRow * 68917, zoneColumn + zoneRow * 31) ?? families[0];
+  const index = positiveModulo(hashInt(seed + zoneColumn * 92821 + zoneRow * 68917), families.length);
+  return families[index] ?? families[0];
 }
 
 function getFamilyCounters(
@@ -298,18 +294,6 @@ function getFamilyCounters(
     store.set(family.key, counters);
   }
   return counters;
-}
-
-function pickWeightedFamily(families: TerrainTileFamily[], seed: number, salt: number): TerrainTileFamily | undefined {
-  if (families.length === 0) return undefined;
-  const total = families.reduce((sum, family) => sum + Math.max(1, family.totalWeight), 0);
-  const roll = (seededNoise(seed + salt * 17, seed * 3 + salt * 29, seed + 11) * 0.5 + 0.5) * total;
-  let cursor = 0;
-  for (const family of families) {
-    cursor += Math.max(1, family.totalWeight);
-    if (roll <= cursor) return family;
-  }
-  return families[families.length - 1];
 }
 
 function createFilledRectMask(columns: number, rows: number): TerrainMask {
@@ -601,11 +585,7 @@ function pickTileForRole(
 function pickDecorativeTile(families: TerrainTileFamily[], column: number, row: number, seed: number): TerrainTile | null {
   const candidates = families.flatMap((family) => family.byRole.get('decorative') ?? []);
   if (candidates.length === 0) return null;
-  const totalWeight = candidates.reduce((sum, tile) => sum + tile.weight, 0);
-  if (totalWeight <= 0) return null;
-  const chance = seededNoise(column * 19 + 3, row * 23 + 5, seed + 193) * 0.5 + 0.5;
-  const threshold = Math.min(MAX_DECORATIVE_CHANCE, BASE_DECORATIVE_CHANCE + totalWeight * DECORATIVE_CHANCE_PER_WEIGHT);
-  if (chance > threshold) return null;
+  if (seededNoise(column * 19 + 3, row * 23 + 5, seed + 193) * 0.5 + 0.5 > DECORATIVE_CHANCE) return null;
   return pickWeightedTile(candidates, column + 101, row + 203, seed + 389, 0);
 }
 
@@ -704,6 +684,18 @@ function normalizedNoise(x: number, y: number, seed: number): number {
 function seededNoise(x: number, y: number, seed: number): number {
   const value = Math.sin(x * 12.9898 + y * 78.233 + seed * 37.719) * 43758.5453;
   return (value - Math.floor(value)) * 2 - 1;
+}
+
+function hashInt(value: number): number {
+  let hash = Math.trunc(value) | 0;
+  hash ^= hash << 13;
+  hash ^= hash >>> 17;
+  hash ^= hash << 5;
+  return hash;
+}
+
+function positiveModulo(value: number, divisor: number): number {
+  return ((value % divisor) + divisor) % divisor;
 }
 
 function lerp(a: number, b: number, t: number): number {
