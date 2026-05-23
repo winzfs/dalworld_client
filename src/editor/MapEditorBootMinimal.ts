@@ -31,6 +31,7 @@ export class MapEditorBootMinimal {
 
   private panel: any = null;
   private picker: any = createHiddenWindow('tile-picker-window is-fallback');
+  private terrainPanel: any = null;
   private worldMapGrid: any = null;
   private worldMapPanel: any = createHiddenWindow('world-map-panel is-fallback');
   private gridOverlay: any = null;
@@ -48,6 +49,7 @@ export class MapEditorBootMinimal {
   private lastPaintKey: string | null = null;
   private toastTimer: number | null = null;
   private loadingPicker: Promise<any> | null = null;
+  private loadingTerrainPanel: Promise<any> | null = null;
   private transitioning = false;
   private readonly minimapTicker = () => this.updateMinimap();
 
@@ -122,7 +124,7 @@ export class MapEditorBootMinimal {
       onFillAll: () => { void this.fillAll(); },
       onRandomFill: (chancePercent: number) => { void this.fillRandom(chancePercent); },
       onAddTerrainBrush: () => this.addTerrainTileset(),
-      onGenerateTerrain: () => { void this.generateTerrain(); },
+      onGenerateTerrain: () => { void this.openTerrainPanel(); },
       onToggleWorldMap: () => this.worldMapPanel.toggle(),
     });
 
@@ -154,6 +156,7 @@ export class MapEditorBootMinimal {
     this.options.app.ticker.remove(this.minimapTicker);
     this.panel?.element.remove();
     this.picker.element.remove();
+    this.terrainPanel?.element.remove();
     this.worldMapPanel.element.remove();
     this.minimap?.element.remove();
     this.toast.remove();
@@ -264,6 +267,33 @@ export class MapEditorBootMinimal {
     this.report(`Random fill completed. chance=${chancePercent}, before=${before}, after=${after}`);
   }
 
+  private async openTerrainPanel(): Promise<void> {
+    try {
+      const panel = await this.ensureTerrainPanel();
+      panel.open();
+    } catch (error) {
+      console.warn('[MapEditor] Terrain panel failed.', error);
+      this.showToast(`지형 패널 열기 실패 · ${formatError(error)}`, 'error', 4_000);
+      this.report(`Terrain panel failed. ${formatError(error)}`);
+    }
+  }
+
+  private async ensureTerrainPanel(): Promise<any> {
+    if (this.terrainPanel?.open) return this.terrainPanel;
+    if (!this.loadingTerrainPanel) {
+      this.loadingTerrainPanel = import('./generation/TerrainGeneratorPanel').then((module) => {
+        this.terrainPanel = new module.TerrainGeneratorPanel({
+          getTilesets: () => [...this.terrainTilesets],
+          onAddCurrentTileset: () => this.addTerrainTileset(),
+          onGenerate: () => { void this.generateTerrain(); },
+        });
+        this.terrainPanel.mount(this.uiRoot);
+        return this.terrainPanel;
+      });
+    }
+    return this.loadingTerrainPanel;
+  }
+
   private addTerrainTileset(): void {
     const asset = this.getSelectedTilesetAsset();
     if (!asset || !isTerrainTilesetAsset(asset)) {
@@ -274,10 +304,12 @@ export class MapEditorBootMinimal {
     const key = createTilesetKey(asset);
     if (this.terrainTilesets.some((item) => createTilesetKey(item) === key)) {
       this.showToast(`이미 등록된 타일셋입니다 · ${asset.name}`, 'info', 2_500);
+      this.terrainPanel?.render?.();
       return;
     }
 
     this.terrainTilesets.push(asset);
+    this.terrainPanel?.render?.();
     this.showToast(`타일셋 등록 완료 · ${asset.name} · 총 ${this.terrainTilesets.length}개`, 'success', 3_000);
     this.report(`Registered terrain tileset: ${asset.name}. total=${this.terrainTilesets.length}`);
   }
@@ -628,7 +660,7 @@ function createEditorToast(): HTMLDivElement {
 }
 
 function isEditorUiTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest('.map-editor-panel, .tile-picker-window, .world-map-panel, .editor-minimap'));
+  return target instanceof Element && Boolean(target.closest('.map-editor-panel, .tile-picker-window, .world-map-panel, .editor-minimap, .terrain-generator-panel'));
 }
 
 function cellKey(gridX: number, gridY: number): string {
