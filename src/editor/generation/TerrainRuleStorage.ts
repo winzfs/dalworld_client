@@ -8,18 +8,21 @@ import type {
 } from '../types';
 
 const STORAGE_PREFIX = 'dalworld:editor-terrain-rules:';
+const LEGACY_MAP_NAME = 'dalworld-map';
 
 export class TerrainRuleStorage {
   constructor(private readonly mapName: string) {}
 
   load(): EditorTerrainRuleSet {
-    const raw = window.localStorage.getItem(this.key);
+    const raw = window.localStorage.getItem(this.key) ?? window.localStorage.getItem(this.legacyKey);
     if (!raw) return createEmptyRuleSet();
 
     try {
       const parsed = JSON.parse(raw) as EditorTerrainRuleSet;
       if (!isValidRuleSet(parsed)) return createEmptyRuleSet();
-      return normalizeRuleSet(parsed);
+      const normalized = normalizeRuleSet(parsed);
+      this.mirrorSave(normalized);
+      return normalized;
     } catch (error) {
       console.warn('[TerrainRuleStorage] Failed to parse terrain rules.', error);
       return createEmptyRuleSet();
@@ -28,7 +31,7 @@ export class TerrainRuleStorage {
 
   save(ruleSet: EditorTerrainRuleSet): boolean {
     try {
-      window.localStorage.setItem(this.key, JSON.stringify(normalizeRuleSet(ruleSet)));
+      this.mirrorSave(normalizeRuleSet(ruleSet));
       return true;
     } catch (error) {
       console.error('[TerrainRuleStorage] Failed to save terrain rules.', error);
@@ -127,8 +130,18 @@ export class TerrainRuleStorage {
     return { tilesetId, tilesetUrl, material: 'grass', movementMode: 'passable', blocksMovement: false };
   }
 
+  private mirrorSave(ruleSet: EditorTerrainRuleSet): void {
+    const payload = JSON.stringify(ruleSet);
+    window.localStorage.setItem(this.key, payload);
+    window.localStorage.setItem(this.legacyKey, payload);
+  }
+
   private get key(): string {
     return `${STORAGE_PREFIX}${this.mapName}`;
+  }
+
+  private get legacyKey(): string {
+    return `${STORAGE_PREFIX}${LEGACY_MAP_NAME}`;
   }
 }
 
