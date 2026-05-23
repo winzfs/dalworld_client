@@ -5,9 +5,6 @@ import { ResourceGeneratorPanel } from './ResourceGeneratorPanel';
 type MapEditorLike = {
   state?: any;
   placement?: any;
-  showToast?: (message: string, kind: 'info' | 'success' | 'error', durationMs?: number) => void;
-  report?: (message: string) => void;
-  persistCurrentCellDraft?: () => void;
 };
 
 export function installResourceGeneratorFeature(editor: MapEditorLike, root: HTMLElement = document.body): void {
@@ -49,7 +46,7 @@ async function generateResources(editor: MapEditorLike, mapName: string): Promis
     const generated = generateResourcePlacements({ rules, placements: currentDraft.placements, gridSize, seed: readSeed(mapName) });
     const keptPlacements = currentDraft.placements.filter((placement) => !isResourcePlacement(placement));
     await editor.placement.replaceDraft({ ...currentDraft, tileSize: gridSize, placements: [...keptPlacements, ...generated] });
-    editor.persistCurrentCellDraft?.();
+    (editor as any).persistCurrentCellDraft?.();
     notify(editor, `자원 생성 완료 · ${generated.length}개 배치`, 'success', 3500);
   } catch (error) {
     console.warn('[ResourceGenerator] generation failed.', error);
@@ -89,8 +86,8 @@ function createButton(): HTMLButtonElement {
 }
 
 function notify(editor: MapEditorLike, message: string, kind: 'info' | 'success' | 'error', durationMs?: number): void {
-  editor.showToast?.(message, kind, durationMs);
-  editor.report?.(message);
+  (editor as any).showToast?.(message, kind, durationMs);
+  (editor as any).report?.(message);
 }
 
 function rulesKey(mapName: string): string { return `dalworld:editor-resource-rules:${mapName}`; }
