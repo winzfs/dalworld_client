@@ -105,6 +105,40 @@ export type EditorBrush = {
   sourceRect?: EditorSourceRect;
 };
 
+export type EditorTerrainTileRole =
+  | 'center'
+  | 'edgeTop'
+  | 'edgeBottom'
+  | 'edgeLeft'
+  | 'edgeRight'
+  | 'outerTopLeft'
+  | 'outerTopRight'
+  | 'outerBottomLeft'
+  | 'outerBottomRight'
+  | 'innerTopLeft'
+  | 'innerTopRight'
+  | 'innerBottomLeft'
+  | 'innerBottomRight'
+  | 'decorative';
+
+export type EditorTerrainTileRule = {
+  id: string;
+  tilesetId: string;
+  tilesetName: string;
+  tilesetUrl: string;
+  tileSize: number;
+  role: EditorTerrainTileRole;
+  sourceRect: EditorSourceRect;
+  weight?: number;
+  scale?: number;
+};
+
+export type EditorTerrainRuleSet = {
+  version: 1;
+  rules: EditorTerrainTileRule[];
+  updatedAt: number;
+};
+
 export type EditorTilePlacement = {
   id: string;
   assetId: string;
@@ -146,6 +180,7 @@ export type EditorWorldMapDraft = {
   cells: EditorMapCell[];
   monsterSpawnRules?: EditorMonsterSpawnRule[];
   itemOverrides?: EditorItemOverride[];
+  terrainRuleSet?: EditorTerrainRuleSet;
 };
 
 export type EditorMapDraft = {
