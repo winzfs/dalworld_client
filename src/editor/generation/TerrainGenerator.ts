@@ -9,6 +9,7 @@ export type BasicTerrainGenerationOptions = {
   gridSize: number;
   terrainRuleSet?: EditorTerrainRuleSet;
   shape?: TerrainGenerationShape;
+  seed?: number;
   maxPlacements?: number;
 };
 
@@ -34,12 +35,14 @@ type TerrainMask = {
 const DEFAULT_MAX_PLACEMENTS = 12000;
 const DEFAULT_TERRAIN_RULE_KEY = 'dalworld:editor-terrain-rules:dalworld-map';
 const DEFAULT_TERRAIN_SHAPE_KEY = 'dalworld:editor-terrain-shape:dalworld-map';
+const DEFAULT_TERRAIN_SEED_KEY = 'dalworld:editor-terrain-seed:dalworld-map';
 const BASE_DECORATIVE_CHANCE = 0.04;
 const DECORATIVE_CHANCE_PER_WEIGHT = 0.01;
 const MAX_DECORATIVE_CHANCE = 0.35;
 
 export async function generateBasicGroundTerrain(options: BasicTerrainGenerationOptions): Promise<EditorTilePlacement[]> {
   const gridSize = normalizeGridSize(options.gridSize);
+  const seed = normalizeSeed(options.seed ?? readStoredTerrainSeed());
   const terrainRuleSet = options.terrainRuleSet ?? readStoredTerrainRuleSet();
   const pool = await collectTerrainTilePool(options.tilesets, gridSize, terrainRuleSet);
   if (pool.all.length === 0) return [];
@@ -49,7 +52,7 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
   const maxPlacements = normalizePositiveInteger(options.maxPlacements, DEFAULT_MAX_PLACEMENTS);
   const columns = Math.max(1, Math.ceil(width / gridSize));
   const rows = Math.max(1, Math.ceil(height / gridSize));
-  const mask = createTerrainMask(options.shape ?? readStoredTerrainShape(), columns, rows);
+  const mask = createTerrainMask(options.shape ?? readStoredTerrainShape(), columns, rows, seed);
   const roleCounters = new Map<EditorTerrainTileRole | 'all', number>();
   const placements: EditorTilePlacement[] = [];
 
@@ -58,10 +61,10 @@ export async function generateBasicGroundTerrain(options: BasicTerrainGeneration
       if (placements.length >= maxPlacements) return placements;
       if (!mask.isFilled(column, row)) continue;
       const role = resolveRoleFromMask(mask, column, row);
-      const tile = pickTileForRole(pool, role, column, row, roleCounters);
+      const tile = pickTileForRole(pool, role, column, row, seed, roleCounters);
       placements.push(createGroundPlacement(tile, column * gridSize, row * gridSize));
 
-      const decorative = pickDecorativeTile(pool, column, row);
+      const decorative = pickDecorativeTile(pool, column, row, seed);
       if (decorative && placements.length < maxPlacements) {
         placements.push(createGroundPlacement(decorative, column * gridSize, row * gridSize));
       }
@@ -162,8 +165,8 @@ function createTilePool(tiles: TerrainTile[]): TerrainTilePool {
   return { all: tiles, byRole };
 }
 
-function createTerrainMask(shape: TerrainGenerationShape, columns: number, rows: number): TerrainMask {
-  if (shape === 'island') return createIslandMask(columns, rows);
+function createTerrainMask(shape: TerrainGenerationShape, columns: number, rows: number, seed: number): TerrainMask {
+  if (shape === 'island') return createIslandMask(columns, rows, seed);
   return createFilledRectMask(columns, rows);
 }
 
@@ -177,7 +180,7 @@ function createFilledRectMask(columns: number, rows: number): TerrainMask {
   };
 }
 
-function createIslandMask(columns: number, rows: number): TerrainMask {
+function createIslandMask(columns: number, rows: number, seed: number): TerrainMask {
   const centerX = (columns - 1) / 2;
   const centerY = (rows - 1) / 2;
   const radiusX = Math.max(1, columns * 0.46);
@@ -189,7 +192,7 @@ function createIslandMask(columns: number, rows: number): TerrainMask {
       const nx = (column - centerX) / radiusX;
       const ny = (row - centerY) / radiusY;
       const distance = Math.sqrt(nx * nx + ny * ny);
-      const wobble = pseudoNoise(column, row) * 0.18 + pseudoNoise(column * 2 + 7, row * 2 + 11) * 0.08;
+      const wobble = seededNoise(column, row, seed) * 0.18 + seededNoise(column * 2 + 7, row * 2 + 11, seed + 97) * 0.08;
       if (distance <= 0.92 + wobble) values.add(`${column}:${row}`);
     }
   }
@@ -254,6 +257,7 @@ function pickTileForRole(
   role: EditorTerrainTileRole,
   column: number,
   row: number,
+  seed: number,
   counters: Map<EditorTerrainTileRole | 'all', number>,
 ): TerrainTile {
   const candidates = pool.byRole.get(role)
@@ -262,24 +266,24 @@ function pickTileForRole(
   const counterKey = pool.byRole.has(role) ? role : pool.byRole.has('center') ? 'center' : 'all';
   const index = counters.get(counterKey) ?? 0;
   counters.set(counterKey, index + 1);
-  return pickWeightedTile(candidates, column, row, index);
+  return pickWeightedTile(candidates, column, row, seed, index);
 }
 
-function pickDecorativeTile(pool: TerrainTilePool, column: number, row: number): TerrainTile | null {
+function pickDecorativeTile(pool: TerrainTilePool, column: number, row: number, seed: number): TerrainTile | null {
   const candidates = pool.byRole.get('decorative');
   if (!candidates || candidates.length === 0) return null;
   const totalWeight = candidates.reduce((sum, tile) => sum + tile.weight, 0);
   if (totalWeight <= 0) return null;
-  const chance = pseudoNoise(column * 19 + 3, row * 23 + 5) * 0.5 + 0.5;
+  const chance = seededNoise(column * 19 + 3, row * 23 + 5, seed + 193) * 0.5 + 0.5;
   const threshold = Math.min(MAX_DECORATIVE_CHANCE, BASE_DECORATIVE_CHANCE + totalWeight * DECORATIVE_CHANCE_PER_WEIGHT);
   if (chance > threshold) return null;
-  return pickWeightedTile(candidates, column + 101, row + 203, 0);
+  return pickWeightedTile(candidates, column + 101, row + 203, seed + 389, 0);
 }
 
-function pickWeightedTile(candidates: TerrainTile[], column: number, row: number, salt: number): TerrainTile {
+function pickWeightedTile(candidates: TerrainTile[], column: number, row: number, seed: number, salt: number): TerrainTile {
   const totalWeight = candidates.reduce((sum, tile) => sum + tile.weight, 0);
   if (totalWeight <= 0) return candidates[0];
-  const roll = (pseudoNoise(column * 31 + salt * 17, row * 37 + salt * 13) * 0.5 + 0.5) * totalWeight;
+  const roll = (seededNoise(column * 31 + salt * 17, row * 37 + salt * 13, seed + 541) * 0.5 + 0.5) * totalWeight;
   let cursor = 0;
   for (const tile of candidates) {
     cursor += tile.weight;
@@ -331,6 +335,14 @@ function readStoredTerrainShape(): TerrainGenerationShape {
   }
 }
 
+function readStoredTerrainSeed(): number {
+  try {
+    return normalizeSeed(Number(window.localStorage.getItem(DEFAULT_TERRAIN_SEED_KEY) ?? '1'));
+  } catch {
+    return 1;
+  }
+}
+
 function loadImageSize(url: string): Promise<{ width: number; height: number } | null> {
   return new Promise((resolve) => {
     const image = new Image();
@@ -348,8 +360,8 @@ function isImageAssetUrl(url: string): boolean {
   return !url.startsWith('solid://') && !url.startsWith('editor://');
 }
 
-function pseudoNoise(x: number, y: number): number {
-  const value = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+function seededNoise(x: number, y: number, seed: number): number {
+  const value = Math.sin(x * 12.9898 + y * 78.233 + seed * 37.719) * 43758.5453;
   return (value - Math.floor(value)) * 2 - 1;
 }
 
@@ -366,6 +378,11 @@ function normalizeScale(value: number | undefined): number {
 function normalizeWeight(value: number | undefined): number {
   if (!Number.isFinite(value) || (value as number) < 0) return 1;
   return Math.max(0, Math.min(100, Math.round(value as number)));
+}
+
+function normalizeSeed(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(0, Math.min(999_999_999, Math.round(value)));
 }
 
 function normalizePositiveInteger(value: number | undefined, fallback: number): number {
