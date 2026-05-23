@@ -129,10 +129,18 @@ export type EditorTerrainMaterial =
   | 'dirt'
   | 'rock';
 
+export type EditorTerrainMovementMode =
+  | 'passable'
+  | 'blocked'
+  | 'shallow'
+  | 'swim'
+  | 'boatOnly';
+
 export type EditorTerrainTilesetMaterial = {
   tilesetId: string;
   tilesetUrl: string;
   material: EditorTerrainMaterial;
+  movementMode?: EditorTerrainMovementMode;
   blocksMovement?: boolean;
 };
 
@@ -147,6 +155,7 @@ export type EditorTerrainTileRule = {
   weight?: number;
   scale?: number;
   material?: EditorTerrainMaterial;
+  movementMode?: EditorTerrainMovementMode;
   blocksMovement?: boolean;
 };
 
@@ -179,6 +188,10 @@ export type EditorTilePlacement = {
   transparentBlack?: boolean;
   /** Gameplay metadata inferred from the sprite path or assigned by editor tools. */
   gameplay?: EditorPlacementGameplay;
+  /** Terrain material marker used by server-authoritative movement and gameplay rules. */
+  terrainMaterial?: EditorTerrainMaterial;
+  /** Movement marker for terrain. Server decides final movement validity from this mode. */
+  terrainMovementMode?: EditorTerrainMovementMode;
 };
 
 export type EditorMapCoord = {
