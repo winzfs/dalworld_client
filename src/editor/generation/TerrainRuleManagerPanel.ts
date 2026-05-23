@@ -1,4 +1,12 @@
-import type { EditorSourceRect, EditorTerrainRuleSet, EditorTerrainTileRole, EditorTerrainTileRule, EditorTilesetAsset } from '../types';
+import type {
+  EditorSourceRect,
+  EditorTerrainMaterial,
+  EditorTerrainMovementMode,
+  EditorTerrainRuleSet,
+  EditorTerrainTileRole,
+  EditorTerrainTileRule,
+  EditorTilesetAsset,
+} from '../types';
 
 export type TerrainRuleManagerPanelOptions = {
   getTilesets: () => EditorTilesetAsset[];
@@ -8,6 +16,12 @@ export type TerrainRuleManagerPanelOptions = {
 };
 
 type Point = { x: number; y: number };
+
+type TilesetTerrainSettings = {
+  material: EditorTerrainMaterial;
+  movementMode: EditorTerrainMovementMode;
+  blocksMovement: boolean;
+};
 
 const TILE_SIZE_OPTIONS = [16, 32, 64];
 const DEFAULT_ROLE: EditorTerrainTileRole = 'decorative';
@@ -51,8 +65,8 @@ export class TerrainRuleManagerPanel {
       'left:760px',
       'top:72px',
       'z-index:10004',
-      'width:min(880px,calc(100vw - 48px))',
-      'height:min(680px,calc(100vh - 96px))',
+      'width:min(940px,calc(100vw - 48px))',
+      'height:min(720px,calc(100vh - 96px))',
       'display:none',
       'flex-direction:column',
       'overflow:hidden',
@@ -91,14 +105,13 @@ export class TerrainRuleManagerPanel {
     });
 
     this.header.append(title, this.closeButton);
-
-    this.body.style.cssText = 'display:grid;grid-template-columns:220px 1fr;gap:10px;min-height:0;flex:1 1 auto;padding:10px;';
+    this.body.style.cssText = 'display:grid;grid-template-columns:260px 1fr;gap:10px;min-height:0;flex:1 1 auto;padding:10px;';
 
     const left = document.createElement('div');
     left.style.cssText = 'display:flex;flex-direction:column;gap:8px;min-height:0;';
 
     const leftTitle = document.createElement('div');
-    leftTitle.textContent = '등록 타일셋';
+    leftTitle.textContent = '등록 타일셋 / 속성';
     leftTitle.style.cssText = 'font-weight:900;color:#ddd6fe;';
 
     this.tilesetList.style.cssText = 'display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;';
@@ -201,7 +214,6 @@ export class TerrainRuleManagerPanel {
 
     imageLayer.append(this.previewImage, this.ruleBoxes, this.selection, this.overlay);
     this.previewWrap.appendChild(imageLayer);
-
     this.overlay.addEventListener('pointerdown', (event) => this.pickTile(event));
 
     this.status.style.cssText = 'color:rgba(248,250,252,.68);min-height:18px;';
@@ -254,11 +266,36 @@ export class TerrainRuleManagerPanel {
     }
 
     for (const asset of tilesets) {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.textContent = asset.name;
-      item.style.cssText = tilesetButtonStyle(this.selectedAsset?.id === asset.id && this.selectedAsset?.url === asset.url);
-      item.onclick = () => this.selectTileset(asset);
+      const settings = this.getTilesetSettings(asset);
+      const item = document.createElement('div');
+      item.style.cssText = tilesetCardStyle(this.selectedAsset?.id === asset.id && this.selectedAsset?.url === asset.url);
+
+      const selectButton = document.createElement('button');
+      selectButton.type = 'button';
+      selectButton.textContent = asset.name;
+      selectButton.style.cssText = tilesetButtonStyle(false);
+      selectButton.onclick = () => this.selectTileset(asset);
+
+      const materialSelect = createMaterialSelect(settings.material);
+      materialSelect.onchange = () => {
+        const nextMaterial = materialSelect.value as EditorTerrainMaterial;
+        const nextMovement = getDefaultMovementMode(nextMaterial);
+        this.saveTilesetSettings(asset, nextMaterial, nextMovement);
+      };
+
+      const movementSelect = createMovementSelect(settings.movementMode);
+      movementSelect.onchange = () => {
+        this.saveTilesetSettings(
+          asset,
+          materialSelect.value as EditorTerrainMaterial,
+          movementSelect.value as EditorTerrainMovementMode,
+        );
+      };
+
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;grid-template-columns:54px 1fr;gap:5px 6px;align-items:center;';
+      grid.append(smallLabel('속성'), materialSelect, smallLabel('이동'), movementSelect);
+      item.append(selectButton, grid);
       this.tilesetList.appendChild(item);
     }
   }
@@ -298,7 +335,7 @@ export class TerrainRuleManagerPanel {
     const rules = this.getRulesForSelectedAsset();
     for (const rule of rules) {
       const box = document.createElement('div');
-      box.title = `${rule.role} · scale ${rule.scale ?? 1} · weight ${rule.weight ?? 1}`;
+      box.title = `${rule.role} · ${rule.material ?? 'grass'} · ${rule.movementMode ?? 'passable'} · scale ${rule.scale ?? 1} · weight ${rule.weight ?? 1}`;
       box.style.cssText = [
         'position:absolute',
         `left:${rule.sourceRect.x}px`,
@@ -312,7 +349,8 @@ export class TerrainRuleManagerPanel {
       this.ruleBoxes.appendChild(box);
     }
 
-    this.status.textContent = `${this.selectedAsset.name} · ${this.tileSize}px · 규칙 ${rules.length}개`;
+    const settings = this.getTilesetSettings(this.selectedAsset);
+    this.status.textContent = `${this.selectedAsset.name} · ${settings.material}/${settings.movementMode} · ${this.tileSize}px · 규칙 ${rules.length}개`;
   }
 
   private pickTile(event: PointerEvent): void {
@@ -366,6 +404,7 @@ export class TerrainRuleManagerPanel {
     const role = this.roleSelect.value as EditorTerrainTileRole;
     const scale = normalizeScale(Number(this.scaleInput.value));
     const weight = normalizeWeight(Number(this.weightInput.value));
+    const settings = this.getTilesetSettings(this.selectedAsset);
     this.scaleInput.value = String(scale);
     this.weightInput.value = String(weight);
     const rule: EditorTerrainTileRule = {
@@ -377,11 +416,14 @@ export class TerrainRuleManagerPanel {
       role,
       scale,
       weight,
+      material: settings.material,
+      movementMode: settings.movementMode,
+      blocksMovement: settings.blocksMovement,
       sourceRect: { ...this.selectedRect },
     };
     this.options.onSaveRule(rule);
     this.renderPreview();
-    this.status.textContent = `규칙 등록: ${role} ${this.selectedRect.x},${this.selectedRect.y} · scale ${scale} · weight ${weight}`;
+    this.status.textContent = `규칙 등록: ${role} · ${settings.material}/${settings.movementMode} · scale ${scale} · weight ${weight}`;
   }
 
   private removeSelectedRule(): void {
@@ -408,6 +450,44 @@ export class TerrainRuleManagerPanel {
     if (!this.selectedAsset || !this.selectedRect) return undefined;
     const ruleId = createRuleId(this.selectedAsset, this.selectedRect, this.tileSize);
     return this.options.getRuleSet().rules.find((rule) => rule.id === ruleId);
+  }
+
+  private getTilesetSettings(asset: EditorTilesetAsset): TilesetTerrainSettings {
+    const saved = (this.options.getRuleSet().tilesets ?? []).find((item) => item.tilesetId === asset.id && item.tilesetUrl === asset.url);
+    const material = saved?.material ?? 'grass';
+    const movementMode = saved?.movementMode ?? getDefaultMovementMode(material);
+    return { material, movementMode, blocksMovement: saved?.blocksMovement ?? movementMode === 'blocked' };
+  }
+
+  private saveTilesetSettings(
+    asset: EditorTilesetAsset,
+    material: EditorTerrainMaterial,
+    movementMode: EditorTerrainMovementMode,
+  ): void {
+    const current = this.options.getRuleSet();
+    const blocksMovement = movementMode === 'blocked';
+    const nextTilesets = (current.tilesets ?? []).filter((item) => item.tilesetId !== asset.id || item.tilesetUrl !== asset.url);
+    nextTilesets.push({ tilesetId: asset.id, tilesetUrl: asset.url, material, movementMode, blocksMovement });
+    const nextRules = current.rules.map((rule) => (
+      rule.tilesetId === asset.id && rule.tilesetUrl === asset.url
+        ? { ...rule, material, movementMode, blocksMovement }
+        : rule
+    ));
+    const next: EditorTerrainRuleSet = { version: 1, rules: nextRules, tilesets: nextTilesets, updatedAt: Date.now() };
+    this.writeRuleSet(next);
+    this.render();
+  }
+
+  private writeRuleSet(ruleSet: EditorTerrainRuleSet): void {
+    const mapName = this.readMapName();
+    const raw = JSON.stringify(ruleSet);
+    window.localStorage.setItem(`dalworld:editor-terrain-rules:${mapName}`, raw);
+    window.localStorage.setItem('dalworld:editor-terrain-rules:dalworld-map', raw);
+  }
+
+  private readMapName(): string {
+    const first = this.options.getRuleSet().rules[0];
+    return first?.tilesetName ? 'dalworld-map' : 'dalworld-map';
   }
 
   private attachDragHandlers(): void {
@@ -455,6 +535,46 @@ function getRoleOptions(): EditorTerrainTileRole[] {
   ];
 }
 
+function getMaterialOptions(): EditorTerrainMaterial[] {
+  return ['grass', 'water', 'road', 'sand', 'dirt', 'rock'];
+}
+
+function getMovementOptions(): EditorTerrainMovementMode[] {
+  return ['passable', 'blocked', 'shallow', 'swim', 'boatOnly'];
+}
+
+function getDefaultMovementMode(material: EditorTerrainMaterial): EditorTerrainMovementMode {
+  if (material === 'water') return 'boatOnly';
+  if (material === 'rock') return 'blocked';
+  return 'passable';
+}
+
+function createMaterialSelect(value: EditorTerrainMaterial): HTMLSelectElement {
+  const select = document.createElement('select');
+  select.style.cssText = compactSelectStyle();
+  for (const material of getMaterialOptions()) {
+    const option = document.createElement('option');
+    option.value = material;
+    option.textContent = material;
+    select.appendChild(option);
+  }
+  select.value = value;
+  return select;
+}
+
+function createMovementSelect(value: EditorTerrainMovementMode): HTMLSelectElement {
+  const select = document.createElement('select');
+  select.style.cssText = compactSelectStyle();
+  for (const movement of getMovementOptions()) {
+    const option = document.createElement('option');
+    option.value = movement;
+    option.textContent = movement;
+    select.appendChild(option);
+  }
+  select.value = value;
+  return select;
+}
+
 function stopEvent(event: Event): void {
   event.preventDefault();
   event.stopPropagation();
@@ -464,6 +584,13 @@ function label(text: string): HTMLSpanElement {
   const element = document.createElement('span');
   element.textContent = text;
   element.style.cssText = 'color:rgba(248,250,252,.68);font-weight:800;';
+  return element;
+}
+
+function smallLabel(text: string): HTMLSpanElement {
+  const element = document.createElement('span');
+  element.textContent = text;
+  element.style.cssText = 'color:rgba(248,250,252,.62);font-weight:800;';
   return element;
 }
 
@@ -483,6 +610,10 @@ function selectStyle(): string {
   return 'border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 8px;font-weight:800;';
 }
 
+function compactSelectStyle(): string {
+  return 'width:100%;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 7px;font-weight:800;';
+}
+
 function inputStyle(): string {
   return 'width:64px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(0,0,0,.28);color:#f8fafc;padding:6px 8px;font-weight:800;';
 }
@@ -491,11 +622,23 @@ function emptyBoxStyle(): string {
   return 'padding:8px;border:1px dashed rgba(255,255,255,.16);border-radius:10px;color:rgba(248,250,252,.58);line-height:1.45;';
 }
 
+function tilesetCardStyle(active: boolean): string {
+  return [
+    'display:flex',
+    'flex-direction:column',
+    'gap:6px',
+    'border-radius:10px',
+    'padding:8px',
+    active ? 'border:1px solid rgba(167,139,250,.75)' : 'border:1px solid rgba(255,255,255,.12)',
+    active ? 'background:rgba(167,139,250,.18)' : 'background:rgba(255,255,255,.05)',
+  ].join(';');
+}
+
 function tilesetButtonStyle(active: boolean): string {
   return [
     'text-align:left',
-    'border-radius:10px',
-    'padding:8px',
+    'border-radius:8px',
+    'padding:7px',
     'cursor:pointer',
     'font-weight:800',
     active ? 'border:1px solid rgba(167,139,250,.75)' : 'border:1px solid rgba(255,255,255,.12)',
