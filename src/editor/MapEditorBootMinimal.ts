@@ -67,6 +67,7 @@ export class MapEditorBootMinimal {
         placements: [],
       },
     };
+    this.restoreTerrainTilesets();
   }
 
   async start(): Promise<void> {
@@ -152,6 +153,7 @@ export class MapEditorBootMinimal {
   stop(): void {
     if (!this.enabled) return;
     this.persistCurrentCellDraft();
+    this.persistTerrainTilesets();
     this.enabled = false;
     this.options.app.ticker.remove(this.minimapTicker);
     this.panel?.element.remove();
@@ -287,6 +289,7 @@ export class MapEditorBootMinimal {
           onAddCurrentTileset: () => this.addTerrainTileset(),
           onRemoveTileset: (asset: EditorTilesetAsset) => this.removeTerrainTileset(asset),
           onGenerate: () => { void this.generateTerrain(); },
+          mapName: this.mapName,
         });
         this.terrainPanel.mount(this.uiRoot);
         return this.terrainPanel;
@@ -310,6 +313,7 @@ export class MapEditorBootMinimal {
     }
 
     this.terrainTilesets.push(asset);
+    this.persistTerrainTilesets();
     this.terrainPanel?.render?.();
     this.showToast(`타일셋 등록 완료 · ${asset.name} · 총 ${this.terrainTilesets.length}개`, 'success', 3_000);
     this.report(`Registered terrain tileset: ${asset.name}. total=${this.terrainTilesets.length}`);
@@ -320,6 +324,7 @@ export class MapEditorBootMinimal {
     const index = this.terrainTilesets.findIndex((item) => createTilesetKey(item) === key);
     if (index < 0) return;
     this.terrainTilesets.splice(index, 1);
+    this.persistTerrainTilesets();
     this.terrainPanel?.render?.();
     this.showToast(`타일셋 등록 해제 · ${asset.name} · 총 ${this.terrainTilesets.length}개`, 'info', 2_500);
     this.report(`Removed terrain tileset: ${asset.name}. total=${this.terrainTilesets.length}`);
@@ -457,8 +462,30 @@ export class MapEditorBootMinimal {
     return this.state?.selectedAsset ?? this.state?.selectedBrush?.asset ?? null;
   }
 
+  private restoreTerrainTilesets(): void {
+    const saved = readLocalJson<EditorTilesetAsset[]>(terrainTilesetsKey(this.mapName));
+    if (!Array.isArray(saved)) return;
+    this.terrainTilesets.splice(0, this.terrainTilesets.length);
+    const seen = new Set<string>();
+    for (const asset of saved) {
+      if (!isStoredTerrainTilesetAsset(asset)) continue;
+      const key = createTilesetKey(asset);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      this.terrainTilesets.push(asset);
+    }
+    if (this.terrainTilesets.length > 0) {
+      this.report(`Restored terrain tilesets. total=${this.terrainTilesets.length}`);
+    }
+  }
+
+  private persistTerrainTilesets(): void {
+    writeLocalJson(terrainTilesetsKey(this.mapName), this.terrainTilesets);
+  }
+
   private async save(): Promise<void> {
     const world = this.createWorldSave();
+    this.persistTerrainTilesets();
     writeLocalJson(worldKey(this.mapName), world);
     writeLocalJson(draftKey(this.mapName), this.placement.mapDraft);
 
@@ -490,6 +517,8 @@ export class MapEditorBootMinimal {
         return;
       }
       await this.applyWorldSave(world);
+      this.restoreTerrainTilesets();
+      this.terrainPanel?.render?.();
       this.showToast(`맵 불러오기 완료 · 셀 ${world.cells.length}개`, 'success', 3_500);
       this.report(`Loaded world via MapStorage. cells=${world.cells.length}`);
     } catch (error) {
@@ -504,6 +533,8 @@ export class MapEditorBootMinimal {
     const world = readLocalJson<EditorWorldSave>(worldKey(this.mapName));
     if (world) {
       await this.applyWorldSave(world);
+      this.restoreTerrainTilesets();
+      this.terrainPanel?.render?.();
       return true;
     }
 
@@ -515,6 +546,8 @@ export class MapEditorBootMinimal {
       const current = this.worldMap.current ?? { gridX: 0, gridY: 0 };
       this.cellDrafts.set(cellKey(current.gridX, current.gridY), { ...draft, worldMap: this.worldMap });
       await this.placement.loadDraft({ ...draft, worldMap: this.worldMap });
+      this.restoreTerrainTilesets();
+      this.terrainPanel?.render?.();
       return true;
     }
 
@@ -542,6 +575,7 @@ export class MapEditorBootMinimal {
   }
 
   private exportJson(): void {
+    this.persistTerrainTilesets();
     downloadJson(`${this.mapName}-world.json`, this.createWorldSave());
   }
 
@@ -631,6 +665,17 @@ function isTerrainTilesetAsset(asset: EditorTilesetAsset): boolean {
   return asset.solidColor === undefined && isImageAssetUrl(asset.url);
 }
 
+function isStoredTerrainTilesetAsset(value: EditorTilesetAsset): value is EditorTilesetAsset {
+  return Boolean(
+    value
+      && typeof value.id === 'string'
+      && typeof value.name === 'string'
+      && typeof value.categoryId === 'string'
+      && typeof value.url === 'string'
+      && isTerrainTilesetAsset(value),
+  );
+}
+
 function createTilesetKey(asset: EditorTilesetAsset): string {
   return `${asset.id}:${asset.url}`;
 }
@@ -685,6 +730,7 @@ function parseCellKey(key: string): [number, number] {
 
 function draftKey(name: string): string { return `dalworld:editor-map:${name}`; }
 function worldKey(name: string): string { return `dalworld:editor-world:${name}`; }
+function terrainTilesetsKey(name: string): string { return `dalworld:editor-terrain-tilesets:${name}`; }
 
 function writeLocalJson(key: string, value: unknown): boolean {
   try { window.localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
